@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections import namedtuple
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Mapping
@@ -112,22 +113,34 @@ class ProductOnlyRequest:
         )
 
 
-@dataclass(frozen=True, init=False)
-class ProductOnlyProduct:
-    product_id: str
-    parent_product_id: str | None
-    canonical_json: str
-    content_sha256: str
+_ProductOnlyProductTuple = namedtuple(
+    "_ProductOnlyProductTuple",
+    ("product_id", "parent_product_id", "canonical_json", "content_sha256"),
+)
 
-    def __init__(self, product_id: str, parent_product_id: str | None, value: Any) -> None:
+
+class ProductOnlyProduct(_ProductOnlyProductTuple):
+    """Tuple-backed immutable content-addressed unverified product snapshot."""
+
+    __slots__ = ()
+
+    def __new__(
+        cls,
+        product_id: str,
+        parent_product_id: str | None,
+        value: Any,
+    ) -> "ProductOnlyProduct":
         _text(product_id, "product_id")
         if parent_product_id is not None:
             _text(parent_product_id, "parent_product_id")
         canonical_json, content_sha256 = _canonical_product_snapshot(value)
-        object.__setattr__(self, "product_id", product_id)
-        object.__setattr__(self, "parent_product_id", parent_product_id)
-        object.__setattr__(self, "canonical_json", canonical_json)
-        object.__setattr__(self, "content_sha256", content_sha256)
+        return super().__new__(
+            cls,
+            product_id,
+            parent_product_id,
+            canonical_json,
+            content_sha256,
+        )
 
     @property
     def value(self) -> Any:
