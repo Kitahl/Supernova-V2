@@ -621,3 +621,41 @@ Passing implementation tests is necessary but not sufficient for these scientifi
 adversarial question for every future change is: **could this change improve the verified-chain arm
 without changing the intended verified-product mechanism?** If yes, the change is a potential
 confound and needs either a matched control or a narrower claim.
+
+### T32 — Verifier identity is not bound to a hermetic executable/toolchain environment (`CRITICAL`)
+
+**EVIDENCE — repository.** Current merged G1-006 derives `_verifier_id` only from the verifier command
+template and timeout. `VerifiedChain.verify_pending` invokes G1-003 `run_verifier` with only that
+command and timeout; it does not pass a frozen `cwd` or `env`. G1-003 in turn calls
+`subprocess.Popen` with `cwd=None` and `env=None` in this path. The evidence digest binds the command
+template, timeout, result status/return code, and stdout/stderr hashes, but it does not bind the
+resolved executable bytes, ambient environment, working directory, proof-assistant toolchain,
+project/library snapshot, or container/runtime image. **EVIDENCE — external.** Python's official
+`subprocess.Popen` documentation states that `env=None` uses the default behavior of inheriting the
+current process environment, that executable-path resolution is platform dependent, and recommends
+a fully qualified executable path for maximum reliability:
+<https://docs.python.org/3/library/subprocess.html>. Lean's official Elan documentation states that
+PATH proxies select a toolchain from the current context/project and recommends a specific version
+in `lean-toolchain` for reproducible project use:
+<https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Managing-Toolchains-with-Elan/>.
+
+**INFERENCE.** The same Supernova `verifier_id` can therefore name materially different checker
+executions. A PATH change, directory-specific Elan override, different `lean-toolchain`, library
+checkout, environment variable, or replaced executable can change what accepts a product without
+changing the hashed verifier identity. Even if the output/status happens to remain the same, the
+receipt cannot prove which verifier implementation or dependency state actually ran. T32 is more
+specific than T4's abstract independence concern and survives T27's proposed outcome-evidence
+binding unless the verifier identity itself becomes content/environment bound.
+
+**Required falsifier/mitigation.** Make verifier execution hermetic and bind that identity into every
+search/final verification receipt: use an absolute/content-addressed executable or immutable runtime
+image; freeze and record the exact toolchain version/digest, project/library/import snapshot,
+working directory, and an allowlisted environment; include those digests in `verifier_id` and the
+evidence subject. For Lean, pin the project toolchain to a specific release/nightly and freeze the
+library/manifest state used by the checker. At replay, resolve and attest the same executable,
+toolchain, environment, and inputs before accepting PASS. Any drift should fail closed rather than
+reuse the same verifier identity.
+
+**Addendum to minimum design conditions.** 26. a hermetic, content-addressed verifier runtime binding
+covering executable/toolchain bytes, cwd, allowlisted environment, proof-library/import state, and
+runtime/container identity, with drift rejected during replay.
