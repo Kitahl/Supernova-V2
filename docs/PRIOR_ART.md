@@ -353,6 +353,28 @@ latency, throttling, failure rate, or effective retry opportunity of another eve
 state is perfectly isolated. Execution isolation and provider-fault handling therefore belong in the
 confirmatory causal contract, not merely in operational monitoring.
 
+### 26. Lean proof validation and SLSA VSA — a PASS claim should be bound to its exact subject
+
+Primary sources: Lean, *Validating a Lean Proof*.
+<https://lean-lang.org/doc/reference/latest/ValidatingProofs/>; SLSA, *Verification Summary
+Attestation (VSA) v1.2*.
+<https://slsa.dev/spec/v1.2/verification_summary>.
+
+**EVIDENCE.** Lean's official validation guidance distinguishes a proof claim from independently
+checking the proof term, and its high-assurance path replays the proposed proof against a trusted
+challenge while ensuring that the proved theorem statement matches that challenge. SLSA's approved
+VSA format analogously carries the artifact `subject` digest together with verifier identity/version,
+verification policy, and verification result.
+
+**INFERENCE for Goal 1.** These are engineering/assurance precedents rather than evidence that
+Supernova's mechanism works, but they expose a missing scientific edge in the current repository:
+`OutcomeRecord.verifier_passed` is a bare boolean consumed directly by `evaluate_experiment`, while
+proposed G1-003's richer verifier result is not yet bound to the exact problem/proof artifact or to
+the final outcome record. A confirmatory scientific result should therefore count a solved cell only
+when the final verifier evidence is cryptographically or deterministically bound to the exact
+challenge and submitted artifact, with verifier/policy identity preserved and independently
+replayable.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -371,7 +393,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - ordinary McNemar inference assumes independent matched pairs and needs adjustment for clustered pairs;
 - aggregate token/call totals do not uniquely identify LLM inference compute or serving work;
 - telemetry pipelines can drop records, so observed-trace consistency is not by itself a completeness certificate;
-- hosted API quota/cache/queue state can be shared across requests, so concurrent experimental arms can interfere operationally.
+- hosted API quota/cache/queue state can be shared across requests, so concurrent experimental arms can interfere operationally;
+- high-assurance verification practice binds a PASS to an exact artifact/challenge subject and verifier/policy evidence rather than trusting an unbound boolean.
 
 ## What these sources do **not** establish for Supernova
 
@@ -417,6 +440,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Opaque-cost falsifier:** does it persist under auditable hidden-reasoning usage or a predeclared sensitivity bound? (Sun et al.)
 - **Cluster-dependence falsifier:** are benchmark-family/variant clusters identified and either reduced to independent sampling units or analyzed with cluster-aware paired inference? (Eliasziw & Donner; Gönen.)
 - **Shared-serving interference falsifier:** do conclusions persist when paired cells are isolated from shared provider quotas/caches/queues, or under a frozen counterbalanced execution/throttling policy with complete retry/rate-limit telemetry? (OpenAI/Anthropic rate-limit docs.)
+- **Outcome-evidence binding falsifier:** can every counted solved cell be replayed from an evidence-bound final-verifier record tied to the exact challenge and proof/artifact digest, with verifier/version/policy identity preserved? (Lean proof validation; SLSA VSA.)
 
 If those falsifiers are not implemented, a positive result should be described as performance of the
 *bundled verified-chain system* rather than evidence that verified-product chaining itself caused
