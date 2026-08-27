@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sys
 import unittest
 from dataclasses import fields
@@ -31,7 +32,7 @@ class ProductOnlyContractTests(unittest.TestCase):
             problem_id="p-1",
             budget_id="budget-1",
             problem_statement="Prove P.",
-            product_ids=("lemma-a", "lemma-b"),
+            max_products=3,
         )
 
     def test_product_only_is_an_unverified_product_chain(self) -> None:
@@ -45,35 +46,68 @@ class ProductOnlyContractTests(unittest.TestCase):
                 "problem_id",
                 "budget_id",
                 "problem_statement",
-                "product_ids",
+                "max_products",
             },
             request_fields,
         )
-        self.assertEqual({"product_id", "parent_product_id", "value"}, product_fields)
         self.assertFalse(
             {"verifier_id", "evidence_id", "verification", "admission"}
             & (request_fields | result_fields | product_fields)
         )
 
-    def test_answered_result_completes_and_consumes_unverified_chain(self) -> None:
+    def test_answered_result_may_finalize_current_unverified_product(self) -> None:
         request = self.request()
         result = ProductOnlyResult(
             request_id=request.request_id,
             experiment_id=request.experiment_id,
             problem_id=request.problem_id,
             budget_id=request.budget_id,
-            products=(
-                ProductOnlyProduct("lemma-a", None, "A"),
-                ProductOnlyProduct("lemma-b", "lemma-a", "B using A"),
-            ),
+            products=(ProductOnlyProduct("lemma-a", None, "A"),),
             status=ProductOnlyStatus.ANSWERED,
-            answer="proof using B",
-            answer_parent_product_id="lemma-b",
+            answer="proof using A",
+            answer_parent_product_id="lemma-a",
             error=None,
         )
         result.validate_for(request)
 
-    def test_chain_must_be_contiguous_and_follow_requested_order(self) -> None:
+    def test_product_ids_are_runtime_choices_bounded_by_max_products(self) -> None:
+        request = self.request()
+        result = ProductOnlyResult(
+            request.request_id,
+            request.experiment_id,
+            request.problem_id,
+            request.budget_id,
+            (
+                ProductOnlyProduct("runtime-a", None, "A"),
+                ProductOnlyProduct("runtime-b", "runtime-a", "B"),
+            ),
+            "NO_ANSWER",
+            None,
+            None,
+            None,
+        )
+        result.validate_for(request)
+
+        too_many = ProductOnlyResult(
+            request.request_id,
+            request.experiment_id,
+            request.problem_id,
+            request.budget_id,
+            (
+                ProductOnlyProduct("a", None, "A"),
+                ProductOnlyProduct("b", "a", "B"),
+                ProductOnlyProduct("c", "b", "C"),
+                ProductOnlyProduct("d", "c", "D"),
+            ),
+            "NO_ANSWER",
+            None,
+            None,
+            None,
+        )
+        with self.assertRaisesRegex(ValueError, "max_products"):
+            too_many.validate_for(request)
+
+    def test_chain_must_be_contiguous(self) -> None:
         with self.assertRaisesRegex(ValueError, "contiguous"):
             ProductOnlyResult(
                 "r",
@@ -90,36 +124,24 @@ class ProductOnlyContractTests(unittest.TestCase):
                 None,
             )
 
-        request = self.request()
-        out_of_order = ProductOnlyResult(
-            request.request_id,
-            request.experiment_id,
-            request.problem_id,
-            request.budget_id,
-            (ProductOnlyProduct("lemma-b", None, "B"),),
-            "NO_ANSWER",
-            None,
-            None,
-            None,
-        )
-        with self.assertRaisesRegex(ValueError, "ordered prefix"):
-            out_of_order.validate_for(request)
+    def test_product_values_match_verified_chain_json_value_domain(self) -> None:
+        source = {"lemma": ["A", {"score": 1.5}], "ok": True, "none": None}
+        product = ProductOnlyProduct("a", None, source)
+        first = product.value
+        self.assertEqual(source, first)
+        self.assertEqual(64, len(product.content_sha256))
 
-    def test_answered_result_requires_full_requested_chain(self) -> None:
-        request = self.request()
-        result = ProductOnlyResult(
-            request.request_id,
-            request.experiment_id,
-            request.problem_id,
-            request.budget_id,
-            (ProductOnlyProduct("lemma-a", None, "A"),),
-            "ANSWERED",
-            "premature answer",
-            "lemma-a",
-            None,
+        source["lemma"][1]["score"] = 9.0
+        first["lemma"][0] = "mutated"
+        self.assertEqual(
+            {"lemma": ["A", {"score": 1.5}], "none": None, "ok": True},
+            product.value,
         )
-        with self.assertRaisesRegex(ValueError, "complete every requested product"):
-            result.validate_for(request)
+
+        with self.assertRaisesRegex(ValueError, "NaN or infinity"):
+            ProductOnlyProduct("bad", None, math.inf)
+        with self.assertRaisesRegex(TypeError, "JSON-compatible"):
+            ProductOnlyProduct("bad", None, {1, 2, 3})
 
     def test_mapping_rejects_verifier_feedback_channel(self) -> None:
         raw = {
