@@ -44,6 +44,15 @@ mapping to equal that manifest exactly:
   sentinel cannot stand in for execution, and a skipped/not-run arm is incomplete rather
   than a complete zero-cost arm.
 
+Event IDs are also an exact-value boundary: `CostEvent` and `ExpectedCostEvent` accept only
+an exact built-in `str`, not a `str` subclass. Python string subclasses can override
+`__eq__` and `__hash__`; if such values were admitted, five objects with the same printable
+text could behave as five distinct keys and bypass report-wide replay detection while each
+arm's observed and expected manifests still matched. Rejecting polymorphic string IDs
+makes the uniqueness checks operate on ordinary string value semantics. This protects the
+in-process accounting invariant; it does not replace the external dispatch ledger that
+must establish where those IDs came from.
+
 The final bullet is a Goal-1 execution invariant, not a generic claim that every future
 cost-accounting application must call a model. If a later protocol deliberately permits a
 zero-model-call arm, that must be represented prospectively with a different execution
