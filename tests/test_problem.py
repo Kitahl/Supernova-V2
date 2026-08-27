@@ -31,8 +31,12 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
             ValueError, "native_id must be a non-empty trimmed string"
         ):
             BenchmarkProblemIdentity("bench", "v1", "test", " 42 ")
-        with self.assertRaisesRegex(ValueError, "split must not contain control characters"):
-            BenchmarkProblemIdentity("bench", "v1", "te\nst", "42")
+        for invalid in ("te\nst", "te\x7fst", "te\x85st"):
+            with self.subTest(value=repr(invalid)):
+                with self.assertRaisesRegex(
+                    ValueError, "split must not contain control characters"
+                ):
+                    BenchmarkProblemIdentity("bench", "v1", invalid, "42")
         for invalid in ("\ud800", "\udfff"):
             with self.subTest(codepoint=hex(ord(invalid))):
                 with self.assertRaisesRegex(
