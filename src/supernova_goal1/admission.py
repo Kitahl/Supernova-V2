@@ -5,10 +5,16 @@ required by a trusted admission policy. It does not decide whether the product i
 scientifically useful, whether an experiment arm solved a problem, or how any result
 should be scored.
 
-Verifier authentication keys and the trusted policy digest are runtime-only authority
-capabilities. They must be provisioned independently of the product producer and must
-never be persisted as part of admission evidence. The serialized policy is verified
-against that trusted digest before it can authorize any verifier.
+The bounded module models authority explicitly. Producer and verifier identities are
+mapped by trusted policy to authority identities, and both product provenance and
+verification evidence are authenticated against runtime-only authority material. This
+prevents a producer from evading the no-self-admission rule by merely changing a free-form
+identity string.
+
+The shared-key authentication used here is intentionally a bounded-module mechanism: the
+caller that provisions authority keys is inside the admission trust boundary. A later
+integration may replace it with public-key attestations without changing the deterministic
+admission semantics.
 """
 
 from __future__ import annotations
@@ -22,8 +28,9 @@ from string import hexdigits
 from typing import Any, Iterable, Mapping
 
 
-_EVIDENCE_DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v1"
-_POLICY_DIGEST_DOMAIN = "supernova_goal1.admission_policy.v1"
+_PRODUCT_AUTH_DOMAIN = "supernova_goal1.product_candidate.v1"
+_EVIDENCE_DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v2"
+_POLICY_DIGEST_DOMAIN = "supernova_goal1.admission_policy.v2"
 
 
 class EvidenceOutcome(StrEnum):
@@ -46,6 +53,8 @@ def _exact_fields(raw: Mapping[str, Any], expected: set[str], prefix: str) -> No
 def _identifier(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} must be a non-empty string")
+    if value != value.strip():
+        raise ValueError(f"{field} must not contain leading or trailing whitespace")
     return value
 
 
@@ -56,6 +65,23 @@ def _sha256(value: Any, field: str) -> str:
     if value != value.lower():
         raise ValueError(f"{field} must use lowercase hex")
     return value
+
+
+def _canonical_product_bytes(
+    *, product_id: str, producer_id: str, artifact_sha256: str
+) -> bytes:
+    payload = {
+        "artifact_sha256": artifact_sha256,
+        "producer_id": producer_id,
+        "product_id": product_id,
+        "schema": _PRODUCT_AUTH_DOMAIN,
+    }
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
 
 
 def _canonical_evidence_bytes(
@@ -89,26 +115,31 @@ def _canonical_policy_bytes(
     policy_id: str,
     required_checks: tuple[str, ...],
     authorized_verifiers: Mapping[str, tuple[str, ...]],
-    verifier_key_sha256: Mapping[str, str],
+    producer_authorities: Mapping[str, str],
+    verifier_authorities: Mapping[str, str],
+    authority_key_sha256: Mapping[str, str],
 ) -> bytes:
-    """Return a semantic-normalized policy representation for trust-root binding.
-
-    Check and verifier list order are not admission semantics, so they are sorted before
-    hashing. Key commitments are part of the policy root because changing the verifier
-    key for an otherwise identical identity changes who is trusted to attest.
-    """
+    """Return a semantic-normalized policy representation for trust-root binding."""
 
     payload = {
         "authorized_verifiers": {
             check_id: sorted(authorized_verifiers[check_id])
             for check_id in sorted(authorized_verifiers)
         },
+        "authority_key_sha256": {
+            authority_id: authority_key_sha256[authority_id]
+            for authority_id in sorted(authority_key_sha256)
+        },
         "policy_id": policy_id,
+        "producer_authorities": {
+            producer_id: producer_authorities[producer_id]
+            for producer_id in sorted(producer_authorities)
+        },
         "required_checks": sorted(required_checks),
         "schema": _POLICY_DIGEST_DOMAIN,
-        "verifier_key_sha256": {
-            verifier_id: verifier_key_sha256[verifier_id]
-            for verifier_id in sorted(verifier_key_sha256)
+        "verifier_authorities": {
+            verifier_id: verifier_authorities[verifier_id]
+            for verifier_id in sorted(verifier_authorities)
         },
     }
     return json.dumps(
@@ -124,15 +155,31 @@ class ProductCandidate:
     product_id: str
     producer_id: str
     artifact_sha256: str
+    producer_hmac_sha256: str
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "ProductCandidate":
-        expected = {"product_id", "producer_id", "artifact_sha256"}
+        expected = {
+            "product_id",
+            "producer_id",
+            "artifact_sha256",
+            "producer_hmac_sha256",
+        }
         _exact_fields(raw, expected, "product")
         return cls(
             product_id=_identifier(raw["product_id"], "product.product_id"),
             producer_id=_identifier(raw["producer_id"], "product.producer_id"),
             artifact_sha256=_sha256(raw["artifact_sha256"], "product.artifact_sha256"),
+            producer_hmac_sha256=_sha256(
+                raw["producer_hmac_sha256"], "product.producer_hmac_sha256"
+            ),
+        )
+
+    def canonical_bytes(self) -> bytes:
+        return _canonical_product_bytes(
+            product_id=self.product_id,
+            producer_id=self.producer_id,
+            artifact_sha256=self.artifact_sha256,
         )
 
 
@@ -196,7 +243,9 @@ class AdmissionPolicy:
     policy_id: str
     required_checks: tuple[str, ...]
     authorized_verifiers: Mapping[str, tuple[str, ...]]
-    verifier_key_sha256: Mapping[str, str]
+    producer_authorities: Mapping[str, str]
+    verifier_authorities: Mapping[str, str]
+    authority_key_sha256: Mapping[str, str]
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "AdmissionPolicy":
@@ -204,10 +253,13 @@ class AdmissionPolicy:
             "policy_id",
             "required_checks",
             "authorized_verifiers",
-            "verifier_key_sha256",
+            "producer_authorities",
+            "verifier_authorities",
+            "authority_key_sha256",
         }
         _exact_fields(raw, expected, "policy")
         policy_id = _identifier(raw["policy_id"], "policy.policy_id")
+
         required = raw["required_checks"]
         if not isinstance(required, list) or not required:
             raise ValueError("policy.required_checks must be a non-empty list")
@@ -226,7 +278,7 @@ class AdmissionPolicy:
             )
 
         authorized: dict[str, tuple[str, ...]] = {}
-        authorized_identities: set[str] = set()
+        authorized_verifier_ids: set[str] = set()
         for check_id in checks:
             verifier_ids = verifier_map[check_id]
             if not isinstance(verifier_ids, list) or not verifier_ids:
@@ -245,28 +297,66 @@ class AdmissionPolicy:
                     f"policy.authorized_verifiers[{check_id!r}] must be unique"
                 )
             authorized[check_id] = parsed
-            authorized_identities.update(parsed)
+            authorized_verifier_ids.update(parsed)
 
-        key_commitments = raw["verifier_key_sha256"]
-        if not isinstance(key_commitments, Mapping):
-            raise ValueError("policy.verifier_key_sha256 must be a mapping")
-        if set(key_commitments) != authorized_identities:
+        producer_map = raw["producer_authorities"]
+        if not isinstance(producer_map, Mapping) or not producer_map:
+            raise ValueError("policy.producer_authorities must be a non-empty mapping")
+        producer_authorities = {
+            _identifier(producer_id, "policy.producer_authorities key"): _identifier(
+                authority_id,
+                f"policy.producer_authorities[{producer_id!r}]",
+            )
+            for producer_id, authority_id in producer_map.items()
+        }
+
+        verifier_authority_map = raw["verifier_authorities"]
+        if not isinstance(verifier_authority_map, Mapping):
+            raise ValueError("policy.verifier_authorities must be a mapping")
+        if set(verifier_authority_map) != authorized_verifier_ids:
             raise ValueError(
-                "policy.verifier_key_sha256 keys must exactly match authorized verifier identities"
+                "policy.verifier_authorities keys must exactly match authorized verifier identities"
+            )
+        verifier_authorities = {
+            verifier_id: _identifier(
+                verifier_authority_map[verifier_id],
+                f"policy.verifier_authorities[{verifier_id!r}]",
+            )
+            for verifier_id in sorted(authorized_verifier_ids)
+        }
+
+        overlapping_ids = set(producer_authorities).intersection(verifier_authorities)
+        for identity in overlapping_ids:
+            if producer_authorities[identity] != verifier_authorities[identity]:
+                raise ValueError(
+                    f"identity {identity!r} cannot map to different producer and verifier authorities"
+                )
+
+        authority_ids = set(producer_authorities.values()) | set(
+            verifier_authorities.values()
+        )
+        key_commitments = raw["authority_key_sha256"]
+        if not isinstance(key_commitments, Mapping):
+            raise ValueError("policy.authority_key_sha256 must be a mapping")
+        if set(key_commitments) != authority_ids:
+            raise ValueError(
+                "policy.authority_key_sha256 keys must exactly match referenced authority identities"
             )
         parsed_commitments = {
-            verifier_id: _sha256(
-                key_commitments[verifier_id],
-                f"policy.verifier_key_sha256[{verifier_id!r}]",
+            authority_id: _sha256(
+                key_commitments[authority_id],
+                f"policy.authority_key_sha256[{authority_id!r}]",
             )
-            for verifier_id in sorted(authorized_identities)
+            for authority_id in sorted(authority_ids)
         }
 
         return cls(
             policy_id=policy_id,
             required_checks=checks,
             authorized_verifiers=authorized,
-            verifier_key_sha256=parsed_commitments,
+            producer_authorities=producer_authorities,
+            verifier_authorities=verifier_authorities,
+            authority_key_sha256=parsed_commitments,
         )
 
     def canonical_bytes(self) -> bytes:
@@ -274,11 +364,42 @@ class AdmissionPolicy:
             policy_id=self.policy_id,
             required_checks=self.required_checks,
             authorized_verifiers=self.authorized_verifiers,
-            verifier_key_sha256=self.verifier_key_sha256,
+            producer_authorities=self.producer_authorities,
+            verifier_authorities=self.verifier_authorities,
+            authority_key_sha256=self.authority_key_sha256,
         )
 
     def canonical_sha256(self) -> str:
         return hashlib.sha256(self.canonical_bytes()).hexdigest()
+
+
+def _authenticate_authority(
+    *,
+    authority_id: str,
+    canonical_bytes: bytes,
+    proof_sha256: str,
+    policy: AdmissionPolicy,
+    authority_auth_keys: Mapping[str, bytes],
+    label: str,
+    reasons: set[str],
+) -> None:
+    key = authority_auth_keys.get(authority_id)
+    if key is None:
+        reasons.add(f"missing authority authentication key: {authority_id}")
+        return
+    if not isinstance(key, bytes) or not key:
+        reasons.add(f"invalid authority authentication key: {authority_id}")
+        return
+
+    expected_commitment = policy.authority_key_sha256[authority_id]
+    actual_commitment = hashlib.sha256(key).hexdigest()
+    if not hmac.compare_digest(actual_commitment, expected_commitment):
+        reasons.add(f"authority key commitment mismatch: {authority_id}")
+        return
+
+    expected_proof = hmac.new(key, canonical_bytes, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(proof_sha256, expected_proof):
+        reasons.add(f"authority authentication failed: {label}")
 
 
 def evaluate_product_admission(
@@ -287,25 +408,24 @@ def evaluate_product_admission(
     policy_raw: Mapping[str, Any],
     *,
     trusted_policy_sha256: str,
-    verifier_auth_keys: Mapping[str, bytes],
+    authority_auth_keys: Mapping[str, bytes],
 ) -> dict[str, Any]:
     """Return a deterministic evidence-policy decision with no scientific score.
 
     ``policy_raw`` is serialized policy content, not a trust root. The admission boundary
-    must supply ``trusted_policy_sha256`` from independently provisioned configuration;
-    the parsed policy must match that digest before it can authorize a verifier.
+    must supply ``trusted_policy_sha256`` from independently provisioned configuration.
 
-    ``verifier_auth_keys`` is runtime trust material owned by the admission boundary,
-    not caller-authored evidence. The policy stores only SHA-256 commitments to those
-    keys. An evidence record is independently attributable only when its HMAC verifies
-    under a runtime key whose commitment is authorized by the trusted policy.
+    ``authority_auth_keys`` is runtime-only trust material owned by the admission
+    boundary. The policy stores only SHA-256 commitments. Producer provenance and verifier
+    evidence must authenticate under the authority identity selected by the trusted
+    policy. Self-admission is rejected by authority identity, not by free-form role name.
     """
 
     trusted_policy_sha256 = _sha256(
         trusted_policy_sha256, "trusted_policy_sha256"
     )
-    if not isinstance(verifier_auth_keys, Mapping):
-        raise ValueError("verifier_auth_keys must be a mapping")
+    if not isinstance(authority_auth_keys, Mapping):
+        raise ValueError("authority_auth_keys must be a mapping")
 
     product = ProductCandidate.from_mapping(product_raw)
     policy = AdmissionPolicy.from_mapping(policy_raw)
@@ -314,6 +434,20 @@ def evaluate_product_admission(
     reasons: set[str] = set()
     if not hmac.compare_digest(policy.canonical_sha256(), trusted_policy_sha256):
         reasons.add("admission policy digest mismatch")
+
+    producer_authority = policy.producer_authorities.get(product.producer_id)
+    if producer_authority is None:
+        reasons.add(f"unauthorized producer identity: {product.producer_id}")
+    else:
+        _authenticate_authority(
+            authority_id=producer_authority,
+            canonical_bytes=product.canonical_bytes(),
+            proof_sha256=product.producer_hmac_sha256,
+            policy=policy,
+            authority_auth_keys=authority_auth_keys,
+            label=f"producer={product.producer_id}",
+            reasons=reasons,
+        )
 
     required = set(policy.required_checks)
     by_check: dict[str, list[AdmissionEvidence]] = {
@@ -346,29 +480,21 @@ def evaluate_product_admission(
                 f"unauthorized verifier for check: {item.check_id}={item.verifier_id}"
             )
         else:
-            key = verifier_auth_keys.get(item.verifier_id)
-            if key is None:
-                reasons.add(f"missing verifier authentication key: {item.verifier_id}")
-            elif not isinstance(key, bytes) or not key:
-                reasons.add(f"invalid verifier authentication key: {item.verifier_id}")
-            else:
-                expected_commitment = policy.verifier_key_sha256[item.verifier_id]
-                actual_commitment = hashlib.sha256(key).hexdigest()
-                if not hmac.compare_digest(actual_commitment, expected_commitment):
-                    reasons.add(f"verifier key commitment mismatch: {item.verifier_id}")
-                else:
-                    expected_proof = hmac.new(
-                        key, canonical_bytes, hashlib.sha256
-                    ).hexdigest()
-                    if not hmac.compare_digest(
-                        item.verifier_hmac_sha256, expected_proof
-                    ):
-                        reasons.add(
-                            f"verifier authentication failed: {item.evidence_id}"
-                        )
+            verifier_authority = policy.verifier_authorities[item.verifier_id]
+            _authenticate_authority(
+                authority_id=verifier_authority,
+                canonical_bytes=canonical_bytes,
+                proof_sha256=item.verifier_hmac_sha256,
+                policy=policy,
+                authority_auth_keys=authority_auth_keys,
+                label=f"evidence={item.evidence_id}",
+                reasons=reasons,
+            )
+            if producer_authority is not None and verifier_authority == producer_authority:
+                reasons.add(
+                    f"producer authority cannot verify its own product: {item.check_id}"
+                )
 
-        if item.verifier_id == product.producer_id:
-            reasons.add(f"producer cannot verify its own product: {item.check_id}")
         if item.outcome is not EvidenceOutcome.PASS:
             reasons.add(f"check did not PASS: {item.check_id}={item.outcome.value}")
 
