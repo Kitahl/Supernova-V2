@@ -131,6 +131,50 @@ class BenchmarkImporterTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "changed while hashing"):
                     MODULE.build_lock(source, name="bench", version="v1", split="test")
 
+    def test_control_file_inside_source_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            inside_lock = source / "BENCHMARK.lock.json"
+
+            lock_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "lock",
+                    str(source),
+                    "--name",
+                    "bench",
+                    "--version",
+                    "v1",
+                    "--split",
+                    "test",
+                    "--output",
+                    str(inside_lock),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(lock_result.returncode, 2)
+            self.assertIn("must be outside benchmark source", lock_result.stderr)
+            self.assertFalse(inside_lock.exists())
+
+            outside_lock = root / "BENCHMARK.lock.json"
+            lock = MODULE.build_lock(source, name="bench", version="v1", split="test")
+            MODULE._write_lock(outside_lock, lock)
+            inside_lock.write_text(outside_lock.read_text(encoding="utf-8"), encoding="utf-8")
+            check_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(source), "--lock", str(inside_lock)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(check_result.returncode, 2)
+            self.assertIn("must be outside benchmark source", check_result.stderr)
+
     def test_cli_lock_and_check_emit_machine_readable_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
