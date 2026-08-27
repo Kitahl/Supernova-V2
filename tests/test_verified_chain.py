@@ -68,6 +68,22 @@ class VerifiedChainTests(unittest.TestCase):
         self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
         self.assertEqual(ref.content_sha256, verified.content_sha256)
 
+    def test_unencodable_unicode_proposal_fails_atomically(self) -> None:
+        with self.assertRaisesRegex(ValueError, "UTF-8-encodable"):
+            self.chain.propose(
+                "lemma-surrogate", {"claim": "\ud800"}, producer_id="solver"
+            )
+
+        self.assertEqual(ChainState.READY, self.chain.state)
+        self.assertIsNone(self.chain.current)
+        self.assertEqual((), self.chain.history)
+
+        # A failed snapshot must not reserve the product id or poison the chain.
+        ref = self.chain.propose(
+            "lemma-surrogate", {"claim": "valid"}, producer_id="solver"
+        )
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, ref.state)
+
     def test_rejected_product_cannot_be_consumed_and_may_be_discarded(self) -> None:
         self.chain.propose("lemma-bad", "bad proof", producer_id="solver")
         ref = self.chain.record_verification(
