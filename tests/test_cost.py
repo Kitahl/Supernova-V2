@@ -62,6 +62,7 @@ class CompleteCostAccountingTests(unittest.TestCase):
             accounting_complete=True,
         )
         self.assertTrue(trace.coverage_complete)
+        self.assertTrue(trace.measurements_complete)
         self.assertEqual(
             CompleteCost(
                 model_calls=2,
@@ -180,6 +181,39 @@ class CompleteCostAccountingTests(unittest.TestCase):
         self.assertFalse(trace.coverage_complete)
         self.assertEqual(("attempt-1",), trace.missing_expected_events)
         self.assertEqual(("attempt-1",), trace.unexpected_events)
+
+    def test_unknown_model_usage_cannot_be_coerced_to_zero_complete_cost(self) -> None:
+        traces = [self._zero_trace(arm) for arm in Arm]
+        traces[0] = ArmCostTrace.from_events(
+            Arm.ORDINARY,
+            (CostEvent.model_call("call-1", input_tokens=None, output_tokens=0),),
+            expected_events=(ExpectedCostEvent.model_call("call-1"),),
+            accounting_complete=True,
+        )
+        self.assertTrue(traces[0].coverage_complete)
+        self.assertFalse(traces[0].measurements_complete)
+        self.assertEqual(
+            (("call-1", ("input_tokens",)),),
+            traces[0].unknown_measurements,
+        )
+        with self.assertRaisesRegex(ValueError, "incomplete arm accounting"):
+            CompleteCostReport.from_traces(traces)
+
+    def test_unknown_elapsed_time_cannot_be_coerced_to_zero_complete_cost(self) -> None:
+        trace = ArmCostTrace.from_events(
+            Arm.ORDINARY,
+            (CostEvent.orchestration("route-1", milliseconds=None),),
+            expected_events=(ExpectedCostEvent.orchestration("route-1"),),
+            accounting_complete=True,
+        )
+        self.assertTrue(trace.coverage_complete)
+        self.assertFalse(trace.measurements_complete)
+        self.assertEqual(
+            (("route-1", ("orchestration_milliseconds",)),),
+            trace.unknown_measurements,
+        )
+        with self.assertRaisesRegex(ValueError, "incomplete cost telemetry"):
+            _ = trace.total
 
     def test_zero_cost_requires_coverage_evidence_not_an_empty_trace(self) -> None:
         report = self._zero_report()
