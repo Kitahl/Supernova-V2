@@ -99,6 +99,19 @@ class CompleteCostAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "globally unique across all five arms"):
             CompleteCostReport.from_traces(traces)
 
+    def test_hostile_string_subclasses_cannot_spoof_event_identity(self) -> None:
+        class EvilEventId(str):
+            def __eq__(self, other: object) -> bool:
+                return self is other
+
+            __hash__ = object.__hash__
+
+        event_id = EvilEventId("shared-dispatch")
+        with self.assertRaisesRegex(ValueError, "event_id"):
+            CostEvent.model_call(event_id, input_tokens=1, output_tokens=1)
+        with self.assertRaisesRegex(ValueError, "expected event_id"):
+            ExpectedCostEvent.model_call(event_id)
+
     def test_event_shapes_prevent_cross_category_double_counting(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot carry model token counts"):
             CostEvent(
