@@ -393,6 +393,36 @@ self-hosted or otherwise auditable inference stack when feasible. If hosted opac
 complete cost as provider-reported, preserve the uncertainty as a limitation, and require the
 scientific conclusion to survive sensitivity bounds on unobserved/uncertain reasoning cost.
 
+### T22 — Product-only control is not yet contract-equivalent to the verified chain (`CRITICAL` until aligned)
+
+**EVIDENCE — repository.** Proposed `G1-006` (`#5`) allows each verified-chain product to contain any
+supported JSON-compatible value (`null`, boolean, string, finite number, list, or object), permits a
+rejected product to be discarded and retried, and allows the current verified product to be
+finalized. Proposed `G1-005` (`#12`) instead requires every `ProductOnlyProduct.value` to be a
+non-empty string, fixes the product-ID sequence in the request, and requires an `ANSWERED` result to
+complete the entire requested product sequence. **EVIDENCE — external.** TheoremBench compares
+aligned plain and explicitly premised Lean tasks and reports that exposing supporting premises
+substantially improves performance for several Lean-capable provers, showing that intermediate
+problem representation/context can itself change prover performance:
+<https://arxiv.org/abs/2606.09450>.
+
+**INFERENCE.** If these proposed contracts become the experiment runtime unchanged, the
+`verified_chain` versus `product_only` comparison will vary more than verification. The arms also
+differ in intermediate payload representation and in chain-length/finalization semantics. Either
+difference can alter usable context, failure probability, token use, or residual-budget allocation.
+A treatment win would therefore not identify verify-before-consume gating as the unique cause.
+TheoremBench does not establish that JSON objects are superior to strings; it establishes the
+narrower point that representation and explicit intermediate premises are capability-relevant and
+therefore should not be allowed to drift silently across a causal control.
+
+**Required falsifier/mitigation.** Define one shared intermediate-product payload/serialization
+contract and one shared chain-plan, stopping, retry, parentage, and finalization policy for the
+verified-chain and product-only causal pair. Match prompt exposure and product-count policy. The
+intended experimental difference should be only whether downstream consumption is gated on the
+frozen independent-verification event. If dynamic chain length or verifier-triggered retry is part
+of the intended treatment, add a matched dynamic non-gating control and narrow the causal claim
+accordingly. Charge every attempted product and retry to the complete-cost record.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -410,7 +440,8 @@ The confirmatory run should not start until all of the following are frozen and 
 11. model-version attestation plus paired time blocking that prevents moving provider aliases or backend drift from correlating with arm identity;
 12. inference-runtime reproducibility controls: either a frozen self-hosted hardware/software/precision fingerprint or an explicit hosted-backend uncertainty plan with randomized paired execution and replication sensitivity;
 13. a contamination analysis that distinguishes exact/lexical matches from semantic or family-level overlap and states residual risk explicitly;
-14. auditable cost telemetry for hidden/reasoning computation, or a prospectively bounded uncertainty analysis when hosted providers do not expose independently verifiable usage.
+14. auditable cost telemetry for hidden/reasoning computation, or a prospectively bounded uncertainty analysis when hosted providers do not expose independently verifiable usage;
+15. contract-equivalent verified-chain/product-only payload, chain-length, stopping, retry, and finalization semantics, differing only in the predeclared verification-gating mechanism being tested.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
