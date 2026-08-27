@@ -5,7 +5,7 @@ import json
 import math
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, NamedTuple
 
 
 class ChainState(StrEnum):
@@ -70,12 +70,11 @@ def _hash_record(record: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-@dataclass(frozen=True, slots=True)
-class CanonicalProductValue:
-    """Immutable deterministic snapshot used as the verified product identity."""
+class CanonicalProductValue(NamedTuple):
+    """Tuple-backed snapshot whose verified bytes cannot be reassigned in-process."""
 
     canonical_json: str
-    _sha256: str
+    content_sha256: str
 
     @classmethod
     def from_value(cls, value: Any) -> "CanonicalProductValue":
@@ -95,12 +94,12 @@ class CanonicalProductValue:
             ) from exc
         return cls(
             canonical_json=canonical_json,
-            _sha256=hashlib.sha256(canonical_bytes).hexdigest(),
+            content_sha256=hashlib.sha256(canonical_bytes).hexdigest(),
         )
 
     @property
     def sha256(self) -> str:
-        return self._sha256
+        return self.content_sha256
 
     def to_python(self) -> Any:
         # Decode a new value on every access so callers never receive mutable storage
@@ -166,9 +165,8 @@ class ProductRef:
     content_sha256: str
 
 
-@dataclass(frozen=True, slots=True)
-class VerificationSubject:
-    """Exact immutable product and chain context that an external verifier must check."""
+class VerificationSubject(NamedTuple):
+    """Tuple-backed exact product and chain context that the verifier must check."""
 
     problem_id: str
     product_id: str
@@ -179,7 +177,7 @@ class VerificationSubject:
     parent_content_sha256: str | None
     parent_verification_subject_sha256: str | None
     parent_verification_receipt_sha256: str | None
-    _subject_sha256: str
+    subject_digest_sha256: str
 
     @property
     def value(self) -> Any:
@@ -195,11 +193,12 @@ class VerificationSubject:
 
     @property
     def subject_sha256(self) -> str:
-        return self._subject_sha256
+        return self.subject_digest_sha256
 
 
-@dataclass(frozen=True, slots=True)
-class VerifiedProduct:
+class VerifiedProduct(NamedTuple):
+    """Tuple-backed capability minted only after a subject-bound PASS."""
+
     product_id: str
     step_index: int
     content: CanonicalProductValue
@@ -258,8 +257,10 @@ class VerifiedChain:
     byte-identical chain with different verification provenance.
 
     Consumers receive a fresh decoded view of the verified snapshot, never the
-    producer-owned mutable object. A following step must cite the exact
-    ``VerifiedProduct`` returned by ``consume_verified`` as its parent.
+    producer-owned mutable object. The authoritative subject/product wrappers are
+    tuple-backed so even ``object.__setattr__`` cannot rewrite verified fields in
+    place. A following step must cite the exact ``VerifiedProduct`` returned by
+    ``consume_verified`` as its parent.
     """
 
     def __init__(self, problem_id: str) -> None:
@@ -387,7 +388,7 @@ class VerifiedChain:
             parent_content_sha256=parent_content_sha256,
             parent_verification_subject_sha256=parent_verification_subject_sha256,
             parent_verification_receipt_sha256=parent_verification_receipt_sha256,
-            _subject_sha256=subject_sha256,
+            subject_digest_sha256=subject_sha256,
         )
 
     def verification_subject(self, product_id: str) -> VerificationSubject:
