@@ -175,6 +175,42 @@ class BenchmarkImporterTests(unittest.TestCase):
             self.assertEqual(check_result.returncode, 2)
             self.assertIn("must be outside benchmark source", check_result.stderr)
 
+    def test_check_rejects_ambiguous_or_non_standard_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            lock = MODULE.build_lock(source, name="bench", version="v1", split="test")
+            serialized = json.dumps(lock, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+            lock_path = root / "BENCHMARK.lock.json"
+
+            duplicate = serialized.replace(
+                '  "schema_version": 1,',
+                '  "schema_version": 999,\n  "schema_version": 1,',
+                1,
+            )
+            lock_path.write_text(duplicate, encoding="utf-8")
+            duplicate_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(source), "--lock", str(lock_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(duplicate_result.returncode, 2)
+            self.assertIn("duplicate JSON object member: schema_version", duplicate_result.stderr)
+
+            non_standard = serialized.replace('"file_count": 2', '"file_count": NaN', 1)
+            lock_path.write_text(non_standard, encoding="utf-8")
+            constant_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(source), "--lock", str(lock_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(constant_result.returncode, 2)
+            self.assertIn("non-standard JSON constant: NaN", constant_result.stderr)
+
     def test_cli_lock_and_check_emit_machine_readable_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
