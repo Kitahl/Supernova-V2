@@ -24,6 +24,19 @@ def _canonical_json(value: object) -> bytes:
     ).encode("utf-8")
 
 
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"benchmark lock contains duplicate JSON object member: {key}")
+        value[key] = item
+    return value
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"benchmark lock contains non-standard JSON constant: {value}")
+
+
 def _require_text(label: str, value: str) -> str:
     value = value.strip()
     if not value:
@@ -174,7 +187,11 @@ def _write_lock(path: Path, lock: dict[str, Any]) -> None:
 
 
 def _load_lock(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = json.loads(
+        path.read_text(encoding="utf-8"),
+        object_pairs_hook=_strict_json_object,
+        parse_constant=_reject_json_constant,
+    )
     if not isinstance(value, dict):
         raise ValueError("benchmark lock must contain a JSON object")
     return value
