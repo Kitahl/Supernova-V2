@@ -239,8 +239,8 @@ class MultiFidelityContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ordered prefix"):
             skipped.validate_for(request)
 
-    def test_selected_stage_must_have_answered(self) -> None:
-        with self.assertRaisesRegex(ValueError, "ANSWERED candidate"):
+    def test_selected_stage_must_be_final_answered_attempt(self) -> None:
+        with self.assertRaisesRegex(ValueError, "final attempted ANSWERED stage"):
             MultiFidelityResult(
                 "r",
                 "e",
@@ -252,6 +252,49 @@ class MultiFidelityContractTests(unittest.TestCase):
                 ),
                 "low",
             )
+
+    def test_escalation_cannot_retroactively_select_earlier_answer(self) -> None:
+        with self.assertRaisesRegex(ValueError, "final attempted ANSWERED stage"):
+            MultiFidelityResult(
+                "r",
+                "e",
+                "p",
+                "b",
+                (
+                    MultiFidelityCandidate("low", "ANSWERED", "L", None),
+                    MultiFidelityCandidate("high", "ANSWERED", "H", None),
+                ),
+                "low",
+            )
+
+    def test_escalated_nonanswer_has_no_implicit_fallback_policy(self) -> None:
+        request = self.request()
+        with self.assertRaisesRegex(ValueError, "null unless the final attempted stage answered"):
+            MultiFidelityResult(
+                request.request_id,
+                request.experiment_id,
+                request.problem_id,
+                request.budget_id,
+                (
+                    MultiFidelityCandidate("cheap", "ANSWERED", "L", None),
+                    MultiFidelityCandidate("standard", "ERROR", None, "timeout"),
+                ),
+                "cheap",
+            )
+
+        result = MultiFidelityResult(
+            request.request_id,
+            request.experiment_id,
+            request.problem_id,
+            request.budget_id,
+            (
+                MultiFidelityCandidate("cheap", "ANSWERED", "L", None),
+                MultiFidelityCandidate("standard", "ERROR", None, "timeout"),
+            ),
+            None,
+        )
+        result.validate_for(request)
+        self.assertIsNone(result.selected_answer)
 
     def test_multi_fidelity_has_no_cross_stage_product_or_verifier_channel(self) -> None:
         request_fields = {field.name for field in fields(MultiFidelityRequest)}
