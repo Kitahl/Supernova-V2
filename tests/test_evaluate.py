@@ -76,7 +76,10 @@ class EvaluateExperimentTests(unittest.TestCase):
         self.assertEqual("PASS", result["decision"])
         self.assertEqual(4, mcnemar.call_count)
         self.assertTrue(all(call.args == (2, 0) for call in mcnemar.call_args_list))
-        holm.assert_called_once_with((0.01, 0.01, 0.01, 0.01), 0.05)
+        holm.assert_called_once()
+        p_values, alpha = holm.call_args.args
+        self.assertEqual((0.01, 0.01, 0.01, 0.01), tuple(p_values))
+        self.assertEqual(0.05, alpha)
 
 
 if __name__ == "__main__":
