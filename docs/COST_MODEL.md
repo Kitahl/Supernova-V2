@@ -37,24 +37,42 @@ mapping to equal that manifest exactly:
 - expected event IDs and observed event IDs must each be unique;
 - a manifest with zero expected events is invalid.
 
+Identity coverage is necessary but not sufficient. Every cost-bearing measurement on an
+observed event must also be known. `None` is the typed representation of unavailable
+telemetry and prevents report closure:
+
+- a model-call event is incomplete if either input-token or output-token usage is
+  unknown;
+- a verifier event is incomplete if its elapsed milliseconds are unknown;
+- an orchestration event is incomplete if its elapsed milliseconds are unknown.
+
+`0` is reserved for an actually observed zero. A caller must not convert unavailable
+provider usage or missing timing telemetry to zero. This matters especially for failed
+or retried work: the issued attempt must remain in the expected-event manifest, and if
+its required resource measurement cannot be recovered, the arm remains incomplete
+rather than receiving a free zero-cost attempt.
+
 Therefore an empty trace for an executed arm cannot be asserted complete and silently
 converted to exact zero cost. If five callers submit empty traces with
 `accounting_complete=true`, report closure fails because the expected telemetry is
-missing. A measured zero is still representable, but it needs coverage evidence: for
-example, an expected orchestration event observed with `milliseconds=0` contributes
-zero while proving that the accounting event was actually present.
+missing. A measured zero is still representable, but it needs both coverage evidence
+and known measurements: for example, an expected orchestration event observed with
+`milliseconds=0` contributes zero while proving that the accounting event was actually
+present.
 
 The execution harness must construct the expected-event manifest from the planned or
 issued operations rather than infer it from telemetry after the fact. For dynamic
 retries, the retry event must be registered in the manifest at dispatch, before its
 telemetry is collected. The current cost module can deterministically verify manifest
-coverage; it cannot by itself prove that an external harness preregistered the manifest
-at the correct time. That provenance requirement must be frozen in the experiment
-runtime before scientific use.
+coverage and reject typed unknown measurements; it cannot by itself prove that an
+external harness preregistered the manifest at the correct time or that a harness did
+not fabricate an observed zero. That provenance requirement must be frozen and enforced
+in the experiment runtime before scientific use.
 
 A `CompleteCostReport` closes only when **exactly all five arms** are present and every
-arm satisfies both the close marker and exact manifest coverage:
-`ordinary`, `portfolio`, `product_only`, `multi_fidelity`, and `verified_chain`.
+arm satisfies the close marker, exact manifest coverage, and complete resource
+measurements: `ordinary`, `portfolio`, `product_only`, `multi_fidelity`, and
+`verified_chain`.
 
 ## Fair-budget rule: componentwise, not weighted
 
@@ -92,9 +110,10 @@ environment. At minimum, the experimental protocol must freeze and record:
   per-operation elapsed time, so overlapping portfolio work is summed rather than
   receiving a free makespan discount;
 - telemetry completeness rules, including how the execution harness constructs and
-  freezes or dispatch-registers expected events. If the provider/runtime cannot report
-  a required quantity, that arm's accounting remains incomplete rather than
-  substituting zero.
+  freezes or dispatch-registers expected events, how dropped telemetry is detected, and
+  how unavailable quantities are represented as typed unknowns rather than zero. If the
+  provider/runtime cannot report a required quantity, that arm's accounting remains
+  incomplete.
 
 Under heterogeneous models, hardware, verifier implementations, or tool access, the raw
 vector can still be reported, but cross-arm fairness is not established merely by this
@@ -152,6 +171,7 @@ ceiling = CompleteCost(16, 200_000, 100_000, 600_000, 600_000)
 assert report.within_budget(ceiling)[Arm.ORDINARY]
 ```
 
-The zero-valued orchestration events in the example are explicit coverage evidence, not
-permission to use an empty trace. The example demonstrates the accounting API only. It
-is not an instruction to freeze the bootstrap ceiling or any scalar exchange rate.
+The zero-valued orchestration events in the example are explicit coverage evidence with
+known measurements, not permission to use an empty trace or to substitute zero for
+unknown telemetry. The example demonstrates the accounting API only. It is not an
+instruction to freeze the bootstrap ceiling or any scalar exchange rate.
