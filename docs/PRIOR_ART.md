@@ -319,6 +319,23 @@ actual accelerator work. Because chaining itself changes request segmentation, r
 correlated with treatment. The confirmatory protocol should either measure/match model compute with
 request-shape-aware telemetry or narrow the cost claim to a provider-metered token/call proxy.
 
+### 24. OpenTelemetry SDK/Collector — telemetry completeness requires drop/provenance evidence
+
+Primary sources: OpenTelemetry, *Tracing SDK* specification.
+<https://opentelemetry.io/docs/specs/otel/trace/sdk/>; OpenTelemetry, *Collector internal telemetry*.
+<https://opentelemetry.io/docs/collector/internal-telemetry/>.
+
+**EVIDENCE.** The OpenTelemetry tracing SDK specifies a bounded batch-processor queue and states
+that spans are dropped once `maxQueueSize` is reached. The Collector documentation exposes enqueue
+and send-failure counters and recommends using ingress/egress telemetry to detect records that may
+not have reached the backend.
+
+**INFERENCE for Goal 1.** Telemetry can be internally well-formed yet incomplete. Proposed G1-007's
+exact equality between observed events and a caller-supplied expected-event manifest therefore does
+not by itself prove that every cost-bearing operation was represented. A stronger scientific cost
+boundary needs trusted pre-execution dispatch provenance plus reconciliation to provider/runtime
+evidence and explicit telemetry-drop detection.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -335,7 +352,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - intermediate representation/premise exposure can affect prover capability;
 - verification-conditioned feedback/retry can improve proof search;
 - ordinary McNemar inference assumes independent matched pairs and needs adjustment for clustered pairs;
-- aggregate token/call totals do not uniquely identify LLM inference compute or serving work.
+- aggregate token/call totals do not uniquely identify LLM inference compute or serving work;
+- telemetry pipelines can drop records, so observed-trace consistency is not by itself a completeness certificate.
 
 ## What these sources do **not** establish for Supernova
 
@@ -372,6 +390,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Contract-equivalence falsifier:** are payload representation, parentage, chain length, stopping, and finalization matched across the primary causal pair? (TheoremBench.)
 - **Compute falsifier:** does the effect persist at matched realized generator+verifier resources or a preregistered cost frontier? (Snell; AlphaGeometry; Singhi.)
 - **Request-shape compute falsifier:** do conclusions survive request-shape-aware compute measurement/matching, or are they explicitly limited to a token/call budget claim? (Vaswani; Sarathi-Serve; DistServe.)
+- **Dispatch-provenance falsifier:** does every cost-bearing model/verifier/tool operation receive a trusted pre-execution event ID and reconcile to provider/runtime evidence with telemetry-drop counters clean? (OpenTelemetry SDK/Collector.)
 - **Contamination falsifier:** does the effect persist on fresh/hidden or prospectively protected items? (LiveBench; MathArena; LeanDojo.)
 - **Soft-contamination falsifier:** does it survive semantic/family-level overlap checks or post-model-cutoff data? (Spiesberger.)
 - **Benchmark-fidelity falsifier:** does it survive removal/correction of malformed or unsafe formal items? (Ammanamanchi et al.)
