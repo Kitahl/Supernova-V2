@@ -303,6 +303,29 @@ intended proof structure while changing incidental constants/names, and require 
 variants. Treat these as a robustness diagnostic with a predeclared aggregation rule rather than
 silently replacing the primary endpoint after results are seen.
 
+### T18 — Hosted-model time drift can masquerade as an arm effect (`CRITICAL` for API models)
+
+**EVIDENCE — repository.** `goal1/GOAL1.json` currently freezes no model/provider/version and contains
+no execution-time blocking rule. **EVIDENCE — external.** Chen, Zaharia, and Zou measured materially
+different task behavior between March and June 2023 versions of GPT-3.5/GPT-4, showing that a hosted
+LLM service can change over time: <https://arxiv.org/abs/2307.09009>. Current Gemini API documentation
+states that `latest` model aliases are hot-swapped on new releases, while specific stable model names
+are intended to be stable: <https://ai.google.dev/gemini-api/docs/models>.
+
+**INFERENCE.** If one arm is run earlier and another later, calendar time can become correlated with
+arm identity. A provider alias rollover or other backend/model change can then look like a verified-
+chain treatment effect even though the repository, prompt, and nominal model string did not change.
+This threat is distinct from ordinary sampling noise because the data-generating model itself can
+move during the experiment.
+
+**Required falsifier/mitigation.** Use an immutable/specific provider model version rather than a
+moving `latest` alias wherever possible; record the requested and provider-returned model/version
+identifier plus trusted call time; execute paired arms for each problem in randomized or
+counterbalanced narrow time blocks; and fail closed or segment a confirmatory run if model identity
+changes inside a block. If the provider cannot attest an immutable model identity, predeclare that
+limitation and make time blocking part of the design rather than assuming a repeated alias denotes
+the same treatment.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -316,7 +339,8 @@ The confirmatory run should not start until all of the following are frozen and 
 7. retry, timeout, early-stop, and failure semantics;
 8. replication/aggregation rule and the already-frozen paired statistical decision rule;
 9. a development/confirmatory separation that prevents adaptive benchmark reuse;
-10. a prospective robustness check against memorized-instance success when the benchmark design permits controlled variants.
+10. a prospective robustness check against memorized-instance success when the benchmark design permits controlled variants;
+11. model-version attestation plus paired time blocking that prevents moving provider aliases or backend drift from correlating with arm identity.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
