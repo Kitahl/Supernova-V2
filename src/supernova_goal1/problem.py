@@ -62,21 +62,69 @@ class BenchmarkProblemIdentity(_BenchmarkProblemIdentityTuple):
             _token(native_id, "native_id"),
         )
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise TypeError("BenchmarkProblemIdentity may not be subclassed")
+
     @classmethod
     def _make(cls, iterable: object) -> "BenchmarkProblemIdentity":
         return cls(*tuple(iterable))  # type: ignore[arg-type]
+
+    def _validated_fields(self) -> tuple[str, str, str, str]:
+        values = tuple(self)
+        if len(values) != 4:
+            raise ValueError("problem identity storage must contain exactly four fields")
+        benchmark, version, split, native_id = values
+        return (
+            _token(benchmark, "benchmark"),
+            _token(version, "version"),
+            _token(split, "split"),
+            _token(native_id, "native_id"),
+        )
 
     @property
     def canonical_id(self) -> str:
         return f"sha256:{_digest(self.to_mapping())}"
 
     def to_mapping(self) -> dict[str, str]:
+        benchmark, version, split, native_id = self._validated_fields()
         return {
-            "benchmark": self.benchmark,
-            "native_id": self.native_id,
-            "split": self.split,
-            "version": self.version,
+            "benchmark": benchmark,
+            "native_id": native_id,
+            "split": split,
+            "version": version,
         }
+
+
+def _validated_problems(
+    benchmark: str,
+    version: str,
+    split: str,
+    problems: Sequence[BenchmarkProblemIdentity],
+) -> tuple[BenchmarkProblemIdentity, ...]:
+    if not isinstance(problems, Sequence) or isinstance(
+        problems, (str, bytes, bytearray)
+    ):
+        raise TypeError("problems must be an ordered sequence")
+    frozen_problems = tuple(problems)
+    if not frozen_problems:
+        raise ValueError("problems must contain at least one benchmark problem")
+
+    canonical_ids: set[str] = set()
+    for problem in frozen_problems:
+        if type(problem) is not BenchmarkProblemIdentity:
+            raise TypeError("problems must contain exact BenchmarkProblemIdentity values")
+        problem_benchmark, problem_version, problem_split, _ = problem._validated_fields()
+        if (
+            problem_benchmark,
+            problem_version,
+            problem_split,
+        ) != (benchmark, version, split):
+            raise ValueError("every problem must belong to the contract benchmark/version/split")
+        canonical_id = problem.canonical_id
+        if canonical_id in canonical_ids:
+            raise ValueError(f"duplicate problem identity: {canonical_id}")
+        canonical_ids.add(canonical_id)
+    return frozen_problems
 
 
 _SplitContractTuple = namedtuple(
@@ -103,29 +151,11 @@ class SplitContract(_SplitContractTuple):
         benchmark = _token(benchmark, "benchmark")
         version = _token(version, "version")
         split = _token(split, "split")
-        if not isinstance(problems, Sequence) or isinstance(
-            problems, (str, bytes, bytearray)
-        ):
-            raise TypeError("problems must be an ordered sequence")
-        frozen_problems = tuple(problems)
-        if not frozen_problems:
-            raise ValueError("problems must contain at least one benchmark problem")
-
-        canonical_ids: set[str] = set()
-        for problem in frozen_problems:
-            if not isinstance(problem, BenchmarkProblemIdentity):
-                raise TypeError("problems must contain BenchmarkProblemIdentity values")
-            if (
-                problem.benchmark,
-                problem.version,
-                problem.split,
-            ) != (benchmark, version, split):
-                raise ValueError("every problem must belong to the contract benchmark/version/split")
-            if problem.canonical_id in canonical_ids:
-                raise ValueError(f"duplicate problem identity: {problem.canonical_id}")
-            canonical_ids.add(problem.canonical_id)
-
+        frozen_problems = _validated_problems(benchmark, version, split, problems)
         return super().__new__(cls, benchmark, version, split, frozen_problems)
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise TypeError("SplitContract may not be subclassed")
 
     @classmethod
     def _make(cls, iterable: object) -> "SplitContract":
@@ -160,18 +190,36 @@ class SplitContract(_SplitContractTuple):
             ),
         )
 
+    def _validated_fields(
+        self,
+    ) -> tuple[str, str, str, tuple[BenchmarkProblemIdentity, ...]]:
+        values = tuple(self)
+        if len(values) != 4:
+            raise ValueError("split contract storage must contain exactly four fields")
+        benchmark, version, split, problems = values
+        benchmark = _token(benchmark, "benchmark")
+        version = _token(version, "version")
+        split = _token(split, "split")
+        if type(problems) is not tuple:
+            raise TypeError("split contract storage must contain an immutable problem tuple")
+        return benchmark, version, split, _validated_problems(
+            benchmark, version, split, problems
+        )
+
     @property
     def problem_ids(self) -> tuple[str, ...]:
-        return tuple(problem.canonical_id for problem in self.problems)
+        _, _, _, problems = self._validated_fields()
+        return tuple(problem.canonical_id for problem in problems)
 
     @property
     def contract_id(self) -> str:
         return f"sha256:{_digest(self.to_mapping())}"
 
     def to_mapping(self) -> dict[str, object]:
+        benchmark, version, split, problems = self._validated_fields()
         return {
-            "benchmark": self.benchmark,
-            "problem_ids": list(self.problem_ids),
-            "split": self.split,
-            "version": self.version,
+            "benchmark": benchmark,
+            "problem_ids": [problem.canonical_id for problem in problems],
+            "split": split,
+            "version": version,
         }
