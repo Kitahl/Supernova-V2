@@ -91,6 +91,19 @@ class SplitContractTests(unittest.TestCase):
                 benchmark="bench", version="v1", split="test", native_ids="p1"
             )
 
+    def test_contract_rejects_unordered_membership(self) -> None:
+        for native_ids in ({"p1", "p2"}, frozenset({"p1", "p2"})):
+            with self.subTest(container=type(native_ids).__name__):
+                with self.assertRaisesRegex(
+                    TypeError, "must preserve deterministic iteration order"
+                ):
+                    SplitContract.from_native_ids(
+                        benchmark="bench",
+                        version="v1",
+                        split="test",
+                        native_ids=native_ids,
+                    )
+
     def test_contract_requires_nonempty_membership_and_is_frozen(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least one"):
             SplitContract.from_native_ids(
