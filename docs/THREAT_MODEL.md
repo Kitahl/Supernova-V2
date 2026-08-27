@@ -326,6 +326,32 @@ changes inside a block. If the provider cannot attest an immutable model identit
 limitation and make time blocking part of the design rather than assuming a repeated alias denotes
 the same treatment.
 
+### T19 — "Deterministic" inference can still vary with backend execution (`HIGH`)
+
+**EVIDENCE — repository.** `goal1/GOAL1.json` does not freeze an inference-runtime fingerprint such
+as batch size, accelerator type/count, numerical precision, serving engine, or deterministic-kernel
+policy. **EVIDENCE — external.** Yuan et al. show that changing batch size, GPU count, or GPU version
+can change reasoning-model outputs and benchmark accuracy even under greedy decoding; their NeurIPS
+2025 study reports up to 9% accuracy variation for one reasoning model under BF16 across system
+configurations: <https://proceedings.neurips.cc/paper_files/paper/2025/hash/f80094a824ba5912d4a2de169c404a40-Abstract-Conference.html>.
+Ouyang et al. independently report substantial run-to-run non-determinism for ChatGPT code
+generation and find that temperature zero does not guarantee deterministic outputs:
+<https://arxiv.org/abs/2308.02828>.
+
+**INFERENCE.** Freezing a model name, prompt, temperature, and seed does not by itself make paired
+arm outcomes reproducible. If backend batching, hardware, precision, or serving kernels differ
+across arms or replicates, system-level numerical variation can be mistaken for treatment variation.
+This is distinct from T18's model-version drift: the advertised model can stay fixed while its
+execution path changes.
+
+**Required falsifier/mitigation.** For self-hosted inference, freeze and record the model weights,
+serving engine/version, accelerator type/count, batch size, numerical precision, parallelism, and
+kernel/determinism settings. For hosted APIs where those details are unavailable, do not label a
+seed or temperature-zero run "deterministic" unless the provider guarantees it; randomize paired
+arm order, use a prospectively frozen replication policy, retain request/response provenance when
+available, and run a sensitivity analysis showing that the scientific conclusion is not driven by
+single-run backend noise.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -340,7 +366,8 @@ The confirmatory run should not start until all of the following are frozen and 
 8. replication/aggregation rule and the already-frozen paired statistical decision rule;
 9. a development/confirmatory separation that prevents adaptive benchmark reuse;
 10. a prospective robustness check against memorized-instance success when the benchmark design permits controlled variants;
-11. model-version attestation plus paired time blocking that prevents moving provider aliases or backend drift from correlating with arm identity.
+11. model-version attestation plus paired time blocking that prevents moving provider aliases or backend drift from correlating with arm identity;
+12. inference-runtime reproducibility controls: either a frozen self-hosted hardware/software/precision fingerprint or an explicit hosted-backend uncertainty plan with randomized paired execution and replication sensitivity.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
