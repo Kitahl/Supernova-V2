@@ -180,6 +180,16 @@ def _load_lock(path: Path) -> dict[str, Any]:
     return value
 
 
+def _require_control_path_outside_source(source: Path, control_path: Path, *, label: str) -> None:
+    source = source.resolve()
+    control_path = control_path.resolve()
+    try:
+        control_path.relative_to(source)
+    except ValueError:
+        return
+    raise ValueError(f"{label} must be outside benchmark source: {control_path}")
+
+
 def _summary(command: str, lock: dict[str, Any], *, status: str) -> str:
     content = lock["content"]
     return json.dumps(
@@ -217,11 +227,13 @@ def main(argv: list[str]) -> int:
     args = _parser().parse_args(argv[1:])
     try:
         if args.command == "lock":
+            _require_control_path_outside_source(args.source, args.output, label="benchmark lock output")
             lock = build_lock(args.source, name=args.name, version=args.version, split=args.split)
             _write_lock(args.output, lock)
             print(_summary("lock", lock, status="LOCKED"))
             return 0
 
+        _require_control_path_outside_source(args.source, args.lock, label="benchmark lock file")
         lock = _load_lock(args.lock)
         verified = verify_lock(args.source, lock)
         print(_summary("check", verified, status="PASS"))
