@@ -246,6 +246,24 @@ feedback for agentic tasks.
 contract. A treatment receiving fine-grained verifier feedback is not fairly compared with an arm
 receiving only a binary terminal score, even if both invoke a component called a "verifier."
 
+### 16. Chen, Zaharia & Zou (2023) plus provider versioning docs — hosted-model identity can move over time
+
+Primary sources: Lingjiao Chen, Matei Zaharia, and James Zou, *How is ChatGPT's behavior changing
+over time?* <https://arxiv.org/abs/2307.09009>; Google, *Gemini API — Models*.
+<https://ai.google.dev/gemini-api/docs/models>
+
+**EVIDENCE.** Chen et al. compare March and June 2023 versions of GPT-3.5/GPT-4 and report substantial,
+task-dependent behavior changes over a short interval. Google's current Gemini documentation makes
+the operational versioning hazard explicit: specific stable model names are intended to be stable,
+whereas `latest` aliases are hot-swapped to newer releases.
+
+**INFERENCE for Goal 1.** Model family/name equality is not enough to establish treatment equality
+across time. If arms are executed in separate temporal blocks against a moving hosted endpoint, a
+provider update can be confounded with arm identity. Confirmatory execution should therefore use a
+specific immutable/stable model version where available, record returned model identity and trusted
+call time, and interleave/counterbalance paired arms so service drift cannot systematically favor one
+mechanism.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -261,7 +279,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - modern theorem provers already generate/refine lemmas and use formally proved intermediate facts downstream (Seed-Prover, Prover Agent, Goedel-Architect);
 - reusable lemma discovery can create cross-problem state and transfer effects (DreamProver);
 - a kernel-accepted Lean proof does not by itself establish that the benchmark statement faithfully encodes the intended problem (Ammanamanchi et al.);
-- fine-grained verification feedback can itself be an agentic capability channel (Kwok et al.).
+- fine-grained verification feedback can itself be an agentic capability channel (Kwok et al.);
+- hosted model services can change over time, and moving model aliases can silently change the data-generating system (Chen et al.; Gemini model-version documentation).
 
 ## What these sources do **not** establish for Supernova
 
@@ -307,6 +326,9 @@ to answer these prior-art-driven falsifiers:
   vacuous, weakened, or unsafe formal items? (Ammanamanchi et al.)
 - **State-transfer falsifier:** does the result persist when every problem starts without reusable
   products or learned lemma state from previous benchmark items? (DreamProver.)
+- **Temporal-drift falsifier:** does the effect persist when paired arms are interleaved or
+  counterbalanced in narrow time blocks on the exact same stable model version, with returned model
+  identity and call time recorded? (Chen et al.; Gemini model-version documentation.)
 
 If those falsifiers are not implemented, any positive result should be described as performance of
 the *bundled verified-chain system* rather than evidence that verified-product chaining itself is
