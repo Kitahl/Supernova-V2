@@ -1,16 +1,22 @@
 """Deterministic product admission, intentionally separate from scientific scoring.
 
-Admission answers only whether a product has the exact independent evidence required by
-an admission policy. It does not decide whether the product is scientifically useful,
-whether an experiment arm solved a problem, or how any result should be scored.
+Admission answers only whether a product has the exact independently authorized evidence
+required by a trusted admission policy. It does not decide whether the product is
+scientifically useful, whether an experiment arm solved a problem, or how any result
+should be scored.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 from string import hexdigits
 from typing import Any, Iterable, Mapping
+
+
+_EVIDENCE_DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v1"
 
 
 class EvidenceOutcome(StrEnum):
@@ -43,6 +49,35 @@ def _sha256(value: Any, field: str) -> str:
     if value != value.lower():
         raise ValueError(f"{field} must use lowercase hex")
     return value
+
+
+def _canonical_evidence_sha256(
+    *,
+    evidence_id: str,
+    check_id: str,
+    product_id: str,
+    artifact_sha256: str,
+    verifier_id: str,
+    outcome: EvidenceOutcome,
+) -> str:
+    """Hash the canonical evidence content, excluding the digest field itself."""
+
+    payload = {
+        "artifact_sha256": artifact_sha256,
+        "check_id": check_id,
+        "evidence_id": evidence_id,
+        "outcome": outcome.value,
+        "product_id": product_id,
+        "schema": _EVIDENCE_DIGEST_DOMAIN,
+        "verifier_id": verifier_id,
+    }
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -98,15 +133,26 @@ class AdmissionEvidence:
             evidence_sha256=_sha256(raw["evidence_sha256"], "evidence.evidence_sha256"),
         )
 
+    def canonical_sha256(self) -> str:
+        return _canonical_evidence_sha256(
+            evidence_id=self.evidence_id,
+            check_id=self.check_id,
+            product_id=self.product_id,
+            artifact_sha256=self.artifact_sha256,
+            verifier_id=self.verifier_id,
+            outcome=self.outcome,
+        )
+
 
 @dataclass(frozen=True)
 class AdmissionPolicy:
     policy_id: str
     required_checks: tuple[str, ...]
+    authorized_verifiers: Mapping[str, tuple[str, ...]]
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "AdmissionPolicy":
-        expected = {"policy_id", "required_checks"}
+        expected = {"policy_id", "required_checks", "authorized_verifiers"}
         _exact_fields(raw, expected, "policy")
         policy_id = _identifier(raw["policy_id"], "policy.policy_id")
         required = raw["required_checks"]
@@ -117,7 +163,40 @@ class AdmissionPolicy:
         )
         if len(set(checks)) != len(checks):
             raise ValueError("policy.required_checks must be unique")
-        return cls(policy_id=policy_id, required_checks=checks)
+
+        verifier_map = raw["authorized_verifiers"]
+        if not isinstance(verifier_map, Mapping):
+            raise ValueError("policy.authorized_verifiers must be a mapping")
+        if set(verifier_map) != set(checks):
+            raise ValueError(
+                "policy.authorized_verifiers keys must exactly match required_checks"
+            )
+
+        authorized: dict[str, tuple[str, ...]] = {}
+        for check_id in checks:
+            verifier_ids = verifier_map[check_id]
+            if not isinstance(verifier_ids, list) or not verifier_ids:
+                raise ValueError(
+                    f"policy.authorized_verifiers[{check_id!r}] must be a non-empty list"
+                )
+            parsed = tuple(
+                _identifier(
+                    verifier_id,
+                    f"policy.authorized_verifiers[{check_id!r}][]",
+                )
+                for verifier_id in verifier_ids
+            )
+            if len(set(parsed)) != len(parsed):
+                raise ValueError(
+                    f"policy.authorized_verifiers[{check_id!r}] must be unique"
+                )
+            authorized[check_id] = parsed
+
+        return cls(
+            policy_id=policy_id,
+            required_checks=checks,
+            authorized_verifiers=authorized,
+        )
 
 
 def evaluate_product_admission(
@@ -142,14 +221,24 @@ def evaluate_product_admission(
         reasons.add("duplicate evidence_id")
 
     for item in evidence:
+        if item.evidence_sha256 != item.canonical_sha256():
+            reasons.add(f"evidence digest mismatch: {item.evidence_id}")
+
         if item.check_id not in required:
             reasons.add(f"unexpected check: {item.check_id}")
             continue
+
         by_check[item.check_id].append(item)
         if item.product_id != product.product_id:
             reasons.add(f"product_id mismatch for check: {item.check_id}")
         if item.artifact_sha256 != product.artifact_sha256:
             reasons.add(f"artifact digest mismatch for check: {item.check_id}")
+
+        authorized = policy.authorized_verifiers[item.check_id]
+        if item.verifier_id not in authorized:
+            reasons.add(
+                f"unauthorized verifier for check: {item.check_id}={item.verifier_id}"
+            )
         if item.verifier_id == product.producer_id:
             reasons.add(f"producer cannot verify its own product: {item.check_id}")
         if item.outcome is not EvidenceOutcome.PASS:
