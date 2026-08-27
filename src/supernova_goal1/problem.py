@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Set as AbstractSet
+from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 import json
@@ -66,8 +66,10 @@ class SplitContract:
     def __post_init__(self) -> None:
         for field in ("benchmark", "version", "split"):
             object.__setattr__(self, field, _token(getattr(self, field), field))
-        if isinstance(self.problems, AbstractSet):
-            raise TypeError("problems must preserve deterministic iteration order")
+        if not isinstance(self.problems, Sequence) or isinstance(
+            self.problems, (str, bytes, bytearray)
+        ):
+            raise TypeError("problems must be an ordered sequence")
         object.__setattr__(self, "problems", tuple(self.problems))
         if not self.problems:
             raise ValueError("problems must contain at least one benchmark problem")
@@ -93,12 +95,12 @@ class SplitContract:
         benchmark: str,
         version: str,
         split: str,
-        native_ids: Iterable[str],
+        native_ids: Sequence[str],
     ) -> "SplitContract":
-        if isinstance(native_ids, (str, bytes)):
-            raise TypeError("native_ids must be an iterable of problem-id strings")
-        if isinstance(native_ids, AbstractSet):
-            raise TypeError("native_ids must preserve deterministic iteration order")
+        if isinstance(native_ids, (str, bytes, bytearray)):
+            raise TypeError("native_ids must be a sequence of problem-id strings")
+        if not isinstance(native_ids, Sequence):
+            raise TypeError("native_ids must be an ordered sequence")
         frozen_ids = tuple(native_ids)
         return cls(
             benchmark=benchmark,
