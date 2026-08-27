@@ -37,6 +37,15 @@ mapping to equal that manifest exactly:
 - expected event IDs and observed event IDs must each be unique;
 - a manifest with zero expected events is invalid.
 
+Closure is snapshot-based. `ArmCostTrace` copies the supplied telemetry and expected-event
+collections into immutable tuples, and `CompleteCostReport` likewise snapshots its trace
+collection. This applies even when callers use the public dataclass constructors directly
+rather than the convenience constructors. Mutating a caller-owned list after report
+closure therefore cannot delete an expensive event, erase its expected-manifest entry,
+or remove an arm from a previously accepted report. `frozen=True` is not treated as a
+substitute for this copy because freezing a dataclass does not deep-freeze mutable objects
+held in its fields.
+
 Identity coverage is necessary but not sufficient. Every cost-bearing measurement on an
 observed event must also be known. `None` is the typed representation of unavailable
 telemetry and prevents report closure:
