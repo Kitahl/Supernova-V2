@@ -78,6 +78,9 @@ class MultiFidelityRequest:
         stage_ids = [stage.stage_id for stage in self.stages]
         if len(stage_ids) != len(set(stage_ids)):
             raise ValueError("multi-fidelity stage_ids must be unique")
+        fidelity_ids = [stage.fidelity_id for stage in self.stages]
+        if len(fidelity_ids) != len(set(fidelity_ids)):
+            raise ValueError("multi-fidelity fidelity_ids must be unique")
         ranks = [stage.fidelity_rank for stage in self.stages]
         if any(left >= right for left, right in zip(ranks, ranks[1:])):
             raise ValueError("multi-fidelity fidelity_rank values must strictly increase")
