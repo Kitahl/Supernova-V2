@@ -182,11 +182,21 @@ class MultiFidelityResult:
         if self.selected_stage_id is not None:
             _text(self.selected_stage_id, "selected_stage_id")
 
-        # Escalation is directional: attempting a later stage means every earlier
-        # stage was deferred. The result therefore cannot inspect a later output and
-        # then retroactively cherry-pick an earlier answer. A fallback policy after a
-        # later NO_ANSWER/ERROR would be a separate routing policy and is not hidden in
-        # this arm contract.
+        # Escalation is directional: a later stage is only attempted after every
+        # earlier stage deferred or errored. Once any stage answers, the cascade stops;
+        # running a higher-fidelity stage after observing that answer would introduce
+        # an unregistered post-answer routing/search policy.
+        if any(
+            candidate.status is MultiFidelityAttemptStatus.ANSWERED
+            for candidate in self.candidates[:-1]
+        ):
+            raise ValueError(
+                "multi-fidelity escalation cannot continue after an ANSWERED stage"
+            )
+
+        # The stop-stage itself is the only selectable answer. A fallback policy after
+        # a final NO_ANSWER/ERROR would be a separate routing policy and is not hidden
+        # in this arm contract.
         final_candidate = self.candidates[-1]
         if final_candidate.status is MultiFidelityAttemptStatus.ANSWERED:
             if self.selected_stage_id != final_candidate.stage_id:
