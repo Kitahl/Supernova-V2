@@ -275,6 +275,15 @@ class ProductAdmissionTests(unittest.TestCase):
             result["reasons"],
         )
 
+    def test_short_runtime_authority_key_rejects(self) -> None:
+        keys = dict(self.auth_keys)
+        keys[KERNEL_AUTHORITY] = b"k" * 16
+        result = self.evaluate(auth_keys=keys)
+        self.assertIn(
+            f"authority authentication key too short: {KERNEL_AUTHORITY}",
+            result["reasons"],
+        )
+
     def test_producer_provenance_is_authenticated(self) -> None:
         product = copy.deepcopy(self.product)
         product["producer_hmac_sha256"] = "0" * 64
