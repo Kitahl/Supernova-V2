@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -237,9 +238,28 @@ def verify_lock(source: Path, lock: dict[str, Any]) -> dict[str, Any]:
 def _write_lock(path: Path, lock: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(lock, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(serialized, encoding="utf-8")
-    temporary.replace(path)
+    temporary: Path | None = None
+    descriptor = -1
+    try:
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            text=True,
+        )
+        temporary = Path(temporary_name)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+            descriptor = -1
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _load_lock(path: Path) -> dict[str, Any]:
