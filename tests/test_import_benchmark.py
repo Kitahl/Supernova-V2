@@ -110,6 +110,27 @@ class BenchmarkImporterTests(unittest.TestCase):
                 with self.assertRaisesRegex(PermissionError, "blocked subtree"):
                     MODULE.build_lock(source, name="bench", version="v1", split="test")
 
+    def test_file_change_while_hashing_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            volatile = source / "volatile.txt"
+            volatile.write_bytes(b"before")
+            real_fstat = MODULE.os.fstat
+            calls = 0
+
+            def mutating_fstat(fd):
+                nonlocal calls
+                result = real_fstat(fd)
+                calls += 1
+                if calls == 1:
+                    volatile.write_bytes(b"after-change")
+                return result
+
+            with mock.patch.object(MODULE.os, "fstat", mutating_fstat):
+                with self.assertRaisesRegex(ValueError, "changed while hashing"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
     def test_cli_lock_and_check_emit_machine_readable_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
