@@ -392,6 +392,23 @@ class CompleteCostReport:
                 f"missing={missing}, extra={extra}"
             )
 
+        # Event IDs identify issued work. A single dispatch/completion record cannot be
+        # replayed into multiple arms and count as distinct arm execution. Cross-arm
+        # uniqueness does not prove external dispatch provenance, but it closes the
+        # deterministic alias where one event ID could satisfy several arm manifests.
+        seen_event_ids: set[str] = set()
+        replayed_event_ids: set[str] = set()
+        for trace in self.traces:
+            for event in trace.events:
+                if event.event_id in seen_event_ids:
+                    replayed_event_ids.add(event.event_id)
+                seen_event_ids.add(event.event_id)
+        if replayed_event_ids:
+            raise ValueError(
+                "cost event_id values must be globally unique across all five arms; "
+                f"replayed={sorted(replayed_event_ids)}"
+            )
+
     @classmethod
     def from_traces(cls, traces: Iterable[ArmCostTrace]) -> "CompleteCostReport":
         return cls(tuple(traces))
