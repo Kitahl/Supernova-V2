@@ -78,6 +78,8 @@ def _enumerate_files(root: Path) -> list[dict[str, Any]]:
 
 
 def build_lock(source: Path, *, name: str, version: str, split: str) -> dict[str, Any]:
+    if source.is_symlink():
+        raise ValueError(f"benchmark source must not be a symlink: {source}")
     source = source.resolve()
     if not source.is_dir():
         raise ValueError(f"benchmark source is not a directory: {source}")
