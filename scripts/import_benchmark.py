@@ -98,7 +98,7 @@ def _walk_snapshot(
         current_path = Path(current)
         current_stat = current_path.lstat()
         current_relative = "." if current_path == root else current_path.relative_to(root).as_posix()
-        if current_path.is_symlink() or not stat.S_ISDIR(current_stat.st_mode):
+        if current_path.is_symlink() or current_path.is_junction() or not stat.S_ISDIR(current_stat.st_mode):
             raise ValueError(f"benchmark tree contains non-directory path during traversal: {current_relative}")
         directory_signatures[current_relative] = _stat_signature(current_stat)
 
@@ -110,6 +110,10 @@ def _walk_snapshot(
             if candidate.is_symlink():
                 raise ValueError(
                     f"benchmark tree contains symlinked directory: {candidate.relative_to(root).as_posix()}"
+                )
+            if candidate.is_junction():
+                raise ValueError(
+                    f"benchmark tree contains junction directory: {candidate.relative_to(root).as_posix()}"
                 )
 
         for filename in filenames:
@@ -149,7 +153,12 @@ def _validate_snapshot(
     for relative, expected in directory_signatures.items():
         directory = root if relative == "." else root / relative
         current = directory.lstat()
-        if directory.is_symlink() or not stat.S_ISDIR(current.st_mode) or _stat_signature(current) != expected:
+        if (
+            directory.is_symlink()
+            or directory.is_junction()
+            or not stat.S_ISDIR(current.st_mode)
+            or _stat_signature(current) != expected
+        ):
             raise ValueError(f"benchmark tree changed while hashing: directory changed after traversal: {relative}")
 
 
@@ -162,6 +171,8 @@ def _enumerate_files(root: Path) -> list[dict[str, Any]]:
 def build_lock(source: Path, *, name: str, version: str, split: str) -> dict[str, Any]:
     if source.is_symlink():
         raise ValueError(f"benchmark source must not be a symlink: {source}")
+    if source.is_junction():
+        raise ValueError(f"benchmark source must not be a junction: {source}")
     source = source.resolve()
     if not source.is_dir():
         raise ValueError(f"benchmark source is not a directory: {source}")
