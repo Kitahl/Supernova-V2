@@ -7,7 +7,12 @@ import json
 
 
 def _token(value: str, field: str) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a non-empty trimmed string")
+    # Authority-bearing tokens must not retain behavior from a user-defined str
+    # subclass (custom equality/strip/encode could otherwise spoof validation).
+    value = str.__str__(value)
+    if not value or value != value.strip():
         raise ValueError(f"{field} must be a non-empty trimmed string")
     if any(ord(char) < 32 for char in value):
         raise ValueError(f"{field} must not contain control characters")
