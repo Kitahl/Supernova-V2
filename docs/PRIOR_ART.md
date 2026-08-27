@@ -394,6 +394,26 @@ bind that digest. A confirmatory record should therefore carry the exact benchma
 contract identity, and any preprocessing/formalization transform identity, so an outcome cannot be
 replayed after the benchmark bytes change under the same names.
 
+### 28. ASA p-value guidance and Lakens (2022) — statistical detectability is not effect magnitude
+
+Primary sources: Ronald L. Wasserstein and Nicole A. Lazar, *The ASA's Statement on p-Values:
+Context, Process, and Purpose*.
+<https://doi.org/10.1080/00031305.2016.1154108>; Daniël Lakens, *Sample Size Justification*.
+<https://doi.org/10.1525/collabra.33267>.
+
+**EVIDENCE.** The ASA statement says that statistical significance does not measure effect size or
+importance and warns against scientific conclusions based only on crossing a p-value threshold.
+Lakens surveys prospective sample-size justification around the inferential target, including a
+smallest effect size of interest, desired precision, and power/sensitivity.
+
+**INFERENCE for Goal 1.** Current Goal 1 freezes an alpha threshold and a null-rejection rule but no
+minimum paired solve-rate gain, precision target, or sensitivity/power criterion. Even if exact
+McNemar and Holm are implemented perfectly, a PASS can identify a statistically detectable positive
+difference without establishing a scientifically material one; conversely, a FAIL can be
+uninformative when the confirmatory set is too small for the effect sizes that matter. The effect
+quantity, smallest meaningful margin or explicit no-margin interpretation, and sample-size/
+uncertainty plan should therefore be frozen before confirmation.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -414,7 +434,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - telemetry pipelines can drop records, so observed-trace consistency is not by itself a completeness certificate;
 - hosted API quota/cache/queue state can be shared across requests, so concurrent experimental arms can interfere operationally;
 - high-assurance verification practice binds a PASS to an exact artifact/challenge subject and verifier/policy evidence rather than trusting an unbound boolean;
-- reproducible dataset tracking binds evaluation data to a digest/fingerprint and source lineage rather than relying on a dataset name alone.
+- reproducible dataset tracking binds evaluation data to a digest/fingerprint and source lineage rather than relying on a dataset name alone;
+- p-value threshold crossing does not by itself quantify effect magnitude or scientific importance, and sample-size justification should match the inferential target.
 
 ## What these sources do **not** establish for Supernova
 
@@ -462,6 +483,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Shared-serving interference falsifier:** do conclusions persist when paired cells are isolated from shared provider quotas/caches/queues, or under a frozen counterbalanced execution/throttling policy with complete retry/rate-limit telemetry? (OpenAI/Anthropic rate-limit docs.)
 - **Outcome-evidence binding falsifier:** can every counted solved cell be replayed from an evidence-bound final-verifier record tied to the exact challenge and proof/artifact digest, with verifier/version/policy identity preserved? (Lean proof validation; SLSA VSA.)
 - **Benchmark-content binding falsifier:** can every scientific record be joined to the exact benchmark-lock root digest, split-contract identity, and preprocessing/formalization identity, with mismatches rejected rather than accepted under the same logical problem labels? (MLflow; Hugging Face Datasets.)
+- **Effect-size/sensitivity falsifier:** is the paired solve-rate effect, a justified smallest meaningful margin or explicit no-margin interpretation, and the confirmatory sample-size/uncertainty target frozen before outcomes are observed? (ASA p-value statement; Lakens.)
 
 If those falsifiers are not implemented, a positive result should be described as performance of the
 *bundled verified-chain system* rather than evidence that verified-product chaining itself caused
