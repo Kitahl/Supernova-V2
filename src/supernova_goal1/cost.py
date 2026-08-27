@@ -35,6 +35,12 @@ def _natural(value: int, field: str) -> int:
     return value
 
 
+def _optional_natural(value: int | None, field: str) -> int | None:
+    if value is None:
+        return None
+    return _natural(value, field)
+
+
 def _normalize_event_kind(kind: CostEventKind | str) -> CostEventKind:
     if isinstance(kind, CostEventKind):
         return kind
@@ -73,18 +79,29 @@ class ExpectedCostEvent:
 class CostEvent:
     event_id: str
     kind: CostEventKind
-    input_tokens: int = 0
-    output_tokens: int = 0
-    milliseconds: int = 0
+    input_tokens: int | None = 0
+    output_tokens: int | None = 0
+    milliseconds: int | None = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.event_id, str) or not self.event_id.strip():
             raise ValueError("event_id must be a non-empty string")
         object.__setattr__(self, "kind", _normalize_event_kind(self.kind))
-
-        _natural(self.input_tokens, "input_tokens")
-        _natural(self.output_tokens, "output_tokens")
-        _natural(self.milliseconds, "milliseconds")
+        object.__setattr__(
+            self,
+            "input_tokens",
+            _optional_natural(self.input_tokens, "input_tokens"),
+        )
+        object.__setattr__(
+            self,
+            "output_tokens",
+            _optional_natural(self.output_tokens, "output_tokens"),
+        )
+        object.__setattr__(
+            self,
+            "milliseconds",
+            _optional_natural(self.milliseconds, "milliseconds"),
+        )
 
         if self.kind is CostEventKind.MODEL_CALL:
             if self.milliseconds != 0:
@@ -93,14 +110,20 @@ class CostEvent:
                     "must be recorded separately"
                 )
         elif self.kind is CostEventKind.VERIFIER:
-            if self.input_tokens or self.output_tokens:
+            if self.input_tokens != 0 or self.output_tokens != 0:
                 raise ValueError("verifier events cannot carry model token counts")
         elif self.kind is CostEventKind.ORCHESTRATION:
-            if self.input_tokens or self.output_tokens:
+            if self.input_tokens != 0 or self.output_tokens != 0:
                 raise ValueError("orchestration events cannot carry model token counts")
 
     @classmethod
-    def model_call(cls, event_id: str, *, input_tokens: int, output_tokens: int) -> "CostEvent":
+    def model_call(
+        cls,
+        event_id: str,
+        *,
+        input_tokens: int | None,
+        output_tokens: int | None,
+    ) -> "CostEvent":
         return cls(
             event_id=event_id,
             kind=CostEventKind.MODEL_CALL,
@@ -109,7 +132,7 @@ class CostEvent:
         )
 
     @classmethod
-    def verifier(cls, event_id: str, *, milliseconds: int) -> "CostEvent":
+    def verifier(cls, event_id: str, *, milliseconds: int | None) -> "CostEvent":
         return cls(
             event_id=event_id,
             kind=CostEventKind.VERIFIER,
@@ -117,15 +140,40 @@ class CostEvent:
         )
 
     @classmethod
-    def orchestration(cls, event_id: str, *, milliseconds: int) -> "CostEvent":
+    def orchestration(cls, event_id: str, *, milliseconds: int | None) -> "CostEvent":
         return cls(
             event_id=event_id,
             kind=CostEventKind.ORCHESTRATION,
             milliseconds=milliseconds,
         )
 
-    def cost_increment(self) -> CompleteCost:
+    @property
+    def unknown_measurements(self) -> tuple[str, ...]:
         if self.kind is CostEventKind.MODEL_CALL:
+            unknown: list[str] = []
+            if self.input_tokens is None:
+                unknown.append("input_tokens")
+            if self.output_tokens is None:
+                unknown.append("output_tokens")
+            return tuple(unknown)
+        if self.kind is CostEventKind.VERIFIER:
+            return ("verifier_milliseconds",) if self.milliseconds is None else ()
+        return ("orchestration_milliseconds",) if self.milliseconds is None else ()
+
+    @property
+    def measurement_complete(self) -> bool:
+        return not self.unknown_measurements
+
+    def cost_increment(self) -> CompleteCost:
+        if not self.measurement_complete:
+            raise ValueError(
+                "cannot aggregate incomplete cost telemetry; "
+                f"event_id={self.event_id!r}, missing={self.unknown_measurements}"
+            )
+
+        if self.kind is CostEventKind.MODEL_CALL:
+            assert self.input_tokens is not None
+            assert self.output_tokens is not None
             return CompleteCost(
                 model_calls=1,
                 input_tokens=self.input_tokens,
@@ -133,6 +181,7 @@ class CostEvent:
                 verifier_milliseconds=0,
                 orchestration_milliseconds=0,
             )
+        assert self.milliseconds is not None
         if self.kind is CostEventKind.VERIFIER:
             return CompleteCost(0, 0, 0, self.milliseconds, 0)
         return CompleteCost(0, 0, 0, 0, self.milliseconds)
@@ -214,6 +263,18 @@ class ArmCostTrace:
         )
 
     @property
+    def unknown_measurements(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        return tuple(
+            (event.event_id, event.unknown_measurements)
+            for event in self.events
+            if not event.measurement_complete
+        )
+
+    @property
+    def measurements_complete(self) -> bool:
+        return not self.unknown_measurements
+
+    @property
     def total(self) -> CompleteCost:
         model_calls = input_tokens = output_tokens = 0
         verifier_milliseconds = orchestration_milliseconds = 0
@@ -244,9 +305,14 @@ class CompleteCostReport:
                 trace.accounting_complete,
                 trace.missing_expected_events,
                 trace.unexpected_events,
+                trace.unknown_measurements,
             )
             for trace in self.traces
-            if not trace.accounting_complete or not trace.coverage_complete
+            if (
+                not trace.accounting_complete
+                or not trace.coverage_complete
+                or not trace.measurements_complete
+            )
         ]
         if incomplete:
             raise ValueError(
