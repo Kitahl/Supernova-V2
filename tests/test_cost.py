@@ -156,6 +156,32 @@ class CompleteCostAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ceiling.input_tokens"):
             report.within_budget(CompleteCost(1, True, 0, 0, 0))
 
+    def test_hostile_int_subclasses_are_rejected_at_accounting_boundaries(self) -> None:
+        class EvilInt(int):
+            def __lt__(self, other: object) -> bool:
+                return False
+
+        with self.assertRaisesRegex(ValueError, "input_tokens"):
+            CostEvent.model_call(
+                "evil-call",
+                input_tokens=EvilInt(-9),
+                output_tokens=0,
+            )
+
+        with self.assertRaisesRegex(ValueError, "milliseconds"):
+            CostEvent.verifier("evil-verify", milliseconds=EvilInt(-9))
+
+        report = self._zero_report()
+        with self.assertRaisesRegex(ValueError, "ceiling.model_calls"):
+            report.within_budget(CompleteCost(EvilInt(-9), 0, 0, 0, 0))
+
+        valid = CompleteCost(1, 1, 1, 1, 1)
+        with self.assertRaisesRegex(ValueError, "right.input_tokens"):
+            compare_complete_cost(
+                valid,
+                CompleteCost(1, EvilInt(-9), 1, 1, 1),
+            )
+
     def test_cost_comparison_preserves_incomparability_without_weights(self) -> None:
         cheap_tokens_expensive_verifier = CompleteCost(1, 10, 10, 500, 5)
         expensive_tokens_cheap_verifier = CompleteCost(1, 100, 10, 50, 5)
