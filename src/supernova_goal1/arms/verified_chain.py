@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -30,28 +33,88 @@ class InvalidParentError(ValueError):
     """Raised when a new product is not chained from the last consumed product."""
 
 
+def _validate_product_value(value: Any, path: str = "value") -> None:
+    if value is None or isinstance(value, (bool, str, int)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"{path} must not contain NaN or infinity")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_product_value(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"{path} object keys must be strings")
+            _validate_product_value(item, f"{path}.{key}")
+        return
+    raise TypeError(
+        f"{path} must be JSON-compatible (null, boolean, string, number, list, or object)"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalProductValue:
+    """Immutable deterministic snapshot used as the verified product identity."""
+
+    canonical_json: str
+
+    @classmethod
+    def from_value(cls, value: Any) -> "CanonicalProductValue":
+        _validate_product_value(value)
+        canonical_json = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        return cls(canonical_json=canonical_json)
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(self.canonical_json.encode("utf-8")).hexdigest()
+
+    def to_python(self) -> Any:
+        # Decode a new value on every access so callers never receive mutable storage
+        # owned by the verified product.
+        return json.loads(self.canonical_json)
+
+
 @dataclass(frozen=True, slots=True)
 class ProductRef:
     product_id: str
     step_index: int
     state: ChainState
+    content_sha256: str
 
 
 @dataclass(frozen=True, slots=True)
 class VerifiedProduct:
     product_id: str
     step_index: int
-    value: Any
+    content: CanonicalProductValue
     producer_id: str
     verifier_id: str
     evidence_id: str
     parent_product_id: str | None
+
+    @property
+    def value(self) -> Any:
+        return self.content.to_python()
+
+    @property
+    def content_sha256(self) -> str:
+        return self.content.sha256
 
 
 @dataclass(frozen=True, slots=True)
 class StepRecord:
     product_id: str
     step_index: int
+    content_sha256: str
     outcome: VerificationOutcome
     producer_id: str
     verifier_id: str
@@ -65,7 +128,7 @@ class StepRecord:
 class _PendingProduct:
     product_id: str
     step_index: int
-    value: Any
+    content: CanonicalProductValue
     producer_id: str
     parent_product_id: str | None
 
@@ -73,10 +136,14 @@ class _PendingProduct:
 class VerifiedChain:
     """Runtime typestate for a within-problem verified product chain.
 
-    The chain never exposes an intermediate value through its consumption API until a
-    distinct verifier has recorded PASS for the current product. A following step must
-    cite the exact ``VerifiedProduct`` object returned by ``consume_verified`` as its
-    parent, preserving a concrete verified chain instead of a bag of unrelated products.
+    Each proposed value is immediately converted to an immutable, content-addressed
+    snapshot. PASS therefore binds verification to bytes that cannot be changed by
+    later mutation of the producer's source object. Consumers receive a fresh decoded
+    view of that verified snapshot, never the producer-owned mutable object.
+
+    A following step must cite the exact ``VerifiedProduct`` object returned by
+    ``consume_verified`` as its parent, preserving a concrete verified chain instead
+    of a bag of unrelated products.
     """
 
     def __init__(self, problem_id: str) -> None:
@@ -109,12 +176,14 @@ class VerifiedChain:
                 product_id=self._pending.product_id,
                 step_index=self._pending.step_index,
                 state=self._state,
+                content_sha256=self._pending.content.sha256,
             )
         if self._verified is not None:
             return ProductRef(
                 product_id=self._verified.product_id,
                 step_index=self._verified.step_index,
                 state=self._state,
+                content_sha256=self._verified.content_sha256,
             )
         return None
 
@@ -150,17 +219,18 @@ class VerifiedChain:
             parent_product_id = parent.product_id
             step_index = parent.step_index + 1
 
+        content = CanonicalProductValue.from_value(value)
         self._pending = _PendingProduct(
             product_id=product_id,
             step_index=step_index,
-            value=value,
+            content=content,
             producer_id=producer_id,
             parent_product_id=parent_product_id,
         )
         self._verified = None
         self._used_product_ids.add(product_id)
         self._state = ChainState.AWAITING_VERIFICATION
-        return ProductRef(product_id, step_index, self._state)
+        return ProductRef(product_id, step_index, self._state, content.sha256)
 
     def record_verification(
         self,
@@ -192,7 +262,7 @@ class VerifiedChain:
             self._verified = VerifiedProduct(
                 product_id=pending.product_id,
                 step_index=pending.step_index,
-                value=pending.value,
+                content=pending.content,
                 producer_id=pending.producer_id,
                 verifier_id=verifier_id,
                 evidence_id=evidence_id,
@@ -205,6 +275,7 @@ class VerifiedChain:
                 StepRecord(
                     product_id=pending.product_id,
                     step_index=pending.step_index,
+                    content_sha256=pending.content.sha256,
                     outcome=normalized,
                     producer_id=pending.producer_id,
                     verifier_id=verifier_id,
@@ -216,7 +287,7 @@ class VerifiedChain:
             )
             self._state = ChainState.REJECTED
 
-        return ProductRef(product_id, pending.step_index, self._state)
+        return ProductRef(product_id, pending.step_index, self._state, pending.content.sha256)
 
     def consume_verified(self, product_id: str) -> VerifiedProduct:
         if self._state is ChainState.AWAITING_VERIFICATION:
@@ -235,6 +306,7 @@ class VerifiedChain:
             StepRecord(
                 product_id=verified.product_id,
                 step_index=verified.step_index,
+                content_sha256=verified.content_sha256,
                 outcome=VerificationOutcome.PASS,
                 producer_id=verified.producer_id,
                 verifier_id=verified.verifier_id,
@@ -276,6 +348,7 @@ class VerifiedChain:
             StepRecord(
                 product_id=verified.product_id,
                 step_index=verified.step_index,
+                content_sha256=verified.content_sha256,
                 outcome=VerificationOutcome.PASS,
                 producer_id=verified.producer_id,
                 verifier_id=verified.verifier_id,
