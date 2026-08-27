@@ -106,11 +106,12 @@ def _verification_subject_sha256(
     producer_id: str,
     parent_product_id: str | None,
     parent_content_sha256: str | None,
+    parent_verification_subject_sha256: str | None,
 ) -> str:
     """Bind verification to both immutable content and its exact chain context."""
 
     subject = {
-        "schema": "supernova-goal1-verification-subject-v1",
+        "schema": "supernova-goal1-verification-subject-v2",
         "problem_id": problem_id,
         "product_id": product_id,
         "step_index": step_index,
@@ -118,6 +119,7 @@ def _verification_subject_sha256(
         "producer_id": producer_id,
         "parent_product_id": parent_product_id,
         "parent_content_sha256": parent_content_sha256,
+        "parent_verification_subject_sha256": parent_verification_subject_sha256,
     }
     subject_bytes = json.dumps(
         subject,
@@ -148,6 +150,7 @@ class VerificationSubject:
     producer_id: str
     parent_product_id: str | None
     parent_content_sha256: str | None
+    parent_verification_subject_sha256: str | None
     _subject_sha256: str
 
     @property
@@ -217,9 +220,9 @@ class VerifiedChain:
     Each proposed value is immediately converted to an immutable, content-addressed
     snapshot. The verifier receives that exact snapshot through ``verification_subject``
     together with its problem/step/parent context, and ``record_verification`` requires
-    the resulting decision to cite a SHA-256 digest over that complete subject. PASS
-    therefore cannot be replayed from another problem or parent chain merely because
-    the product bytes happen to match.
+    the resulting decision to cite a SHA-256 digest over that complete subject. Parent
+    subjects are linked recursively, so PASS cannot be replayed from another problem
+    or deeper lineage merely because the immediate product/parent bytes happen to match.
     Consumers receive a fresh decoded view of that verified snapshot, never the
     producer-owned mutable object.
 
@@ -322,6 +325,11 @@ class VerifiedChain:
             if pending.parent_product_id is not None and self._last_consumed is not None
             else None
         )
+        parent_verification_subject_sha256 = (
+            self._last_consumed.verification_subject_sha256
+            if pending.parent_product_id is not None and self._last_consumed is not None
+            else None
+        )
         subject_sha256 = _verification_subject_sha256(
             problem_id=self._problem_id,
             product_id=pending.product_id,
@@ -330,6 +338,7 @@ class VerifiedChain:
             producer_id=pending.producer_id,
             parent_product_id=pending.parent_product_id,
             parent_content_sha256=parent_content_sha256,
+            parent_verification_subject_sha256=parent_verification_subject_sha256,
         )
         return VerificationSubject(
             problem_id=self._problem_id,
@@ -339,6 +348,7 @@ class VerifiedChain:
             producer_id=pending.producer_id,
             parent_product_id=pending.parent_product_id,
             parent_content_sha256=parent_content_sha256,
+            parent_verification_subject_sha256=parent_verification_subject_sha256,
             _subject_sha256=subject_sha256,
         )
 
