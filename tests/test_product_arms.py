@@ -38,7 +38,7 @@ class ProductOnlyContractTests(unittest.TestCase):
     def test_product_only_is_an_unverified_product_chain(self) -> None:
         request_fields = {field.name for field in fields(ProductOnlyRequest)}
         result_fields = {field.name for field in fields(ProductOnlyResult)}
-        product_fields = {field.name for field in fields(ProductOnlyProduct)}
+        product_fields = set(ProductOnlyProduct._fields)
         self.assertEqual(
             {
                 "request_id",
@@ -142,6 +142,27 @@ class ProductOnlyContractTests(unittest.TestCase):
             ProductOnlyProduct("bad", None, math.inf)
         with self.assertRaisesRegex(TypeError, "JSON-compatible"):
             ProductOnlyProduct("bad", None, {1, 2, 3})
+
+    def test_product_snapshot_resists_low_level_field_reassignment(self) -> None:
+        product = ProductOnlyProduct("a", None, {"answer": [1, 2]})
+        original_value = product.value
+        original_digest = product.content_sha256
+
+        mutations = (
+            ("product_id", "forged"),
+            ("parent_product_id", "forged-parent"),
+            ("canonical_json", '{"answer":[999]}'),
+            ("content_sha256", "0" * 64),
+        )
+        for field, replacement in mutations:
+            with self.subTest(field=field):
+                with self.assertRaises(AttributeError):
+                    object.__setattr__(product, field, replacement)
+
+        self.assertEqual("a", product.product_id)
+        self.assertIsNone(product.parent_product_id)
+        self.assertEqual(original_value, product.value)
+        self.assertEqual(original_digest, product.content_sha256)
 
     def test_mapping_rejects_verifier_feedback_channel(self) -> None:
         raw = {
