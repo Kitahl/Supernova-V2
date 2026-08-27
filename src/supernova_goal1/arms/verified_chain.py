@@ -33,6 +33,10 @@ class InvalidParentError(ValueError):
     """Raised when a new product is not chained from the last consumed product."""
 
 
+class VerificationSubjectMismatchError(ValueError):
+    """Raised when a verifier result is not bound to the current product content."""
+
+
 def _validate_product_value(value: Any, path: str = "value") -> None:
     if value is None or isinstance(value, (bool, str, int)):
         return
@@ -102,6 +106,29 @@ class ProductRef:
 
 
 @dataclass(frozen=True, slots=True)
+class VerificationSubject:
+    """Exact immutable product snapshot that an external verifier must check."""
+
+    product_id: str
+    step_index: int
+    content: CanonicalProductValue
+    producer_id: str
+    parent_product_id: str | None
+
+    @property
+    def value(self) -> Any:
+        return self.content.to_python()
+
+    @property
+    def canonical_json(self) -> str:
+        return self.content.canonical_json
+
+    @property
+    def content_sha256(self) -> str:
+        return self.content.sha256
+
+
+@dataclass(frozen=True, slots=True)
 class VerifiedProduct:
     product_id: str
     step_index: int
@@ -147,9 +174,12 @@ class VerifiedChain:
     """Runtime typestate for a within-problem verified product chain.
 
     Each proposed value is immediately converted to an immutable, content-addressed
-    snapshot. PASS therefore binds verification to bytes that cannot be changed by
-    later mutation of the producer's source object. Consumers receive a fresh decoded
-    view of that verified snapshot, never the producer-owned mutable object.
+    snapshot. The verifier receives that exact snapshot through ``verification_subject``
+    and ``record_verification`` requires the resulting decision to cite its SHA-256
+    digest. PASS therefore binds verification to bytes that cannot be changed by later
+    mutation of the producer's source object or confused with another product snapshot.
+    Consumers receive a fresh decoded view of that verified snapshot, never the
+    producer-owned mutable object.
 
     A following step must cite the exact ``VerifiedProduct`` object returned by
     ``consume_verified`` as its parent, preserving a concrete verified chain instead
@@ -242,10 +272,27 @@ class VerifiedChain:
         self._state = ChainState.AWAITING_VERIFICATION
         return ProductRef(product_id, step_index, self._state, content.sha256)
 
+    def verification_subject(self, product_id: str) -> VerificationSubject:
+        if self._state is not ChainState.AWAITING_VERIFICATION or self._pending is None:
+            raise InvalidTransitionError(
+                f"no verification subject while chain state is {self._state.value}"
+            )
+        if product_id != self._pending.product_id:
+            raise ValueError("verification product_id does not match current product")
+        pending = self._pending
+        return VerificationSubject(
+            product_id=pending.product_id,
+            step_index=pending.step_index,
+            content=pending.content,
+            producer_id=pending.producer_id,
+            parent_product_id=pending.parent_product_id,
+        )
+
     def record_verification(
         self,
         product_id: str,
         *,
+        subject_content_sha256: str,
         outcome: VerificationOutcome | str,
         verifier_id: str,
         evidence_id: str,
@@ -256,6 +303,12 @@ class VerifiedChain:
             )
         if product_id != self._pending.product_id:
             raise ValueError("verification product_id does not match current product")
+        if not isinstance(subject_content_sha256, str) or not subject_content_sha256:
+            raise ValueError("subject_content_sha256 must be a non-empty string")
+        if subject_content_sha256 != self._pending.content.sha256:
+            raise VerificationSubjectMismatchError(
+                "verification subject digest does not match current product content"
+            )
         if not isinstance(verifier_id, str) or not verifier_id:
             raise ValueError("verifier_id must be a non-empty string")
         if verifier_id == self._pending.producer_id:
