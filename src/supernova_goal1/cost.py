@@ -62,8 +62,10 @@ def _snapshot_complete_cost(value: CompleteCost, field: str) -> CompleteCost:
 
 
 def _normalize_event_kind(kind: CostEventKind | str) -> CostEventKind:
-    if isinstance(kind, CostEventKind):
+    if type(kind) is CostEventKind:
         return kind
+    if type(kind) is not str:
+        raise ValueError(f"unknown cost event kind: {kind!r}")
     try:
         return CostEventKind(kind)
     except (TypeError, ValueError) as exc:
