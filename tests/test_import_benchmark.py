@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +76,24 @@ class BenchmarkImporterTests(unittest.TestCase):
                 self.skipTest("symlinks unavailable on this platform")
             with self.assertRaisesRegex(ValueError, "symlinked file"):
                 MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+    def test_walk_errors_fail_closed_instead_of_producing_partial_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            (source / "visible.txt").write_text("visible", encoding="utf-8")
+
+            def failing_walk(root, *, topdown, onerror, followlinks):
+                self.assertTrue(topdown)
+                self.assertFalse(followlinks)
+                self.assertIsNotNone(onerror)
+                onerror(PermissionError("blocked subtree"))
+                if False:
+                    yield root, [], []
+
+            with mock.patch.object(MODULE.os, "walk", failing_walk):
+                with self.assertRaisesRegex(PermissionError, "blocked subtree"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
 
     def test_cli_lock_and_check_emit_machine_readable_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
