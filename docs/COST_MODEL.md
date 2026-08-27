@@ -46,6 +46,12 @@ telemetry and prevents report closure:
 - a verifier event is incomplete if its elapsed milliseconds are unknown;
 - an orchestration event is incomplete if its elapsed milliseconds are unknown.
 
+Relevant measurement fields default to `None`, not `0`, at the `CostEvent` API boundary.
+Constructing an event without supplying its required token or elapsed-time measurement
+therefore produces typed unknown telemetry and cannot close a report. An explicit zero
+must be supplied to assert an observed zero. Fields that are irrelevant to an event kind
+may remain `None`; a nonzero cross-category value is rejected.
+
 `0` is reserved for an actually observed zero. A caller must not convert unavailable
 provider usage or missing timing telemetry to zero. This matters especially for failed
 or retried work: the issued attempt must remain in the expected-event manifest, and if
