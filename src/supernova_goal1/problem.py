@@ -57,6 +57,10 @@ class BenchmarkProblemIdentity(_BenchmarkProblemIdentityTuple):
             _token(native_id, "native_id"),
         )
 
+    @classmethod
+    def _make(cls, iterable: object) -> "BenchmarkProblemIdentity":
+        return cls(*tuple(iterable))  # type: ignore[arg-type]
+
     @property
     def canonical_id(self) -> str:
         return f"sha256:{_digest(self.to_mapping())}"
@@ -117,6 +121,10 @@ class SplitContract(_SplitContractTuple):
             canonical_ids.add(problem.canonical_id)
 
         return super().__new__(cls, benchmark, version, split, frozen_problems)
+
+    @classmethod
+    def _make(cls, iterable: object) -> "SplitContract":
+        return cls(*tuple(iterable))  # type: ignore[arg-type]
 
     @classmethod
     def from_native_ids(
