@@ -218,8 +218,9 @@ class VerifiedProduct(NamedTuple):
         return self.content.sha256
 
 
-@dataclass(frozen=True, slots=True)
-class StepRecord:
+class StepRecord(NamedTuple):
+    """Tuple-backed immutable audit record for a verification transition."""
+
     product_id: str
     step_index: int
     content_sha256: str
@@ -257,10 +258,10 @@ class VerifiedChain:
     byte-identical chain with different verification provenance.
 
     Consumers receive a fresh decoded view of the verified snapshot, never the
-    producer-owned mutable object. The authoritative subject/product wrappers are
-    tuple-backed so even ``object.__setattr__`` cannot rewrite verified fields in
-    place. A following step must cite the exact ``VerifiedProduct`` returned by
-    ``consume_verified`` as its parent.
+    producer-owned mutable object. The authoritative subject/product/history wrappers
+    are tuple-backed so even ``object.__setattr__`` cannot rewrite verified fields or
+    audit outcomes in place. A following step must cite the exact ``VerifiedProduct``
+    returned by ``consume_verified`` as its parent.
     """
 
     def __init__(self, problem_id: str) -> None:
