@@ -458,6 +458,37 @@ For high-assurance formal runs, replay the exact final artifact against the froz
 clean verifier environment. Missing, mismatched, replayed, or unverifiable evidence must fail closed;
 search-time verifier evidence must remain distinct from final-outcome evidence.
 
+### T28 — Benchmark names and problem IDs are not bound to the locked benchmark bytes (`CRITICAL`)
+
+**EVIDENCE — repository.** Current `BenchmarkProblemIdentity.canonical_id` hashes only the logical
+fields `benchmark`, `version`, `split`, and `native_id`; `SplitContract.contract_id` is derived from
+those logical problem IDs and split metadata. Proposed G1-002 / PR #11 separately creates a
+`BENCHMARK.lock.json` with a `content.root_sha256`, but the current `ExperimentSpec.from_mapping`
+does not consume the `benchmark` object or any benchmark-lock/split-contract digest at all. Current
+`OutcomeRecord` likewise carries only `experiment_id`, `problem_id`, `arm`, `budget_id`, booleans,
+and aggregate cost. **EVIDENCE — external.** MLflow's current dataset-tracking contract records both
+a dataset name and a digest/hash plus source lineage rather than treating the name alone as the data
+identity: <https://mlflow.org/docs/latest/dataset/>. Hugging Face Datasets similarly describes a
+fingerprint as tracking the current state of a dataset and changing after transforms:
+<https://huggingface.co/docs/datasets/v1.16.0/about_cache.html>.
+
+**INFERENCE.** A human-readable benchmark/version/split label is not a content identity. Even after
+G1-002 lands, Goal 1 can have a valid benchmark-tree lock living beside scientific records that are
+not cryptographically or deterministically bound to it. Replacing/correcting benchmark bytes,
+changing preprocessing, or replaying an old outcome against the same logical problem IDs could
+therefore leave the evaluator unable to distinguish different scientific inputs. This is distinct
+from T5/T20 contamination: the defect exists even for a perfectly clean benchmark because the
+measurement record is not tied to the exact dataset state it claims to evaluate.
+
+**Required falsifier/mitigation.** Freeze and bind the exact benchmark artifact into the experiment
+contract before any confirmatory execution. At minimum include the trusted `BENCHMARK.lock.json`
+`content.root_sha256` and the exact `SplitContract.contract_id` (or equivalent content-derived split
+digest) in the frozen `ExperimentSpec`, carry the applicable benchmark/problem-content digest into
+each `OutcomeRecord`, and require `evaluate_experiment` to reject any mismatch. If preprocessing,
+formalization, or retrieval-visible benchmark projections transform the source data, bind those
+transforms/tool versions too. A prior outcome must not be reusable after any benchmark-content or
+split-contract digest changes.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -482,7 +513,8 @@ The confirmatory run should not start until all of the following are frozen and 
 18. request-shape-aware model-compute accounting, or an explicit statement that the frozen cost construct is a token/call proxy rather than complete compute;
 19. a trusted pre-execution dispatch ledger reconciled to all cost events/provider-runtime request evidence, with dropped or unregistered telemetry blocking closure;
 20. an execution-isolation plan for shared provider quotas, caches, queues, backoff/retry state, and concurrent serving interference;
-21. evidence-bound final outcomes tying every solved cell to the exact challenge, proof/artifact digest, final-verifier identity/policy, and independently checkable PASS evidence.
+21. evidence-bound final outcomes tying every solved cell to the exact challenge, proof/artifact digest, final-verifier identity/policy, and independently checkable PASS evidence;
+22. an experiment-level benchmark-content binding tying every scientific outcome to the exact benchmark lock, split contract, and any preprocessing/formalization transform identity.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
