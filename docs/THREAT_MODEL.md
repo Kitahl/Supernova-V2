@@ -244,19 +244,79 @@ but it cannot support the scientific hypothesis.
 `BLOCKED` until benchmark/split and complete-cost semantics are frozen. Never quote dry-run solve
 counts as evidence for the mechanism.
 
+### T15 — Kernel-valid can still be benchmark-invalid (`CRITICAL` for formal benchmarks)
+
+**EVIDENCE — external.** Ammanamanchi, Bhat, and Biderman (2026) audited five Lean theorem-proving
+benchmarks and reported 4,833 findings, including 398 mechanically certified issues such as
+counterexamples, vacuous theorems, and unsound axioms. They emphasize that the Lean kernel proves a
+formal statement, not that the formal statement faithfully represents the intended informal
+problem: <https://arxiv.org/abs/2606.29493>.
+
+**INFERENCE.** Goal 1 cannot use "kernel verified" as a synonym for "scientifically correct benchmark
+solve." A malformed or weakened formalization can make an arm look successful while measuring the
+wrong construct. This is distinct from model contamination: the benchmark itself may be defective.
+
+**Required falsifier/mitigation.** Before freezing a formal benchmark, run mechanical dataset checks
+for vacuity, unsafe axioms/imports, contradictory assumptions, degenerate arithmetic semantics, and
+other executable loopholes; maintain a reviewed mapping from informal problem identity to formal
+statement; freeze corrected snapshots/hashes; and report any excluded or repaired items
+prospectively. Final proof replay must be paired with benchmark-fidelity validation, not substituted
+for it.
+
+### T16 — Verifier computation and verifier granularity are treatment variables (`CRITICAL`)
+
+**EVIDENCE — external.** Setlur et al. (ICML 2025) show that verifier-based search/RL can scale
+differently from verifier-free methods even under fixed compute/data budgets:
+<https://proceedings.mlr.press/v267/setlur25a.html>. Singhi et al. (2025) explicitly account for the
+solve-versus-verify tradeoff and report that generative verification can require substantially more
+inference compute than self-consistency at practical budgets:
+<https://arxiv.org/abs/2504.01005>. Chen et al. (2025) further show that verification frequency
+changes both accuracy and FLOP efficiency: <https://arxiv.org/abs/2505.11730>.
+
+**INFERENCE.** Counting only generator calls/tokens while putting verifier computation in a separate,
+loose ceiling leaves a major cost loophole. Two arms can have the same nominal model budget while
+one obtains more total inference FLOPs and more information by verifying more often. The frequency
+and richness of verification are part of the treatment, not neutral bookkeeping.
+
+**Required falsifier/mitigation.** Log and cap verifier invocations, verifier input/output tokens or
+FLOPs where applicable, wall time, diagnostics returned, and verification granularity. Report a
+joint generator+verifier cost vector for every cell. For any causal claim about chaining rather than
+verification intensity, include a control with matched verifier frequency/information bandwidth but
+without verified-product consumption.
+
+### T17 — Public-benchmark success may be instance memorization rather than structural reasoning (`HIGH`)
+
+**EVIDENCE — external.** MathArena evaluates models on newly released math competitions and reports
+strong signs of contamination on AIME 2024, motivating real-time post-release evaluation:
+<https://arxiv.org/abs/2505.23281>. VAR-MATH converts fixed public math questions into multiple
+symbolic instantiations and reports large performance drops on variabilized versions of common math
+benchmarks: <https://arxiv.org/abs/2507.12885>.
+
+**INFERENCE.** Even if a public benchmark is frozen before Supernova tuning, a model may exploit
+memorized instances or surface patterns. A verified final artifact does not distinguish memorized
+retrieval from robust reasoning. This matters especially if Goal 1 is framed as a general reasoning
+mechanism rather than a benchmark-engineering result.
+
+**Required falsifier/mitigation.** Prefer post-model-release or hidden confirmatory items. Where
+problem families permit it, add prospectively generated semantic/symbolic variants that preserve the
+intended proof structure while changing incidental constants/names, and require consistency across
+variants. Treat these as a robustness diagnostic with a predeclared aggregation rule rather than
+silently replacing the primary endpoint after results are seen.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
 
-1. benchmark identity, immutable split/hashes, allowed proof library, and contamination policy;
+1. benchmark identity, immutable split/hashes, allowed proof library, contamination policy, and a benchmark-fidelity audit;
 2. exact model/provider/version, prompts, sampling/seed policy, context limits, and tool permissions;
 3. executable contracts for all five arms showing which single causal features differ;
-4. search-verifier and final-verifier identities, query/diagnostic budgets, and clean replay rules;
+4. search-verifier and final-verifier identities, query/diagnostic budgets, verification granularity, and clean replay rules;
 5. cross-arm/cross-problem isolation and execution randomization;
-6. complete-cost accounting boundary plus an equal-cost or predeclared cost-frontier comparison rule;
+6. complete-cost accounting boundary plus an equal-cost or predeclared cost-frontier comparison rule, including generator and verifier computation;
 7. retry, timeout, early-stop, and failure semantics;
 8. replication/aggregation rule and the already-frozen paired statistical decision rule;
-9. a development/confirmatory separation that prevents adaptive benchmark reuse.
+9. a development/confirmatory separation that prevents adaptive benchmark reuse;
+10. a prospective robustness check against memorized-instance success when the benchmark design permits controlled variants.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
