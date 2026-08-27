@@ -250,6 +250,13 @@ class ArmCostTrace:
             )
         if len(expected_ids) != len(set(expected_ids)):
             raise ValueError(f"duplicate expected event_id in {self.arm.value}")
+        if not any(
+            event.kind is CostEventKind.MODEL_CALL for event in self.expected_events
+        ):
+            raise ValueError(
+                f"{self.arm.value} coverage manifest must contain at least one "
+                "expected model_call attempt"
+            )
 
     @classmethod
     def from_events(
