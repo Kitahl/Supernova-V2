@@ -173,6 +173,20 @@ class MultiFidelityContractTests(unittest.TestCase):
                 (FidelityStage("a", "low", 1), FidelityStage("b", "high", 1)),
             )
 
+    def test_request_rejects_duplicate_fidelity_identity(self) -> None:
+        with self.assertRaisesRegex(ValueError, "fidelity_ids must be unique"):
+            MultiFidelityRequest(
+                "r",
+                "e",
+                "p",
+                "b",
+                "problem",
+                (
+                    FidelityStage("a", "same-fidelity", 0),
+                    FidelityStage("b", "same-fidelity", 1),
+                ),
+            )
+
     def test_progressive_fidelity_selects_one_stage_answer_verbatim(self) -> None:
         request = self.request()
         result = MultiFidelityResult(
