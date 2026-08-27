@@ -92,6 +92,32 @@ class BenchmarkImporterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "source must not be a symlink"):
                 MODULE.build_lock(alias, name="bench", version="v1", split="test")
 
+    def test_windows_junctions_are_rejected_as_directory_indirection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+
+            with mock.patch.object(
+                Path,
+                "is_junction",
+                autospec=True,
+                side_effect=lambda path: path == source,
+            ):
+                with self.assertRaisesRegex(ValueError, "source must not be a junction"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+            nested = source / "zeta"
+            with mock.patch.object(
+                Path,
+                "is_junction",
+                autospec=True,
+                side_effect=lambda path: path == nested,
+            ):
+                with self.assertRaisesRegex(ValueError, "junction directory: zeta"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
     def test_walk_errors_fail_closed_instead_of_producing_partial_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "benchmark"
