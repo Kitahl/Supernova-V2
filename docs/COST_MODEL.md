@@ -124,6 +124,18 @@ The same frozen `CompleteCost` ceiling is applied to every arm, component by com
 An arm is within budget only if all five observed components are no greater than their
 corresponding ceilings.
 
+Budget checks and componentwise cost comparisons do not trust a caller-supplied
+`CompleteCost` object merely because its fields are type-annotated. Before use, the cost
+module requires an exact concrete `CompleteCost`, revalidates every dimension as a
+non-negative integer (rejecting booleans), and snapshots the five values once. The same
+snapshotted ceiling is then used for every arm in a report. This closes two runtime API
+aliases that would otherwise violate the common-budget invariant: Python does not enforce
+type annotations at runtime, so a directly constructed or post-construction-mutated
+`CompleteCost` could contain negative, boolean, or non-integer dimensions; and a subclass
+could override `as_tuple()` so the apparent ceiling or comparison vector differs from its
+stored fields or even changes between calls. The validated snapshot boundary prevents
+those objects from participating in budget or Pareto decisions.
+
 The implementation deliberately defines **no scalar weighted total**. There is no
 scientific basis in this repository for deciding, for example, that one verifier
 millisecond equals some fixed number of tokens or that one model call equals a fixed
