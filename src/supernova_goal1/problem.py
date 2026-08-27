@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Set as AbstractSet
 from dataclasses import dataclass
 from hashlib import sha256
 import json
-from typing import Iterable
 
 
 def _token(value: str, field: str) -> str:
@@ -91,6 +91,8 @@ class SplitContract:
     ) -> "SplitContract":
         if isinstance(native_ids, (str, bytes)):
             raise TypeError("native_ids must be an iterable of problem-id strings")
+        if isinstance(native_ids, AbstractSet):
+            raise TypeError("native_ids must preserve deterministic iteration order")
         frozen_ids = tuple(native_ids)
         return cls(
             benchmark=benchmark,
