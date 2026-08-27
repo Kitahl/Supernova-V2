@@ -32,20 +32,41 @@ class VerifiedChainTests(unittest.TestCase):
         self.assertEqual(ChainState.AWAITING_VERIFICATION, self.chain.state)
 
     def test_pass_mints_consumable_verified_product(self) -> None:
-        self.chain.propose("lemma-1", "proof term", producer_id="solver")
-        ref = self.chain.record_verification(
+        ref = self.chain.propose("lemma-1", "proof term", producer_id="solver")
+        verified_ref = self.chain.record_verification(
             "lemma-1",
             outcome=VerificationOutcome.PASS,
             verifier_id="lean-kernel",
             evidence_id="check-001",
         )
-        self.assertEqual(ChainState.VERIFIED, ref.state)
+        self.assertEqual(ChainState.VERIFIED, verified_ref.state)
+        self.assertEqual(ref.content_sha256, verified_ref.content_sha256)
         product = self.chain.consume_verified("lemma-1")
         self.assertIsInstance(product, VerifiedProduct)
         self.assertEqual("proof term", product.value)
+        self.assertEqual(ref.content_sha256, product.content_sha256)
         self.assertEqual("lean-kernel", product.verifier_id)
         self.assertEqual(ChainState.READY, self.chain.state)
         self.assertTrue(self.chain.history[-1].consumed)
+
+    def test_source_mutation_cannot_change_verified_product(self) -> None:
+        source = {"answer": 42, "trace": ["a", "b"]}
+        ref = self.chain.propose("lemma-1", source, producer_id="solver")
+        self.chain.record_verification(
+            "lemma-1", outcome="PASS", verifier_id="checker", evidence_id="v1"
+        )
+        verified = self.chain.consume_verified("lemma-1")
+
+        source["answer"] = 999
+        source["trace"].append("mutated")
+        self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
+        self.assertEqual(ref.content_sha256, verified.content_sha256)
+
+        decoded = verified.value
+        decoded["answer"] = -1
+        decoded["trace"].clear()
+        self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
+        self.assertEqual(ref.content_sha256, verified.content_sha256)
 
     def test_rejected_product_cannot_be_consumed_and_may_be_discarded(self) -> None:
         self.chain.propose("lemma-bad", "bad proof", producer_id="solver")
@@ -72,7 +93,7 @@ class VerifiedChainTests(unittest.TestCase):
         forged = VerifiedProduct(
             product_id=parent.product_id,
             step_index=parent.step_index,
-            value=parent.value,
+            content=parent.content,
             producer_id=parent.producer_id,
             verifier_id=parent.verifier_id,
             evidence_id=parent.evidence_id,
