@@ -89,6 +89,8 @@ class SplitContract:
         split: str,
         native_ids: Iterable[str],
     ) -> "SplitContract":
+        if isinstance(native_ids, (str, bytes)):
+            raise TypeError("native_ids must be an iterable of problem-id strings")
         frozen_ids = tuple(native_ids)
         return cls(
             benchmark=benchmark,
