@@ -182,16 +182,21 @@ class MultiFidelityResult:
         if self.selected_stage_id is not None:
             _text(self.selected_stage_id, "selected_stage_id")
 
-        answered = {
-            candidate.stage_id
-            for candidate in self.candidates
-            if candidate.status is MultiFidelityAttemptStatus.ANSWERED
-        }
-        if answered:
-            if self.selected_stage_id not in answered:
-                raise ValueError("selected_stage_id must name an ANSWERED candidate")
+        # Escalation is directional: attempting a later stage means every earlier
+        # stage was deferred. The result therefore cannot inspect a later output and
+        # then retroactively cherry-pick an earlier answer. A fallback policy after a
+        # later NO_ANSWER/ERROR would be a separate routing policy and is not hidden in
+        # this arm contract.
+        final_candidate = self.candidates[-1]
+        if final_candidate.status is MultiFidelityAttemptStatus.ANSWERED:
+            if self.selected_stage_id != final_candidate.stage_id:
+                raise ValueError(
+                    "selected_stage_id must name the final attempted ANSWERED stage"
+                )
         elif self.selected_stage_id is not None:
-            raise ValueError("selected_stage_id must be null when no candidate answered")
+            raise ValueError(
+                "selected_stage_id must be null unless the final attempted stage answered"
+            )
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "MultiFidelityResult":
