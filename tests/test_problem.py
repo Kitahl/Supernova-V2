@@ -40,6 +40,28 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
                 ):
                     BenchmarkProblemIdentity("bench", "v1", "test", invalid)
 
+    def test_string_subclass_behavior_cannot_spoof_token_validation(self) -> None:
+        class DeceptiveString(str):
+            def __eq__(self, other: object) -> bool:
+                return True
+
+            def strip(self, chars: str | None = None) -> "DeceptiveString":
+                return self
+
+            def encode(self, *args: object, **kwargs: object) -> bytes:
+                return b"spoofed"
+
+            __hash__ = str.__hash__
+
+        with self.assertRaisesRegex(ValueError, "split must be a non-empty trimmed string"):
+            BenchmarkProblemIdentity("bench", "v1", DeceptiveString(" test "), "p1")
+
+        problem = BenchmarkProblemIdentity("bench", "v1", DeceptiveString("train"), "p1")
+        self.assertIs(type(problem.split), str)
+        self.assertEqual("train", problem.split)
+        with self.assertRaisesRegex(ValueError, "contract benchmark/version/split"):
+            SplitContract("bench", "v1", "test", (problem,))
+
     def test_identity_is_frozen(self) -> None:
         problem = BenchmarkProblemIdentity("bench", "v1", "test", "42")
         with self.assertRaises(AttributeError):
