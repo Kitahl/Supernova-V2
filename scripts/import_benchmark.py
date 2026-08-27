@@ -48,7 +48,7 @@ def _stat_signature(value: os.stat_result) -> tuple[int, int, int, int]:
     return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
 
 
-def _sha256_file(path: Path) -> tuple[str, int]:
+def _sha256_file(path: Path) -> tuple[str, int, tuple[int, int, int, int]]:
     before = path.lstat()
     if not stat.S_ISREG(before.st_mode):
         raise ValueError(f"benchmark tree contains non-regular file: {path}")
@@ -74,11 +74,17 @@ def _sha256_file(path: Path) -> tuple[str, int]:
         or size != after_read.st_size
     ):
         raise ValueError(f"benchmark file changed while hashing: {path}")
-    return digest.hexdigest(), size
+    return digest.hexdigest(), size, expected
 
 
-def _enumerate_files(root: Path) -> list[dict[str, Any]]:
+def _walk_snapshot(
+    root: Path,
+    *,
+    hash_files: bool,
+) -> tuple[list[dict[str, Any]], dict[str, tuple[int, int, int, int]], dict[str, tuple[int, int, int, int]]]:
     entries: list[dict[str, Any]] = []
+    file_signatures: dict[str, tuple[int, int, int, int]] = {}
+    directory_signatures: dict[str, tuple[int, int, int, int]] = {}
 
     def raise_walk_error(error: OSError) -> None:
         raise error
@@ -90,6 +96,12 @@ def _enumerate_files(root: Path) -> list[dict[str, Any]]:
         followlinks=False,
     ):
         current_path = Path(current)
+        current_stat = current_path.lstat()
+        current_relative = "." if current_path == root else current_path.relative_to(root).as_posix()
+        if current_path.is_symlink() or not stat.S_ISDIR(current_stat.st_mode):
+            raise ValueError(f"benchmark tree contains non-directory path during traversal: {current_relative}")
+        directory_signatures[current_relative] = _stat_signature(current_stat)
+
         dirnames.sort()
         filenames.sort()
 
@@ -105,12 +117,45 @@ def _enumerate_files(root: Path) -> list[dict[str, Any]]:
             relative = candidate.relative_to(root).as_posix()
             if candidate.is_symlink():
                 raise ValueError(f"benchmark tree contains symlinked file: {relative}")
-            if not candidate.is_file():
+            candidate_stat = candidate.lstat()
+            if not stat.S_ISREG(candidate_stat.st_mode):
                 raise ValueError(f"benchmark tree contains non-regular file: {relative}")
-            digest, size = _sha256_file(candidate)
-            entries.append({"path": relative, "sha256": digest, "bytes": size})
+
+            if hash_files:
+                digest, size, signature = _sha256_file(candidate)
+                entries.append({"path": relative, "sha256": digest, "bytes": size})
+            else:
+                signature = _stat_signature(candidate_stat)
+            file_signatures[relative] = signature
 
     entries.sort(key=lambda entry: entry["path"])
+    return entries, file_signatures, directory_signatures
+
+
+def _validate_snapshot(
+    root: Path,
+    file_signatures: dict[str, tuple[int, int, int, int]],
+    directory_signatures: dict[str, tuple[int, int, int, int]],
+) -> None:
+    _, current_files, current_directories = _walk_snapshot(root, hash_files=False)
+    if current_files != file_signatures or current_directories != directory_signatures:
+        raise ValueError("benchmark tree changed while hashing: paths or metadata changed during traversal")
+
+    for relative, expected in file_signatures.items():
+        current = (root / relative).lstat()
+        if not stat.S_ISREG(current.st_mode) or _stat_signature(current) != expected:
+            raise ValueError(f"benchmark tree changed while hashing: file changed after traversal: {relative}")
+
+    for relative, expected in directory_signatures.items():
+        directory = root if relative == "." else root / relative
+        current = directory.lstat()
+        if directory.is_symlink() or not stat.S_ISDIR(current.st_mode) or _stat_signature(current) != expected:
+            raise ValueError(f"benchmark tree changed while hashing: directory changed after traversal: {relative}")
+
+
+def _enumerate_files(root: Path) -> list[dict[str, Any]]:
+    entries, file_signatures, directory_signatures = _walk_snapshot(root, hash_files=True)
+    _validate_snapshot(root, file_signatures, directory_signatures)
     return entries
 
 
