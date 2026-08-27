@@ -4,11 +4,16 @@ Admission answers only whether a product has the exact independently authorized 
 required by a trusted admission policy. It does not decide whether the product is
 scientifically useful, whether an experiment arm solved a problem, or how any result
 should be scored.
+
+Verifier authentication keys are runtime-only authority capabilities. They must be
+provisioned independently of the product producer and must never be persisted as part of
+admission evidence or policy.
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from dataclasses import dataclass
 from enum import StrEnum
@@ -51,7 +56,7 @@ def _sha256(value: Any, field: str) -> str:
     return value
 
 
-def _canonical_evidence_sha256(
+def _canonical_evidence_bytes(
     *,
     evidence_id: str,
     check_id: str,
@@ -59,9 +64,7 @@ def _canonical_evidence_sha256(
     artifact_sha256: str,
     verifier_id: str,
     outcome: EvidenceOutcome,
-) -> str:
-    """Hash the canonical evidence content, excluding the digest field itself."""
-
+) -> bytes:
     payload = {
         "artifact_sha256": artifact_sha256,
         "check_id": check_id,
@@ -71,13 +74,12 @@ def _canonical_evidence_sha256(
         "schema": _EVIDENCE_DIGEST_DOMAIN,
         "verifier_id": verifier_id,
     }
-    canonical = json.dumps(
+    return json.dumps(
         payload,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
     ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,7 @@ class AdmissionEvidence:
     verifier_id: str
     outcome: EvidenceOutcome
     evidence_sha256: str
+    verifier_hmac_sha256: str
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "AdmissionEvidence":
@@ -117,6 +120,7 @@ class AdmissionEvidence:
             "verifier_id",
             "outcome",
             "evidence_sha256",
+            "verifier_hmac_sha256",
         }
         _exact_fields(raw, expected, "evidence")
         try:
@@ -131,10 +135,13 @@ class AdmissionEvidence:
             verifier_id=_identifier(raw["verifier_id"], "evidence.verifier_id"),
             outcome=outcome,
             evidence_sha256=_sha256(raw["evidence_sha256"], "evidence.evidence_sha256"),
+            verifier_hmac_sha256=_sha256(
+                raw["verifier_hmac_sha256"], "evidence.verifier_hmac_sha256"
+            ),
         )
 
-    def canonical_sha256(self) -> str:
-        return _canonical_evidence_sha256(
+    def canonical_bytes(self) -> bytes:
+        return _canonical_evidence_bytes(
             evidence_id=self.evidence_id,
             check_id=self.check_id,
             product_id=self.product_id,
@@ -143,16 +150,25 @@ class AdmissionEvidence:
             outcome=self.outcome,
         )
 
+    def canonical_sha256(self) -> str:
+        return hashlib.sha256(self.canonical_bytes()).hexdigest()
+
 
 @dataclass(frozen=True)
 class AdmissionPolicy:
     policy_id: str
     required_checks: tuple[str, ...]
     authorized_verifiers: Mapping[str, tuple[str, ...]]
+    verifier_key_sha256: Mapping[str, str]
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "AdmissionPolicy":
-        expected = {"policy_id", "required_checks", "authorized_verifiers"}
+        expected = {
+            "policy_id",
+            "required_checks",
+            "authorized_verifiers",
+            "verifier_key_sha256",
+        }
         _exact_fields(raw, expected, "policy")
         policy_id = _identifier(raw["policy_id"], "policy.policy_id")
         required = raw["required_checks"]
@@ -173,6 +189,7 @@ class AdmissionPolicy:
             )
 
         authorized: dict[str, tuple[str, ...]] = {}
+        authorized_identities: set[str] = set()
         for check_id in checks:
             verifier_ids = verifier_map[check_id]
             if not isinstance(verifier_ids, list) or not verifier_ids:
@@ -191,11 +208,28 @@ class AdmissionPolicy:
                     f"policy.authorized_verifiers[{check_id!r}] must be unique"
                 )
             authorized[check_id] = parsed
+            authorized_identities.update(parsed)
+
+        key_commitments = raw["verifier_key_sha256"]
+        if not isinstance(key_commitments, Mapping):
+            raise ValueError("policy.verifier_key_sha256 must be a mapping")
+        if set(key_commitments) != authorized_identities:
+            raise ValueError(
+                "policy.verifier_key_sha256 keys must exactly match authorized verifier identities"
+            )
+        parsed_commitments = {
+            verifier_id: _sha256(
+                key_commitments[verifier_id],
+                f"policy.verifier_key_sha256[{verifier_id!r}]",
+            )
+            for verifier_id in sorted(authorized_identities)
+        }
 
         return cls(
             policy_id=policy_id,
             required_checks=checks,
             authorized_verifiers=authorized,
+            verifier_key_sha256=parsed_commitments,
         )
 
 
@@ -203,8 +237,19 @@ def evaluate_product_admission(
     product_raw: Mapping[str, Any],
     evidence_raw: Iterable[Mapping[str, Any]],
     policy_raw: Mapping[str, Any],
+    *,
+    verifier_auth_keys: Mapping[str, bytes],
 ) -> dict[str, Any]:
-    """Return a deterministic evidence-policy decision with no scientific score."""
+    """Return a deterministic evidence-policy decision with no scientific score.
+
+    ``verifier_auth_keys`` is runtime trust material owned by the admission boundary,
+    not caller-authored evidence. The policy stores only SHA-256 commitments to those
+    keys. An evidence record is independently attributable only when its HMAC verifies
+    under a runtime key whose commitment is authorized by the trusted policy.
+    """
+
+    if not isinstance(verifier_auth_keys, Mapping):
+        raise ValueError("verifier_auth_keys must be a mapping")
 
     product = ProductCandidate.from_mapping(product_raw)
     policy = AdmissionPolicy.from_mapping(policy_raw)
@@ -221,7 +266,9 @@ def evaluate_product_admission(
         reasons.add("duplicate evidence_id")
 
     for item in evidence:
-        if item.evidence_sha256 != item.canonical_sha256():
+        canonical_bytes = item.canonical_bytes()
+        expected_digest = hashlib.sha256(canonical_bytes).hexdigest()
+        if not hmac.compare_digest(item.evidence_sha256, expected_digest):
             reasons.add(f"evidence digest mismatch: {item.evidence_id}")
 
         if item.check_id not in required:
@@ -239,6 +286,28 @@ def evaluate_product_admission(
             reasons.add(
                 f"unauthorized verifier for check: {item.check_id}={item.verifier_id}"
             )
+        else:
+            key = verifier_auth_keys.get(item.verifier_id)
+            if key is None:
+                reasons.add(f"missing verifier authentication key: {item.verifier_id}")
+            elif not isinstance(key, bytes) or not key:
+                reasons.add(f"invalid verifier authentication key: {item.verifier_id}")
+            else:
+                expected_commitment = policy.verifier_key_sha256[item.verifier_id]
+                actual_commitment = hashlib.sha256(key).hexdigest()
+                if not hmac.compare_digest(actual_commitment, expected_commitment):
+                    reasons.add(f"verifier key commitment mismatch: {item.verifier_id}")
+                else:
+                    expected_proof = hmac.new(
+                        key, canonical_bytes, hashlib.sha256
+                    ).hexdigest()
+                    if not hmac.compare_digest(
+                        item.verifier_hmac_sha256, expected_proof
+                    ):
+                        reasons.add(
+                            f"verifier authentication failed: {item.evidence_id}"
+                        )
+
         if item.verifier_id == product.producer_id:
             reasons.add(f"producer cannot verify its own product: {item.check_id}")
         if item.outcome is not EvidenceOutcome.PASS:
