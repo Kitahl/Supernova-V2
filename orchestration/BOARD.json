@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "repository": "Kitahl/Supernova-V2",
+  "integration_policy": "pull_request_only",
+  "tickets": [
+    {"id":"G1-001","owner":"MF01","status":"READY","paths":["src/supernova_goal1/problem.py","tests/test_problem.py"],"objective":"Define the canonical benchmark problem identity and immutable split contract."},
+    {"id":"G1-002","owner":"MF02","status":"READY","paths":["scripts/import_benchmark.py","tests/test_import_benchmark.py","goal1/BENCHMARK.lock.json"],"objective":"Build a deterministic benchmark importer and content lock without adding benchmark data to git."},
+    {"id":"G1-003","owner":"MF03","status":"READY","paths":["src/supernova_goal1/verifier.py","tests/test_verifier.py"],"objective":"Build a timeout-bounded verifier adapter with typed PASS, FAIL, TIMEOUT, and ERROR outcomes."},
+    {"id":"G1-004","owner":"MF04","status":"READY","paths":["src/supernova_goal1/arms/ordinary.py","src/supernova_goal1/arms/portfolio.py","tests/test_baseline_arms.py"],"objective":"Define ordinary and portfolio arm request/result contracts; no model API calls."},
+    {"id":"G1-005","owner":"MF05","status":"READY","paths":["src/supernova_goal1/arms/product_only.py","src/supernova_goal1/arms/multi_fidelity.py","tests/test_product_arms.py"],"objective":"Define product-only and multi-fidelity arm contracts; no model API calls."},
+    {"id":"G1-006","owner":"MM01","status":"READY","paths":["src/supernova_goal1/arms/verified_chain.py","tests/test_verified_chain.py"],"objective":"Define the verified-chain state machine and prohibit use of unverified intermediate products."},
+    {"id":"G1-007","owner":"MM02","status":"READY","paths":["src/supernova_goal1/cost.py","tests/test_cost.py","docs/COST_MODEL.md"],"objective":"Propose and implement complete-cost accounting across all five arms with explicit assumptions."},
+    {"id":"G1-008","owner":"MM03","status":"READY","paths":["src/supernova_goal1/admission.py","tests/test_admission.py"],"objective":"Implement product admission as deterministic evidence checks, separate from scientific scoring."},
+    {"id":"G1-009","owner":"MM04","status":"READY","paths":["src/supernova_goal1/assignment.py","tests/test_assignment.py"],"objective":"Implement seeded paired assignment and blind evaluation ordering."},
+    {"id":"G1-010","owner":"MM05","status":"READY","paths":["src/supernova_goal1/statistics.py","tests/test_statistics.py"],"objective":"Extract and property-test exact McNemar plus Holm correction from the bootstrap evaluator."},
+    {"id":"G1-011","owner":"MM07","status":"READY","paths":["tests/test_adversarial.py"],"objective":"Add adversarial tests for duplicate records, missing arms, cost overruns, verifier contradictions, and order invariance."},
+    {"id":"G1-012","owner":"EXT01","status":"READY","paths":["docs/THREAT_MODEL.md","docs/PRIOR_ART.md"],"objective":"Independently attack construct validity, leakage, unfair controls, and cost-accounting loopholes; cite sources."},
+    {"id":"G1-013","owner":"MM06","status":"WAITING","paths":["reviews/"],"objective":"Review open Goal-1 PRs against ticket criteria and CI evidence; never author or merge the reviewed code."},
+    {"id":"G1-014","owner":"MF06","status":"WAITING","paths":["integration/"],"objective":"Run the assembled dry cohort after builder PRs land and report concrete seam failures."},
+    {"id":"G1-015","owner":"BIL00","status":"WAITING","paths":["reports/STATUS.md"],"objective":"Summarize board state, blockers, and next runnable milestone without changing scientific decisions."}
+  ]
+}
