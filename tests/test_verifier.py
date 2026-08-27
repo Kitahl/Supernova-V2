@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -51,6 +52,35 @@ class RunVerifierTests(unittest.TestCase):
         self.assertIsNone(result.returncode)
         self.assertIn("exceeded timeout_seconds", result.error or "")
         self.assertLess(wall_seconds, 2.0)
+
+    def test_timeout_contains_descendant_process_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            marker = Path(tmpdir) / "escaped-child.txt"
+            child_code = (
+                "import pathlib,sys,time; "
+                "time.sleep(0.4); "
+                "pathlib.Path(sys.argv[1]).write_text('escaped', encoding='utf-8')"
+            )
+            parent_code = (
+                "import subprocess,sys,time; "
+                "subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]], "
+                "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+                "stderr=subprocess.DEVNULL); "
+                "time.sleep(5)"
+            )
+
+            started = time.monotonic()
+            result = run_verifier(
+                [sys.executable, "-c", parent_code, child_code, str(marker)],
+                timeout_seconds=0.05,
+            )
+            wall_seconds = time.monotonic() - started
+
+            self.assertIs(VerifierStatus.TIMEOUT, result.status)
+            self.assertIn("process tree terminated", result.error or "")
+            self.assertLess(wall_seconds, 2.0)
+            time.sleep(0.6)
+            self.assertFalse(marker.exists(), "timed-out verifier descendant mutated state")
 
     def test_missing_executable_is_typed_error(self) -> None:
         result = run_verifier(
