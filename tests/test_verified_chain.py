@@ -13,6 +13,7 @@ from supernova_goal1.arms.verified_chain import (
     InvalidTransitionError,
     UnverifiedProductError,
     VerificationOutcome,
+    VerificationSubjectMismatchError,
     VerifiedChain,
     VerifiedProduct,
 )
@@ -21,6 +22,22 @@ from supernova_goal1.arms.verified_chain import (
 class VerifiedChainTests(unittest.TestCase):
     def setUp(self) -> None:
         self.chain = VerifiedChain("dry-001")
+
+    def _pass(
+        self,
+        product_id: str,
+        *,
+        verifier_id: str = "checker",
+        evidence_id: str = "v1",
+    ) -> None:
+        subject = self.chain.verification_subject(product_id)
+        self.chain.record_verification(
+            product_id,
+            subject_content_sha256=subject.content_sha256,
+            outcome=VerificationOutcome.PASS,
+            verifier_id=verifier_id,
+            evidence_id=evidence_id,
+        )
 
     def test_unverified_product_cannot_be_consumed_or_finalized(self) -> None:
         ref = self.chain.propose("lemma-1", {"claim": "A"}, producer_id="solver")
@@ -33,8 +50,11 @@ class VerifiedChainTests(unittest.TestCase):
 
     def test_pass_mints_consumable_verified_product(self) -> None:
         ref = self.chain.propose("lemma-1", "proof term", producer_id="solver")
+        subject = self.chain.verification_subject("lemma-1")
+        self.assertEqual("proof term", subject.value)
         verified_ref = self.chain.record_verification(
             "lemma-1",
+            subject_content_sha256=subject.content_sha256,
             outcome=VerificationOutcome.PASS,
             verifier_id="lean-kernel",
             evidence_id="check-001",
@@ -52,8 +72,13 @@ class VerifiedChainTests(unittest.TestCase):
     def test_source_mutation_cannot_change_verified_product(self) -> None:
         source = {"answer": 42, "trace": ["a", "b"]}
         ref = self.chain.propose("lemma-1", source, producer_id="solver")
+        subject = self.chain.verification_subject("lemma-1")
         self.chain.record_verification(
-            "lemma-1", outcome="PASS", verifier_id="checker", evidence_id="v1"
+            "lemma-1",
+            subject_content_sha256=subject.content_sha256,
+            outcome="PASS",
+            verifier_id="checker",
+            evidence_id="v1",
         )
         verified = self.chain.consume_verified("lemma-1")
 
@@ -67,6 +92,39 @@ class VerifiedChainTests(unittest.TestCase):
         decoded["trace"].clear()
         self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
         self.assertEqual(ref.content_sha256, verified.content_sha256)
+
+    def test_verification_result_must_bind_pending_content_digest(self) -> None:
+        source = {"answer": 42}
+        ref = self.chain.propose("lemma-1", source, producer_id="solver")
+        subject = self.chain.verification_subject("lemma-1")
+
+        source["answer"] = 999
+        self.assertEqual({"answer": 42}, subject.value)
+        self.assertEqual(ref.content_sha256, subject.content_sha256)
+
+        with self.assertRaisesRegex(
+            VerificationSubjectMismatchError, "digest does not match"
+        ):
+            self.chain.record_verification(
+                "lemma-1",
+                subject_content_sha256="0" * 64,
+                outcome="PASS",
+                verifier_id="checker",
+                evidence_id="wrong-subject",
+            )
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, self.chain.state)
+        self.assertEqual(ref.content_sha256, self.chain.current.content_sha256)
+
+        self.chain.record_verification(
+            "lemma-1",
+            subject_content_sha256=subject.content_sha256,
+            outcome="PASS",
+            verifier_id="checker",
+            evidence_id="bound-subject",
+        )
+        verified = self.chain.consume_verified("lemma-1")
+        self.assertEqual({"answer": 42}, verified.value)
+        self.assertEqual(subject.content_sha256, verified.content_sha256)
 
     def test_unencodable_unicode_proposal_fails_atomically(self) -> None:
         with self.assertRaisesRegex(ValueError, "UTF-8-encodable"):
@@ -86,8 +144,10 @@ class VerifiedChainTests(unittest.TestCase):
 
     def test_rejected_product_cannot_be_consumed_and_may_be_discarded(self) -> None:
         self.chain.propose("lemma-bad", "bad proof", producer_id="solver")
+        subject = self.chain.verification_subject("lemma-bad")
         ref = self.chain.record_verification(
             "lemma-bad",
+            subject_content_sha256=subject.content_sha256,
             outcome="FAIL",
             verifier_id="lean-kernel",
             evidence_id="check-bad",
@@ -101,9 +161,7 @@ class VerifiedChainTests(unittest.TestCase):
 
     def test_next_step_requires_exact_last_consumed_verified_parent(self) -> None:
         self.chain.propose("lemma-1", "A", producer_id="solver")
-        self.chain.record_verification(
-            "lemma-1", outcome="PASS", verifier_id="checker", evidence_id="v1"
-        )
+        self._pass("lemma-1")
         parent = self.chain.consume_verified("lemma-1")
 
         forged = VerifiedProduct(
@@ -123,17 +181,17 @@ class VerifiedChainTests(unittest.TestCase):
 
     def test_chain_cannot_skip_consumption_between_verified_steps(self) -> None:
         self.chain.propose("lemma-1", "A", producer_id="solver")
-        self.chain.record_verification(
-            "lemma-1", outcome="PASS", verifier_id="checker", evidence_id="v1"
-        )
+        self._pass("lemma-1")
         with self.assertRaisesRegex(InvalidTransitionError, "cannot propose"):
             self.chain.propose("lemma-2", "B", producer_id="solver")
 
     def test_verifier_must_be_distinct_from_producer(self) -> None:
         self.chain.propose("lemma-1", "A", producer_id="same-agent")
+        subject = self.chain.verification_subject("lemma-1")
         with self.assertRaisesRegex(ValueError, "differ from producer"):
             self.chain.record_verification(
                 "lemma-1",
+                subject_content_sha256=subject.content_sha256,
                 outcome="PASS",
                 verifier_id="same-agent",
                 evidence_id="v1",
@@ -142,8 +200,13 @@ class VerifiedChainTests(unittest.TestCase):
 
     def test_final_output_requires_pass_and_closes_chain(self) -> None:
         self.chain.propose("answer", 42, producer_id="solver")
+        subject = self.chain.verification_subject("answer")
         self.chain.record_verification(
-            "answer", outcome="PASS", verifier_id="checker", evidence_id="answer-v"
+            "answer",
+            subject_content_sha256=subject.content_sha256,
+            outcome="PASS",
+            verifier_id="checker",
+            evidence_id="answer-v",
         )
         final = self.chain.finalize("answer")
         self.assertEqual(42, final.value)
@@ -154,8 +217,13 @@ class VerifiedChainTests(unittest.TestCase):
 
     def test_product_ids_are_unique_even_after_rejection(self) -> None:
         self.chain.propose("lemma", "bad", producer_id="solver")
+        subject = self.chain.verification_subject("lemma")
         self.chain.record_verification(
-            "lemma", outcome="FAIL", verifier_id="checker", evidence_id="bad"
+            "lemma",
+            subject_content_sha256=subject.content_sha256,
+            outcome="FAIL",
+            verifier_id="checker",
+            evidence_id="bad",
         )
         self.chain.discard_rejected("lemma")
         with self.assertRaisesRegex(ValueError, "already used"):
