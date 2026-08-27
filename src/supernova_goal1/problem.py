@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections import namedtuple
 from collections.abc import Sequence
-from dataclasses import dataclass
 from hashlib import sha256
 import json
 
@@ -28,18 +28,34 @@ def _digest(payload: object) -> str:
     return sha256(canonical).hexdigest()
 
 
-@dataclass(frozen=True, slots=True)
-class BenchmarkProblemIdentity:
-    """Stable identity for one problem in one exact benchmark split."""
+_BenchmarkProblemIdentityTuple = namedtuple(
+    "BenchmarkProblemIdentity", ("benchmark", "version", "split", "native_id"), module=__name__
+)
 
+
+class BenchmarkProblemIdentity(_BenchmarkProblemIdentityTuple):
+    """Stable, tuple-immutable identity for one problem in one exact benchmark split."""
+
+    __slots__ = ()
     benchmark: str
     version: str
     split: str
     native_id: str
 
-    def __post_init__(self) -> None:
-        for field in ("benchmark", "version", "split", "native_id"):
-            object.__setattr__(self, field, _token(getattr(self, field), field))
+    def __new__(
+        cls,
+        benchmark: str,
+        version: str,
+        split: str,
+        native_id: str,
+    ) -> "BenchmarkProblemIdentity":
+        return super().__new__(
+            cls,
+            _token(benchmark, "benchmark"),
+            _token(version, "version"),
+            _token(split, "split"),
+            _token(native_id, "native_id"),
+        )
 
     @property
     def canonical_id(self) -> str:
@@ -54,39 +70,53 @@ class BenchmarkProblemIdentity:
         }
 
 
-@dataclass(frozen=True, slots=True)
-class SplitContract:
+_SplitContractTuple = namedtuple(
+    "SplitContract", ("benchmark", "version", "split", "problems"), module=__name__
+)
+
+
+class SplitContract(_SplitContractTuple):
     """Immutable, ordered membership contract for one benchmark split."""
 
+    __slots__ = ()
     benchmark: str
     version: str
     split: str
     problems: tuple[BenchmarkProblemIdentity, ...]
 
-    def __post_init__(self) -> None:
-        for field in ("benchmark", "version", "split"):
-            object.__setattr__(self, field, _token(getattr(self, field), field))
-        if not isinstance(self.problems, Sequence) or isinstance(
-            self.problems, (str, bytes, bytearray)
+    def __new__(
+        cls,
+        benchmark: str,
+        version: str,
+        split: str,
+        problems: Sequence[BenchmarkProblemIdentity],
+    ) -> "SplitContract":
+        benchmark = _token(benchmark, "benchmark")
+        version = _token(version, "version")
+        split = _token(split, "split")
+        if not isinstance(problems, Sequence) or isinstance(
+            problems, (str, bytes, bytearray)
         ):
             raise TypeError("problems must be an ordered sequence")
-        object.__setattr__(self, "problems", tuple(self.problems))
-        if not self.problems:
+        frozen_problems = tuple(problems)
+        if not frozen_problems:
             raise ValueError("problems must contain at least one benchmark problem")
 
         canonical_ids: set[str] = set()
-        for problem in self.problems:
+        for problem in frozen_problems:
             if not isinstance(problem, BenchmarkProblemIdentity):
                 raise TypeError("problems must contain BenchmarkProblemIdentity values")
             if (
                 problem.benchmark,
                 problem.version,
                 problem.split,
-            ) != (self.benchmark, self.version, self.split):
+            ) != (benchmark, version, split):
                 raise ValueError("every problem must belong to the contract benchmark/version/split")
             if problem.canonical_id in canonical_ids:
                 raise ValueError(f"duplicate problem identity: {problem.canonical_id}")
             canonical_ids.add(problem.canonical_id)
+
+        return super().__new__(cls, benchmark, version, split, frozen_problems)
 
     @classmethod
     def from_native_ids(
