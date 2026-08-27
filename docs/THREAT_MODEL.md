@@ -489,6 +489,38 @@ formalization, or retrieval-visible benchmark projections transform the source d
 transforms/tool versions too. A prior outcome must not be reusable after any benchmark-content or
 split-contract digest changes.
 
+### T29 — Statistical significance is not a minimum scientific effect (`HIGH`)
+
+**EVIDENCE — repository.** `goal1/GOAL1.json` freezes `familywise_alpha=0.05` and requires verified-chain
+superiority over every control under Holm-corrected exact paired tests. Current `ExperimentSpec`
+contains no minimum effect-size, precision, power, or sensitivity target. Current
+`evaluate_experiment` declares PASS when each control comparison has more verified-chain-only wins
+than control-only wins and the Holm-adjusted exact McNemar null is rejected; it does not require a
+minimum absolute solve-rate gain or uncertainty bound around that gain. **EVIDENCE — external.** The
+American Statistical Association's statement on p-values explicitly says that statistical
+significance does not measure effect size or importance, and that scientific conclusions should not
+be based only on crossing a p-value threshold:
+<https://doi.org/10.1080/00031305.2016.1154108>. Lakens' sample-size-justification review likewise
+argues that study design should be tied to the inferential goal, including the smallest effect size
+of interest, desired precision, or power/sensitivity:
+<https://doi.org/10.1525/collabra.33267>.
+
+**INFERENCE.** A sufficiently large confirmatory set can make a very small positive paired advantage
+statistically decisive, while a small confirmatory set can fail to reject despite an effect large
+enough to matter. The current binary PASS/FAIL therefore answers a null-rejection question but does
+not by itself establish that the gain is scientifically meaningful, nor does FAIL establish useful
+absence of an effect. This is distinct from T23: T23 concerns invalid p-values under clustered
+sampling; T29 remains even when every McNemar assumption is satisfied.
+
+**Required falsifier/mitigation.** Before confirmatory execution, freeze the effect quantity that
+matters (for example paired solve-rate difference against each control), a justified smallest effect
+size of interest or other decision-relevant margin, and the intended uncertainty/sensitivity rule.
+Report the effect estimate and an interval or equivalent uncertainty summary for every control.
+Justify the confirmatory problem count prospectively against that inferential target; if no minimum
+meaningful effect can be justified, narrow PASS to "statistically detectable positive difference
+under the frozen test" rather than treating it as evidence of a practically/scientifically material
+mechanism advantage.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -514,7 +546,8 @@ The confirmatory run should not start until all of the following are frozen and 
 19. a trusted pre-execution dispatch ledger reconciled to all cost events/provider-runtime request evidence, with dropped or unregistered telemetry blocking closure;
 20. an execution-isolation plan for shared provider quotas, caches, queues, backoff/retry state, and concurrent serving interference;
 21. evidence-bound final outcomes tying every solved cell to the exact challenge, proof/artifact digest, final-verifier identity/policy, and independently checkable PASS evidence;
-22. an experiment-level benchmark-content binding tying every scientific outcome to the exact benchmark lock, split contract, and any preprocessing/formalization transform identity.
+22. an experiment-level benchmark-content binding tying every scientific outcome to the exact benchmark lock, split contract, and any preprocessing/formalization transform identity;
+23. a prospectively justified effect-size/precision target and confirmatory problem count, with uncertainty reported alongside every paired comparison.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
