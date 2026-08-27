@@ -81,6 +81,22 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
         ):
             problem._replace(native_id=" 43 ")
 
+    def test_low_level_tuple_construction_fails_closed(self) -> None:
+        with self.assertRaisesRegex(TypeError, "may not be subclassed"):
+            type("SpoofedIdentity", (BenchmarkProblemIdentity,), {})
+
+        malformed = tuple.__new__(
+            BenchmarkProblemIdentity, ("bench", "v1", "test", " p1 ")
+        )
+        with self.assertRaisesRegex(
+            ValueError, "native_id must be a non-empty trimmed string"
+        ):
+            _ = malformed.canonical_id
+
+        truncated = tuple.__new__(BenchmarkProblemIdentity, ("bench",))
+        with self.assertRaisesRegex(ValueError, "exactly four fields"):
+            _ = truncated.canonical_id
+
 
 class SplitContractTests(unittest.TestCase):
     def test_factory_snapshots_ordered_membership(self) -> None:
@@ -208,6 +224,25 @@ class SplitContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "contract benchmark/version/split"):
             contract._replace(problems=(wrong_split,))
+
+    def test_contract_low_level_construction_fails_closed(self) -> None:
+        with self.assertRaisesRegex(TypeError, "may not be subclassed"):
+            type("SpoofedContract", (SplitContract,), {})
+
+        problem = BenchmarkProblemIdentity("bench", "v1", "test", "p1")
+        mutable_storage = tuple.__new__(
+            SplitContract, ("bench", "v1", "test", [problem])
+        )
+        with self.assertRaisesRegex(TypeError, "immutable problem tuple"):
+            _ = mutable_storage.contract_id
+
+        malformed_problem = tuple.__new__(
+            BenchmarkProblemIdentity, ("bench", "v1", "test", " p1 ")
+        )
+        with self.assertRaisesRegex(
+            ValueError, "native_id must be a non-empty trimmed string"
+        ):
+            SplitContract("bench", "v1", "test", (malformed_problem,))
 
 
 if __name__ == "__main__":
