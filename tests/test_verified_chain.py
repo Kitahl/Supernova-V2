@@ -93,6 +93,33 @@ class VerifiedChainTests(unittest.TestCase):
         self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
         self.assertEqual(ref.content_sha256, verified.content_sha256)
 
+    def test_verified_authority_objects_resist_low_level_field_reassignment(self) -> None:
+        source = {"answer": 42}
+        self.chain.propose("lemma-1", source, producer_id="solver")
+        subject = self.chain.verification_subject("lemma-1")
+
+        with self.assertRaises(AttributeError):
+            object.__setattr__(subject.content, "canonical_json", '{"answer":999}')
+        with self.assertRaises(AttributeError):
+            object.__setattr__(subject, "producer_id", "attacker")
+        self.assertEqual({"answer": 42}, subject.value)
+
+        self.chain.record_verification(
+            "lemma-1",
+            subject_sha256=subject.subject_sha256,
+            outcome="PASS",
+            verifier_id="checker",
+            evidence_id="v1",
+        )
+        verified = self.chain.consume_verified("lemma-1")
+
+        with self.assertRaises(AttributeError):
+            object.__setattr__(verified.content, "canonical_json", '{"answer":999}')
+        with self.assertRaises(AttributeError):
+            object.__setattr__(verified, "verifier_id", "attacker")
+        self.assertEqual({"answer": 42}, verified.value)
+        self.assertEqual(subject.content_sha256, verified.content_sha256)
+
     def test_verification_result_must_bind_exact_chain_subject(self) -> None:
         source = {"answer": 42}
         ref = self.chain.propose("lemma-1", source, producer_id="solver")
