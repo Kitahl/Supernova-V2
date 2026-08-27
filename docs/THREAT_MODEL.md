@@ -338,6 +338,35 @@ use a cluster-aware paired test/randomization/bootstrap whose unit is the family
 structure-preserving variants as independent n. If clustering is uncertain, report a prospectively
 specified sensitivity analysis under plausible family groupings.
 
+### T24 — Aggregate token counts do not identify model compute (`CRITICAL` if "complete cost" means compute parity)
+
+**EVIDENCE — repository.** Proposed G1-007 / PR #2 defines model work by aggregate `model_calls`,
+`input_tokens`, and `output_tokens`. It does not record per-request sequence lengths, prefill/decode
+phase work, accelerator time/FLOPs, or the batching/KV-cache regime, and its documented known
+exclusions include model-call latency. **EVIDENCE — external.** Vaswani et al. give full
+self-attention per-layer complexity as a function of sequence length (`O(n^2 d)`):
+<https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html>.
+Sarathi-Serve distinguishes compute-intensive prompt prefill from one-token-at-a-time decode and
+shows that batching/scheduling materially changes serving efficiency:
+<https://www.usenix.org/conference/osdi24/presentation/agrawal>. DistServe independently treats
+prefill and decode as resource/parallelism-distinct phases:
+<https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin>.
+
+**INFERENCE.** Even perfect token telemetry does not make aggregate token totals an
+architecture-independent measure of inference compute. Two arms can have the same number of calls
+and the same total input/output tokens while distributing those tokens across different request
+lengths and phases, producing different accelerator work or serving opportunity. That is especially
+relevant here because a verified chain structurally changes call segmentation. This is distinct from
+T21: T21 concerns unavailable/opaque token telemetry; T24 remains when token counts are exact.
+
+**Required falsifier/mitigation.** Freeze what the cost construct means. If Goal 1 means a
+provider-metered token/call budget, name it as such and do not infer compute parity from it. If the
+claim requires complete compute parity, preserve per-call input/output lengths and runtime/cache/
+batching provenance and use an auditable hardware measure (for example accelerator-seconds/energy)
+or a validated architecture-specific FLOP estimator; prospectively match or stratify request-shape
+distributions across the causal controls. For opaque hosted models, report the token/call vector as
+a proxy plus a frozen sensitivity bound rather than a complete-compute certificate.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -358,7 +387,8 @@ The confirmatory run should not start until all of the following are frozen and 
 14. auditable hidden/reasoning-cost telemetry or a frozen uncertainty/sensitivity analysis;
 15. contract-equivalent intermediate representation, chain-length, stopping, parentage, and finalization semantics for the primary verified-chain/product-only causal pair;
 16. an explicit estimand for verifier-conditioned reject/retry: either matched as a nuisance variable or declared part of the treatment;
-17. an independent benchmark sampling unit plus cluster/family-aware inference when multiple items share a latent source/template.
+17. an independent benchmark sampling unit plus cluster/family-aware inference when multiple items share a latent source/template;
+18. request-shape-aware model-compute accounting, or an explicit statement that the frozen cost construct is a token/call proxy rather than complete compute.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
