@@ -215,6 +215,33 @@ class CompleteCostAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incomplete cost telemetry"):
             _ = trace.total
 
+    def test_omitted_measurements_default_to_unknown_not_zero(self) -> None:
+        model_event = CostEvent(event_id="call-1", kind=CostEventKind.MODEL_CALL)
+        verifier_event = CostEvent(event_id="verify-1", kind=CostEventKind.VERIFIER)
+        orchestration_event = CostEvent(
+            event_id="route-1", kind=CostEventKind.ORCHESTRATION
+        )
+
+        self.assertEqual(
+            ("input_tokens", "output_tokens"), model_event.unknown_measurements
+        )
+        self.assertEqual(
+            ("verifier_milliseconds",), verifier_event.unknown_measurements
+        )
+        self.assertEqual(
+            ("orchestration_milliseconds",), orchestration_event.unknown_measurements
+        )
+
+        traces = [self._zero_trace(arm) for arm in Arm]
+        traces[0] = ArmCostTrace.from_events(
+            Arm.ORDINARY,
+            (model_event,),
+            expected_events=(ExpectedCostEvent.model_call("call-1"),),
+            accounting_complete=True,
+        )
+        with self.assertRaisesRegex(ValueError, "incomplete arm accounting"):
+            CompleteCostReport.from_traces(traces)
+
     def test_zero_cost_requires_coverage_evidence_not_an_empty_trace(self) -> None:
         report = self._zero_report()
         self.assertEqual(
