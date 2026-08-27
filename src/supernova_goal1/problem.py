@@ -15,8 +15,8 @@ def _token(value: str, field: str) -> str:
     value = str.__str__(value)
     if not value or value != value.strip():
         raise ValueError(f"{field} must be a non-empty trimmed string")
-    if any(unicodedata.category(char) == "Cc" for char in value):
-        raise ValueError(f"{field} must not contain control characters")
+    if any(unicodedata.category(char) in {"Cc", "Cf"} for char in value):
+        raise ValueError(f"{field} must not contain control or format characters")
     try:
         value.encode("utf-8")
     except UnicodeEncodeError as exc:
