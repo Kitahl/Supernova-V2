@@ -336,6 +336,23 @@ not by itself prove that every cost-bearing operation was represented. A stronge
 boundary needs trusted pre-execution dispatch provenance plus reconciliation to provider/runtime
 evidence and explicit telemetry-drop detection.
 
+### 25. OpenAI and Anthropic rate-limit specifications — hosted capacity is shared state
+
+Primary sources: OpenAI, *Rate limits*.
+<https://platform.openai.com/docs/guides/rate-limits>; Anthropic, *Rate limits*.
+<https://docs.anthropic.com/en/api/rate-limits>.
+
+**EVIDENCE.** OpenAI documents rate limits at organization/project scope, shared limits for some
+model families, RPM/TPM-style capacity, and that unsuccessful requests still consume per-minute
+capacity. Anthropic documents organization-level limits, short-burst enforcement, model-class
+request/input/output-token limits, and cache-aware token accounting.
+
+**INFERENCE for Goal 1.** Hosted serving capacity is experimental shared state. If paired arms share
+a provider quota, queue, cache, or retry/backoff environment, activity from one arm can alter the
+latency, throttling, failure rate, or effective retry opportunity of another even when conversation
+state is perfectly isolated. Execution isolation and provider-fault handling therefore belong in the
+confirmatory causal contract, not merely in operational monitoring.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -353,7 +370,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - verification-conditioned feedback/retry can improve proof search;
 - ordinary McNemar inference assumes independent matched pairs and needs adjustment for clustered pairs;
 - aggregate token/call totals do not uniquely identify LLM inference compute or serving work;
-- telemetry pipelines can drop records, so observed-trace consistency is not by itself a completeness certificate.
+- telemetry pipelines can drop records, so observed-trace consistency is not by itself a completeness certificate;
+- hosted API quota/cache/queue state can be shared across requests, so concurrent experimental arms can interfere operationally.
 
 ## What these sources do **not** establish for Supernova
 
@@ -398,6 +416,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Temporal/runtime falsifier:** does it persist with stable model identity, counterbalanced timing, and frozen/self-audited runtime conditions? (Chen; Gemini docs; Yuan; Ouyang.)
 - **Opaque-cost falsifier:** does it persist under auditable hidden-reasoning usage or a predeclared sensitivity bound? (Sun et al.)
 - **Cluster-dependence falsifier:** are benchmark-family/variant clusters identified and either reduced to independent sampling units or analyzed with cluster-aware paired inference? (Eliasziw & Donner; Gönen.)
+- **Shared-serving interference falsifier:** do conclusions persist when paired cells are isolated from shared provider quotas/caches/queues, or under a frozen counterbalanced execution/throttling policy with complete retry/rate-limit telemetry? (OpenAI/Anthropic rate-limit docs.)
 
 If those falsifiers are not implemented, a positive result should be described as performance of the
 *bundled verified-chain system* rather than evidence that verified-product chaining itself caused
