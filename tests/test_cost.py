@@ -86,6 +86,19 @@ class CompleteCostAccountingTests(unittest.TestCase):
                 accounting_complete=True,
             )
 
+    def test_same_event_id_cannot_be_replayed_across_arms(self) -> None:
+        traces = [
+            ArmCostTrace.from_events(
+                arm,
+                (CostEvent.model_call("shared-dispatch", input_tokens=1, output_tokens=1),),
+                expected_events=(ExpectedCostEvent.model_call("shared-dispatch"),),
+                accounting_complete=True,
+            )
+            for arm in Arm
+        ]
+        with self.assertRaisesRegex(ValueError, "globally unique across all five arms"):
+            CompleteCostReport.from_traces(traces)
+
     def test_event_shapes_prevent_cross_category_double_counting(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot carry model token counts"):
             CostEvent(
