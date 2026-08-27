@@ -53,6 +53,16 @@ makes the uniqueness checks operate on ordinary string value semantics. This pro
 in-process accounting invariant; it does not replace the external dispatch ledger that
 must establish where those IDs came from.
 
+Event kinds use the same non-polymorphic parsing boundary. A `CostEvent` or
+`ExpectedCostEvent` accepts either an exact `CostEventKind` member or an exact built-in
+`str` whose value names one declared kind; subclasses of `str` are rejected before enum
+value lookup. Python enum construction performs value lookup, and a string subclass can
+override equality and hashing used by that lookup. Allowing such an object would let a
+malformed caller-controlled kind participate in its own classification and potentially
+normalize to a legitimate accounting category. Rejecting it makes category assignment a
+plain-value decision. This is an in-process parsing invariant, not evidence that the
+external execution harness produced trustworthy telemetry.
+
 The final bullet is a Goal-1 execution invariant, not a generic claim that every future
 cost-accounting application must call a model. If a later protocol deliberately permits a
 zero-model-call arm, that must be represented prospectively with a different execution

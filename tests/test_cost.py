@@ -112,6 +112,33 @@ class CompleteCostAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "expected event_id"):
             ExpectedCostEvent.model_call(event_id)
 
+    def test_hostile_string_subclasses_cannot_spoof_event_kind(self) -> None:
+        class EvilKind(str):
+            def __eq__(self, other: object) -> bool:
+                return True
+
+            def __hash__(self) -> int:
+                return hash(CostEventKind.MODEL_CALL.value)
+
+        hostile = EvilKind("not-a-real-kind")
+        with self.assertRaisesRegex(ValueError, "unknown cost event kind"):
+            CostEvent(
+                event_id="call-1",
+                kind=hostile,
+                input_tokens=1,
+                output_tokens=1,
+            )
+        with self.assertRaisesRegex(ValueError, "unknown cost event kind"):
+            ExpectedCostEvent(event_id="call-1", kind=hostile)
+
+        event = CostEvent(
+            event_id="call-2",
+            kind="model_call",
+            input_tokens=1,
+            output_tokens=1,
+        )
+        self.assertIs(event.kind, CostEventKind.MODEL_CALL)
+
     def test_event_shapes_prevent_cross_category_double_counting(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot carry model token counts"):
             CostEvent(
