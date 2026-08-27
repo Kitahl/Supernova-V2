@@ -33,7 +33,7 @@ class VerifiedChainTests(unittest.TestCase):
         subject = self.chain.verification_subject(product_id)
         self.chain.record_verification(
             product_id,
-            subject_content_sha256=subject.content_sha256,
+            subject_sha256=subject.subject_sha256,
             outcome=VerificationOutcome.PASS,
             verifier_id=verifier_id,
             evidence_id=evidence_id,
@@ -54,7 +54,7 @@ class VerifiedChainTests(unittest.TestCase):
         self.assertEqual("proof term", subject.value)
         verified_ref = self.chain.record_verification(
             "lemma-1",
-            subject_content_sha256=subject.content_sha256,
+            subject_sha256=subject.subject_sha256,
             outcome=VerificationOutcome.PASS,
             verifier_id="lean-kernel",
             evidence_id="check-001",
@@ -75,7 +75,7 @@ class VerifiedChainTests(unittest.TestCase):
         subject = self.chain.verification_subject("lemma-1")
         self.chain.record_verification(
             "lemma-1",
-            subject_content_sha256=subject.content_sha256,
+            subject_sha256=subject.subject_sha256,
             outcome="PASS",
             verifier_id="checker",
             evidence_id="v1",
@@ -93,7 +93,7 @@ class VerifiedChainTests(unittest.TestCase):
         self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
         self.assertEqual(ref.content_sha256, verified.content_sha256)
 
-    def test_verification_result_must_bind_pending_content_digest(self) -> None:
+    def test_verification_result_must_bind_exact_chain_subject(self) -> None:
         source = {"answer": 42}
         ref = self.chain.propose("lemma-1", source, producer_id="solver")
         subject = self.chain.verification_subject("lemma-1")
@@ -101,13 +101,14 @@ class VerifiedChainTests(unittest.TestCase):
         source["answer"] = 999
         self.assertEqual({"answer": 42}, subject.value)
         self.assertEqual(ref.content_sha256, subject.content_sha256)
+        self.assertEqual("dry-001", subject.problem_id)
 
         with self.assertRaisesRegex(
-            VerificationSubjectMismatchError, "digest does not match"
+            VerificationSubjectMismatchError, "chain context"
         ):
             self.chain.record_verification(
                 "lemma-1",
-                subject_content_sha256="0" * 64,
+                subject_sha256="0" * 64,
                 outcome="PASS",
                 verifier_id="checker",
                 evidence_id="wrong-subject",
@@ -117,7 +118,7 @@ class VerifiedChainTests(unittest.TestCase):
 
         self.chain.record_verification(
             "lemma-1",
-            subject_content_sha256=subject.content_sha256,
+            subject_sha256=subject.subject_sha256,
             outcome="PASS",
             verifier_id="checker",
             evidence_id="bound-subject",
@@ -125,6 +126,69 @@ class VerifiedChainTests(unittest.TestCase):
         verified = self.chain.consume_verified("lemma-1")
         self.assertEqual({"answer": 42}, verified.value)
         self.assertEqual(subject.content_sha256, verified.content_sha256)
+        self.assertEqual(subject.subject_sha256, verified.verification_subject_sha256)
+
+    def test_verification_cannot_replay_across_problem_or_parent_context(self) -> None:
+        left = VerifiedChain("dry-001")
+        right = VerifiedChain("dry-002")
+        for chain in (left, right):
+            chain.propose("lemma-1", {"claim": "same"}, producer_id="solver")
+
+        left_subject = left.verification_subject("lemma-1")
+        right_subject = right.verification_subject("lemma-1")
+        self.assertEqual(left_subject.content_sha256, right_subject.content_sha256)
+        self.assertNotEqual(left_subject.subject_sha256, right_subject.subject_sha256)
+
+        with self.assertRaisesRegex(
+            VerificationSubjectMismatchError, "chain context"
+        ):
+            right.record_verification(
+                "lemma-1",
+                subject_sha256=left_subject.subject_sha256,
+                outcome="PASS",
+                verifier_id="checker",
+                evidence_id="cross-problem-replay",
+            )
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, right.state)
+
+        parent_a = VerifiedChain("dry-parent")
+        parent_b = VerifiedChain("dry-parent")
+        parent_a.propose("parent", {"seed": 1}, producer_id="solver")
+        parent_b.propose("parent", {"seed": 2}, producer_id="solver")
+        for chain in (parent_a, parent_b):
+            subject = chain.verification_subject("parent")
+            chain.record_verification(
+                "parent",
+                subject_sha256=subject.subject_sha256,
+                outcome="PASS",
+                verifier_id="checker",
+                evidence_id="parent-pass",
+            )
+        verified_a = parent_a.consume_verified("parent")
+        verified_b = parent_b.consume_verified("parent")
+        parent_a.propose(
+            "child", {"claim": "same"}, producer_id="solver", parent=verified_a
+        )
+        parent_b.propose(
+            "child", {"claim": "same"}, producer_id="solver", parent=verified_b
+        )
+        child_a = parent_a.verification_subject("child")
+        child_b = parent_b.verification_subject("child")
+        self.assertEqual(child_a.content_sha256, child_b.content_sha256)
+        self.assertNotEqual(child_a.parent_content_sha256, child_b.parent_content_sha256)
+        self.assertNotEqual(child_a.subject_sha256, child_b.subject_sha256)
+
+        with self.assertRaisesRegex(
+            VerificationSubjectMismatchError, "chain context"
+        ):
+            parent_b.record_verification(
+                "child",
+                subject_sha256=child_a.subject_sha256,
+                outcome="PASS",
+                verifier_id="checker",
+                evidence_id="cross-parent-replay",
+            )
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, parent_b.state)
 
     def test_unencodable_unicode_proposal_fails_atomically(self) -> None:
         with self.assertRaisesRegex(ValueError, "UTF-8-encodable"):
@@ -147,7 +211,7 @@ class VerifiedChainTests(unittest.TestCase):
         subject = self.chain.verification_subject("lemma-bad")
         ref = self.chain.record_verification(
             "lemma-bad",
-            subject_content_sha256=subject.content_sha256,
+            subject_sha256=subject.subject_sha256,
             outcome="FAIL",
             verifier_id="lean-kernel",
             evidence_id="check-bad",
@@ -172,6 +236,7 @@ class VerifiedChainTests(unittest.TestCase):
             verifier_id=parent.verifier_id,
             evidence_id=parent.evidence_id,
             parent_product_id=parent.parent_product_id,
+            verification_subject_sha256=parent.verification_subject_sha256,
         )
         with self.assertRaisesRegex(InvalidParentError, "exact last consumed"):
             self.chain.propose("lemma-2", "B", producer_id="solver", parent=forged)
@@ -191,7 +256,7 @@ class VerifiedChainTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differ from producer"):
             self.chain.record_verification(
                 "lemma-1",
-                subject_content_sha256=subject.content_sha256,
+                subject_sha256=subject.subject_sha256,
                 outcome="PASS",
                 verifier_id="same-agent",
                 evidence_id="v1",
@@ -203,7 +268,7 @@ class VerifiedChainTests(unittest.TestCase):
         subject = self.chain.verification_subject("answer")
         self.chain.record_verification(
             "answer",
-            subject_content_sha256=subject.content_sha256,
+            subject_sha256=subject.subject_sha256,
             outcome="PASS",
             verifier_id="checker",
             evidence_id="answer-v",
@@ -220,7 +285,7 @@ class VerifiedChainTests(unittest.TestCase):
         subject = self.chain.verification_subject("lemma")
         self.chain.record_verification(
             "lemma",
-            subject_content_sha256=subject.content_sha256,
+            subject_sha256=subject.subject_sha256,
             outcome="FAIL",
             verifier_id="checker",
             evidence_id="bad",
