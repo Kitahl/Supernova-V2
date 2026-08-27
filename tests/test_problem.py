@@ -85,6 +85,12 @@ class SplitContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "contract benchmark/version/split"):
             SplitContract("bench", "v1", "test", (wrong_split,))
 
+    def test_contract_rejects_a_scalar_membership_string(self) -> None:
+        with self.assertRaisesRegex(TypeError, "iterable of problem-id strings"):
+            SplitContract.from_native_ids(
+                benchmark="bench", version="v1", split="test", native_ids="p1"
+            )
+
     def test_contract_requires_nonempty_membership_and_is_frozen(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least one"):
             SplitContract.from_native_ids(
