@@ -242,6 +242,35 @@ class CompleteCostAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incomplete arm accounting"):
             CompleteCostReport.from_traces(traces)
 
+    def test_closed_report_snapshots_mutable_constructor_inputs(self) -> None:
+        ordinary_events = [
+            CostEvent.model_call("call-1", input_tokens=100, output_tokens=20)
+        ]
+        ordinary_expected = [ExpectedCostEvent.model_call("call-1")]
+        ordinary_trace = ArmCostTrace(
+            Arm.ORDINARY,
+            ordinary_events,
+            ordinary_expected,
+            True,
+        )
+        report_inputs = [ordinary_trace]
+        report_inputs.extend(self._zero_trace(arm) for arm in tuple(Arm)[1:])
+        report = CompleteCostReport(report_inputs)
+
+        ordinary_events.clear()
+        ordinary_expected.clear()
+        report_inputs.clear()
+
+        self.assertIsInstance(ordinary_trace.events, tuple)
+        self.assertIsInstance(ordinary_trace.expected_events, tuple)
+        self.assertIsInstance(report.traces, tuple)
+        self.assertEqual(5, len(report.traces))
+        self.assertTrue(ordinary_trace.coverage_complete)
+        self.assertEqual(
+            CompleteCost(1, 100, 20, 0, 0),
+            report.total_for(Arm.ORDINARY),
+        )
+
     def test_zero_cost_requires_coverage_evidence_not_an_empty_trace(self) -> None:
         report = self._zero_report()
         self.assertEqual(
