@@ -225,7 +225,7 @@ class ProductAdmissionTests(unittest.TestCase):
         )
 
     def test_fake_verifier_identity_rejects_even_with_attacker_digest_and_hmac(self) -> None:
-        attacker_key = b"unit-test-attacker-key"
+        attacker_key = b"unit-test-attacker-authority-key-v2"
         evidence = copy.deepcopy(self.evidence)
         evidence[0] = sign_evidence(
             {
@@ -245,7 +245,7 @@ class ProductAdmissionTests(unittest.TestCase):
         )
 
     def test_authorized_name_impersonation_rejects_with_wrong_key(self) -> None:
-        attacker_key = b"unit-test-attacker-key"
+        attacker_key = b"unit-test-attacker-authority-key-v2"
         evidence = copy.deepcopy(self.evidence)
         evidence[0] = sign_evidence(evidence[0], attacker_key)
         result = self.evaluate(evidence=evidence)
@@ -255,7 +255,7 @@ class ProductAdmissionTests(unittest.TestCase):
         )
 
     def test_runtime_key_substitution_rejects_against_policy_commitment(self) -> None:
-        attacker_key = b"unit-test-attacker-key"
+        attacker_key = b"unit-test-attacker-authority-key-v2"
         evidence = copy.deepcopy(self.evidence)
         evidence[0] = sign_evidence(evidence[0], attacker_key)
         keys = dict(self.auth_keys)
@@ -341,7 +341,7 @@ class ProductAdmissionTests(unittest.TestCase):
             )
 
     def test_forged_policy_authority_rejects_against_trusted_policy_digest(self) -> None:
-        attacker_key = b"unit-test-attacker-key"
+        attacker_key = b"unit-test-attacker-authority-key-v2"
         attacker_authority = "authority-attacker"
         policy = copy.deepcopy(self.policy)
         policy["authorized_verifiers"]["kernel"] = ["verifier-pretender"]
