@@ -1,0 +1,16 @@
+{
+  "benchmark": {
+    "name": "UNSELECTED",
+    "split": "UNLOCKED",
+    "version": "UNPINNED"
+  },
+  "content": {
+    "algorithm": "sha256",
+    "file_count": 0,
+    "files": [],
+    "root_sha256": null,
+    "total_bytes": 0
+  },
+  "schema_version": 1,
+  "status": "UNSELECTED"
+}

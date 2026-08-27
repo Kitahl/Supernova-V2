@@ -1,0 +1,362 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "import_benchmark.py"
+SPEC = importlib.util.spec_from_file_location("import_benchmark", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+
+
+class BenchmarkImporterTests(unittest.TestCase):
+    def _tree(self, root: Path) -> None:
+        (root / "zeta").mkdir(parents=True)
+        (root / "zeta" / "b.txt").write_bytes(b"beta\n")
+        (root / "a.txt").write_bytes(b"alpha\n")
+
+    def test_lock_is_deterministic_and_paths_are_sorted_relative(self) -> None:
+        with tempfile.TemporaryDirectory() as first_tmp, tempfile.TemporaryDirectory() as second_tmp:
+            first = Path(first_tmp)
+            second = Path(second_tmp)
+            self._tree(first)
+            (second / "a.txt").write_bytes(b"alpha\n")
+            (second / "zeta").mkdir(parents=True)
+            (second / "zeta" / "b.txt").write_bytes(b"beta\n")
+
+            left = MODULE.build_lock(first, name="bench", version="v1", split="test")
+            right = MODULE.build_lock(second, name="bench", version="v1", split="test")
+
+            self.assertEqual(left, right)
+            self.assertEqual(
+                [entry["path"] for entry in left["content"]["files"]],
+                ["a.txt", "zeta/b.txt"],
+            )
+            self.assertTrue(all(not Path(entry["path"]).is_absolute() for entry in left["content"]["files"]))
+
+    def test_content_change_changes_root_hash_and_check_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            lock = MODULE.build_lock(source, name="bench", version="v1", split="test")
+            original_hash = lock["content"]["root_sha256"]
+
+            MODULE.verify_lock(source, lock)
+            (source / "a.txt").write_bytes(b"changed\n")
+            changed = MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+            self.assertNotEqual(original_hash, changed["content"]["root_sha256"])
+            with self.assertRaisesRegex(ValueError, "does not match lock"):
+                MODULE.verify_lock(source, lock)
+
+    def test_empty_tree_and_symlink_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            with self.assertRaisesRegex(ValueError, "no regular files"):
+                MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+            target = source / "target.txt"
+            target.write_text("x", encoding="utf-8")
+            link = source / "alias.txt"
+            try:
+                os.symlink(target, link)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable on this platform")
+            with self.assertRaisesRegex(ValueError, "symlinked file"):
+                MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+    def test_symlinked_source_root_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            alias = root / "benchmark-alias"
+            try:
+                os.symlink(source, alias, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable on this platform")
+
+            with self.assertRaisesRegex(ValueError, "source must not be a symlink"):
+                MODULE.build_lock(alias, name="bench", version="v1", split="test")
+
+    def test_windows_junctions_are_rejected_as_directory_indirection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+
+            with mock.patch.object(
+                MODULE,
+                "_PATH_IS_JUNCTION",
+                side_effect=lambda path: path == source,
+            ):
+                with self.assertRaisesRegex(ValueError, "source must not be a junction"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+            nested = source / "zeta"
+            with mock.patch.object(
+                MODULE,
+                "_PATH_IS_JUNCTION",
+                side_effect=lambda path: path == nested,
+            ):
+                with self.assertRaisesRegex(ValueError, "junction directory: zeta"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+    def test_python_311_windows_junction_fallback_uses_reparse_metadata(self) -> None:
+        class JunctionStat:
+            st_file_attributes = MODULE._WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT
+            st_reparse_tag = MODULE._WINDOWS_IO_REPARSE_TAG_MOUNT_POINT
+
+        candidate = Path("junction")
+        with (
+            mock.patch.object(MODULE, "_PATH_IS_JUNCTION", None),
+            mock.patch.object(MODULE.os, "name", "nt"),
+            mock.patch.object(Path, "lstat", return_value=JunctionStat()),
+        ):
+            self.assertTrue(MODULE._is_junction(candidate))
+
+        class OrdinaryStat:
+            st_file_attributes = 0
+            st_reparse_tag = 0
+
+        with (
+            mock.patch.object(MODULE, "_PATH_IS_JUNCTION", None),
+            mock.patch.object(MODULE.os, "name", "nt"),
+            mock.patch.object(Path, "lstat", return_value=OrdinaryStat()),
+        ):
+            self.assertFalse(MODULE._is_junction(candidate))
+
+    def test_walk_errors_fail_closed_instead_of_producing_partial_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            (source / "visible.txt").write_text("visible", encoding="utf-8")
+
+            def failing_walk(root, *, topdown, onerror, followlinks):
+                self.assertTrue(topdown)
+                self.assertFalse(followlinks)
+                self.assertIsNotNone(onerror)
+                onerror(PermissionError("blocked subtree"))
+                if False:
+                    yield root, [], []
+
+            with mock.patch.object(MODULE.os, "walk", failing_walk):
+                with self.assertRaisesRegex(PermissionError, "blocked subtree"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+    def test_file_change_while_hashing_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            volatile = source / "volatile.txt"
+            volatile.write_bytes(b"before")
+            real_fstat = MODULE.os.fstat
+            calls = 0
+
+            def mutating_fstat(fd):
+                nonlocal calls
+                result = real_fstat(fd)
+                calls += 1
+                if calls == 1:
+                    volatile.write_bytes(b"after-change")
+                return result
+
+            with mock.patch.object(MODULE.os, "fstat", mutating_fstat):
+                with self.assertRaisesRegex(ValueError, "changed while hashing"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+    def test_tree_entry_change_while_hashing_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            (source / "first.txt").write_bytes(b"first")
+            real_hash = MODULE._sha256_file
+            calls = 0
+
+            def mutating_hash(path):
+                nonlocal calls
+                result = real_hash(path)
+                calls += 1
+                if calls == 1:
+                    (source / "late.txt").write_bytes(b"late")
+                return result
+
+            with mock.patch.object(MODULE, "_sha256_file", mutating_hash):
+                with self.assertRaisesRegex(ValueError, "tree changed while hashing"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+    def test_control_file_inside_source_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            inside_lock = source / "BENCHMARK.lock.json"
+
+            lock_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "lock",
+                    str(source),
+                    "--name",
+                    "bench",
+                    "--version",
+                    "v1",
+                    "--split",
+                    "test",
+                    "--output",
+                    str(inside_lock),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(lock_result.returncode, 2)
+            self.assertIn("must be outside benchmark source", lock_result.stderr)
+            self.assertFalse(inside_lock.exists())
+
+            outside_lock = root / "BENCHMARK.lock.json"
+            lock = MODULE.build_lock(source, name="bench", version="v1", split="test")
+            MODULE._write_lock(outside_lock, lock)
+            inside_lock.write_text(outside_lock.read_text(encoding="utf-8"), encoding="utf-8")
+            check_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(source), "--lock", str(inside_lock)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(check_result.returncode, 2)
+            self.assertIn("must be outside benchmark source", check_result.stderr)
+
+    def test_lock_write_does_not_follow_predictable_temporary_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "BENCHMARK.lock.json"
+            victim = root / "victim.txt"
+            victim.write_text("sentinel", encoding="utf-8")
+            predictable = output.with_name(output.name + ".tmp")
+            try:
+                os.symlink(victim, predictable)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable on this platform")
+
+            lock = {
+                "schema_version": 1,
+                "status": "LOCKED",
+                "benchmark": {"name": "bench", "version": "v1", "split": "test"},
+                "content": {
+                    "algorithm": "sha256",
+                    "root_sha256": "0" * 64,
+                    "file_count": 1,
+                    "total_bytes": 1,
+                    "files": [{"path": "a.txt", "sha256": "1" * 64, "bytes": 1}],
+                },
+            }
+            MODULE._write_lock(output, lock)
+
+            self.assertEqual(victim.read_text(encoding="utf-8"), "sentinel")
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), lock)
+            self.assertTrue(predictable.is_symlink())
+
+    def test_check_rejects_ambiguous_or_non_standard_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            lock = MODULE.build_lock(source, name="bench", version="v1", split="test")
+            serialized = json.dumps(lock, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+            lock_path = root / "BENCHMARK.lock.json"
+
+            duplicate = serialized.replace(
+                '  "schema_version": 1,',
+                '  "schema_version": 999,\n  "schema_version": 1,',
+                1,
+            )
+            lock_path.write_text(duplicate, encoding="utf-8")
+            duplicate_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(source), "--lock", str(lock_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(duplicate_result.returncode, 2)
+            self.assertIn("duplicate JSON object member: schema_version", duplicate_result.stderr)
+
+            non_standard = serialized.replace('"file_count": 2', '"file_count": NaN', 1)
+            lock_path.write_text(non_standard, encoding="utf-8")
+            constant_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(source), "--lock", str(lock_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(constant_result.returncode, 2)
+            self.assertIn("non-standard JSON constant: NaN", constant_result.stderr)
+
+    def test_cli_lock_and_check_emit_machine_readable_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            lock_path = root / "BENCHMARK.lock.json"
+
+            lock_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "lock",
+                    str(source),
+                    "--name",
+                    "bench",
+                    "--version",
+                    "v1",
+                    "--split",
+                    "test",
+                    "--output",
+                    str(lock_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(lock_result.returncode, 0, lock_result.stderr)
+            lock_output = json.loads(lock_result.stdout)
+            self.assertEqual(lock_output["status"], "LOCKED")
+            self.assertEqual(lock_output["file_count"], 2)
+
+            check_result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(source), "--lock", str(lock_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(check_result.returncode, 0, check_result.stderr)
+            self.assertEqual(json.loads(check_result.stdout)["status"], "PASS")
+
+    def test_repository_lock_starts_explicitly_unselected(self) -> None:
+        lock = json.loads((ROOT / "goal1" / "BENCHMARK.lock.json").read_text(encoding="utf-8"))
+        self.assertEqual(lock["status"], "UNSELECTED")
+        self.assertEqual(lock["benchmark"], {"name": "UNSELECTED", "version": "UNPINNED", "split": "UNLOCKED"})
+        self.assertEqual(lock["content"]["files"], [])
+        self.assertIsNone(lock["content"]["root_sha256"])
+
+
+if __name__ == "__main__":
+    unittest.main()
