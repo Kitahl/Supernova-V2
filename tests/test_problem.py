@@ -34,6 +34,12 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
             BenchmarkProblemIdentity("bench", "v1", "test", " 42 ")
         with self.assertRaisesRegex(ValueError, "split must not contain control characters"):
             BenchmarkProblemIdentity("bench", "v1", "te\nst", "42")
+        for invalid in ("\ud800", "\udfff"):
+            with self.subTest(codepoint=hex(ord(invalid))):
+                with self.assertRaisesRegex(
+                    ValueError, "native_id must contain only Unicode scalar values"
+                ):
+                    BenchmarkProblemIdentity("bench", "v1", "test", invalid)
 
     def test_identity_is_frozen(self) -> None:
         problem = BenchmarkProblemIdentity("bench", "v1", "test", "42")
