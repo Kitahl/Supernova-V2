@@ -14,6 +14,9 @@ from typing import Any
 SCHEMA_VERSION = 1
 HASH_ALGORITHM = "sha256"
 DEFAULT_LOCK_PATH = Path("goal1/BENCHMARK.lock.json")
+_PATH_IS_JUNCTION = getattr(Path, "is_junction", None)
+_WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x00000400)
+_WINDOWS_IO_REPARSE_TAG_MOUNT_POINT = getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003)
 
 
 def _canonical_json(value: object) -> bytes:
@@ -47,6 +50,19 @@ def _require_text(label: str, value: str) -> str:
 
 def _stat_signature(value: os.stat_result) -> tuple[int, int, int, int]:
     return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+
+
+def _is_junction(path: Path) -> bool:
+    if _PATH_IS_JUNCTION is not None:
+        return bool(_PATH_IS_JUNCTION(path))
+    if os.name != "nt":
+        return False
+
+    path_stat = path.lstat()
+    return bool(
+        getattr(path_stat, "st_file_attributes", 0) & _WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT
+        and getattr(path_stat, "st_reparse_tag", 0) == _WINDOWS_IO_REPARSE_TAG_MOUNT_POINT
+    )
 
 
 def _sha256_file(path: Path) -> tuple[str, int, tuple[int, int, int, int]]:
@@ -99,7 +115,7 @@ def _walk_snapshot(
         current_path = Path(current)
         current_stat = current_path.lstat()
         current_relative = "." if current_path == root else current_path.relative_to(root).as_posix()
-        if current_path.is_symlink() or current_path.is_junction() or not stat.S_ISDIR(current_stat.st_mode):
+        if current_path.is_symlink() or _is_junction(current_path) or not stat.S_ISDIR(current_stat.st_mode):
             raise ValueError(f"benchmark tree contains non-directory path during traversal: {current_relative}")
         directory_signatures[current_relative] = _stat_signature(current_stat)
 
@@ -112,7 +128,7 @@ def _walk_snapshot(
                 raise ValueError(
                     f"benchmark tree contains symlinked directory: {candidate.relative_to(root).as_posix()}"
                 )
-            if candidate.is_junction():
+            if _is_junction(candidate):
                 raise ValueError(
                     f"benchmark tree contains junction directory: {candidate.relative_to(root).as_posix()}"
                 )
@@ -156,7 +172,7 @@ def _validate_snapshot(
         current = directory.lstat()
         if (
             directory.is_symlink()
-            or directory.is_junction()
+            or _is_junction(directory)
             or not stat.S_ISDIR(current.st_mode)
             or _stat_signature(current) != expected
         ):
@@ -172,7 +188,7 @@ def _enumerate_files(root: Path) -> list[dict[str, Any]]:
 def build_lock(source: Path, *, name: str, version: str, split: str) -> dict[str, Any]:
     if source.is_symlink():
         raise ValueError(f"benchmark source must not be a symlink: {source}")
-    if source.is_junction():
+    if _is_junction(source):
         raise ValueError(f"benchmark source must not be a junction: {source}")
     source = source.resolve()
     if not source.is_dir():
