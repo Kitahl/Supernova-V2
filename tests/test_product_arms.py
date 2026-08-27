@@ -253,8 +253,8 @@ class MultiFidelityContractTests(unittest.TestCase):
                 "low",
             )
 
-    def test_escalation_cannot_retroactively_select_earlier_answer(self) -> None:
-        with self.assertRaisesRegex(ValueError, "final attempted ANSWERED stage"):
+    def test_escalation_stops_after_first_answer(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot continue after an ANSWERED stage"):
             MultiFidelityResult(
                 "r",
                 "e",
@@ -264,31 +264,32 @@ class MultiFidelityContractTests(unittest.TestCase):
                     MultiFidelityCandidate("low", "ANSWERED", "L", None),
                     MultiFidelityCandidate("high", "ANSWERED", "H", None),
                 ),
-                "low",
+                "high",
             )
 
-    def test_escalated_nonanswer_has_no_implicit_fallback_policy(self) -> None:
-        request = self.request()
-        with self.assertRaisesRegex(ValueError, "null unless the final attempted stage answered"):
+    def test_answer_cannot_be_followed_by_failed_higher_fidelity_attempt(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot continue after an ANSWERED stage"):
             MultiFidelityResult(
-                request.request_id,
-                request.experiment_id,
-                request.problem_id,
-                request.budget_id,
+                "r",
+                "e",
+                "p",
+                "b",
                 (
-                    MultiFidelityCandidate("cheap", "ANSWERED", "L", None),
-                    MultiFidelityCandidate("standard", "ERROR", None, "timeout"),
+                    MultiFidelityCandidate("low", "ANSWERED", "L", None),
+                    MultiFidelityCandidate("high", "ERROR", None, "timeout"),
                 ),
-                "cheap",
+                None,
             )
 
+    def test_escalated_error_has_no_selection(self) -> None:
+        request = self.request()
         result = MultiFidelityResult(
             request.request_id,
             request.experiment_id,
             request.problem_id,
             request.budget_id,
             (
-                MultiFidelityCandidate("cheap", "ANSWERED", "L", None),
+                MultiFidelityCandidate("cheap", "NO_ANSWER", None, None),
                 MultiFidelityCandidate("standard", "ERROR", None, "timeout"),
             ),
             None,
