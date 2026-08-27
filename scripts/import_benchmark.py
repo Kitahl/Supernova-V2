@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -30,13 +31,36 @@ def _require_text(label: str, value: str) -> str:
     return value
 
 
+def _stat_signature(value: os.stat_result) -> tuple[int, int, int, int]:
+    return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+
+
 def _sha256_file(path: Path) -> tuple[str, int]:
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError(f"benchmark tree contains non-regular file: {path}")
+
     digest = hashlib.sha256()
     size = 0
     with path.open("rb") as handle:
+        opened = os.fstat(handle.fileno())
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise ValueError(f"benchmark file changed while opening for hashing: {path}")
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
             size += len(chunk)
+        after_read = os.fstat(handle.fileno())
+
+    after_path = path.lstat()
+    expected = _stat_signature(before)
+    if (
+        _stat_signature(opened) != expected
+        or _stat_signature(after_read) != expected
+        or _stat_signature(after_path) != expected
+        or not stat.S_ISREG(after_path.st_mode)
+        or size != after_read.st_size
+    ):
+        raise ValueError(f"benchmark file changed while hashing: {path}")
     return digest.hexdigest(), size
 
 
