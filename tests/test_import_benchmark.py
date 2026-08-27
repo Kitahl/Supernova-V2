@@ -77,6 +77,21 @@ class BenchmarkImporterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "symlinked file"):
                 MODULE.build_lock(source, name="bench", version="v1", split="test")
 
+    def test_symlinked_source_root_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "benchmark"
+            source.mkdir()
+            self._tree(source)
+            alias = root / "benchmark-alias"
+            try:
+                os.symlink(source, alias, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable on this platform")
+
+            with self.assertRaisesRegex(ValueError, "source must not be a symlink"):
+                MODULE.build_lock(alias, name="bench", version="v1", split="test")
+
     def test_walk_errors_fail_closed_instead_of_producing_partial_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "benchmark"
