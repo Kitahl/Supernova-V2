@@ -375,6 +375,25 @@ when the final verifier evidence is cryptographically or deterministically bound
 challenge and submitted artifact, with verifier/policy identity preserved and independently
 replayable.
 
+### 27. MLflow and Hugging Face dataset fingerprints — dataset names are not content identity
+
+Primary sources: MLflow, *ML Dataset Tracking*.
+<https://mlflow.org/docs/latest/dataset/>; Hugging Face Datasets, *The cache — Fingerprint*.
+<https://huggingface.co/docs/datasets/v1.16.0/about_cache.html>.
+
+**EVIDENCE.** MLflow's dataset tracking represents a dataset with both a human-readable name and a
+computed digest/hash plus source lineage. Hugging Face Datasets describes a fingerprint as tracking
+the current dataset state: the initial fingerprint derives from the data files/table and subsequent
+fingerprints change with transforms.
+
+**INFERENCE for Goal 1.** These are reproducibility/data-lineage precedents, not evidence that
+Supernova's mechanism works. They expose a repository-level identity gap: current Goal 1 scientific
+records are keyed by logical benchmark/problem labels, while the proposed benchmark importer keeps
+the benchmark-tree `root_sha256` in a separate lock file and `ExperimentSpec`/`OutcomeRecord` do not
+bind that digest. A confirmatory record should therefore carry the exact benchmark-lock and split-
+contract identity, and any preprocessing/formalization transform identity, so an outcome cannot be
+replayed after the benchmark bytes change under the same names.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -394,7 +413,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - aggregate token/call totals do not uniquely identify LLM inference compute or serving work;
 - telemetry pipelines can drop records, so observed-trace consistency is not by itself a completeness certificate;
 - hosted API quota/cache/queue state can be shared across requests, so concurrent experimental arms can interfere operationally;
-- high-assurance verification practice binds a PASS to an exact artifact/challenge subject and verifier/policy evidence rather than trusting an unbound boolean.
+- high-assurance verification practice binds a PASS to an exact artifact/challenge subject and verifier/policy evidence rather than trusting an unbound boolean;
+- reproducible dataset tracking binds evaluation data to a digest/fingerprint and source lineage rather than relying on a dataset name alone.
 
 ## What these sources do **not** establish for Supernova
 
@@ -441,6 +461,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Cluster-dependence falsifier:** are benchmark-family/variant clusters identified and either reduced to independent sampling units or analyzed with cluster-aware paired inference? (Eliasziw & Donner; Gönen.)
 - **Shared-serving interference falsifier:** do conclusions persist when paired cells are isolated from shared provider quotas/caches/queues, or under a frozen counterbalanced execution/throttling policy with complete retry/rate-limit telemetry? (OpenAI/Anthropic rate-limit docs.)
 - **Outcome-evidence binding falsifier:** can every counted solved cell be replayed from an evidence-bound final-verifier record tied to the exact challenge and proof/artifact digest, with verifier/version/policy identity preserved? (Lean proof validation; SLSA VSA.)
+- **Benchmark-content binding falsifier:** can every scientific record be joined to the exact benchmark-lock root digest, split-contract identity, and preprocessing/formalization identity, with mismatches rejected rather than accepted under the same logical problem labels? (MLflow; Hugging Face Datasets.)
 
 If those falsifiers are not implemented, a positive result should be described as performance of the
 *bundled verified-chain system* rather than evidence that verified-product chaining itself caused
