@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
 import sys
 import unittest
 from pathlib import Path
@@ -43,8 +42,10 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
 
     def test_identity_is_frozen(self) -> None:
         problem = BenchmarkProblemIdentity("bench", "v1", "test", "42")
-        with self.assertRaises(FrozenInstanceError):
+        with self.assertRaises(AttributeError):
             problem.split = "train"  # type: ignore[misc]
+        with self.assertRaises(AttributeError):
+            object.__setattr__(problem, "native_id", "43")
 
 
 class SplitContractTests(unittest.TestCase):
@@ -146,8 +147,22 @@ class SplitContractTests(unittest.TestCase):
         contract = SplitContract.from_native_ids(
             benchmark="bench", version="v1", split="test", native_ids=["p1"]
         )
-        with self.assertRaises(FrozenInstanceError):
+        with self.assertRaises(AttributeError):
             contract.split = "train"  # type: ignore[misc]
+        with self.assertRaises(AttributeError):
+            object.__setattr__(contract, "split", "train")
+        with self.assertRaises(AttributeError):
+            object.__setattr__(contract, "problems", ())
+
+    def test_low_level_reassignment_cannot_mutate_member_identity(self) -> None:
+        contract = SplitContract.from_native_ids(
+            benchmark="bench", version="v1", split="test", native_ids=["p1"]
+        )
+        original_contract_id = contract.contract_id
+        with self.assertRaises(AttributeError):
+            object.__setattr__(contract.problems[0], "native_id", "p2")
+        self.assertEqual("p1", contract.problems[0].native_id)
+        self.assertEqual(original_contract_id, contract.contract_id)
 
 
 if __name__ == "__main__":
