@@ -264,6 +264,26 @@ specific immutable/stable model version where available, record returned model i
 call time, and interleave/counterbalance paired arms so service drift cannot systematically favor one
 mechanism.
 
+### 17. Yuan et al. (NeurIPS 2025) and Ouyang et al. — deterministic settings do not guarantee reproducible inference
+
+Primary sources: Jiayi Yuan et al., *Understanding and Mitigating Numerical Sources of
+Nondeterminism in LLM Inference*, NeurIPS 2025.
+<https://proceedings.neurips.cc/paper_files/paper/2025/hash/f80094a824ba5912d4a2de169c404a40-Abstract-Conference.html>;
+Shuyin Ouyang et al., *An Empirical Study of the Non-determinism of ChatGPT in Code Generation*.
+<https://arxiv.org/abs/2308.02828>
+
+**EVIDENCE.** Yuan et al. show that batch size, GPU count, GPU version, and numerical precision can
+change generated outputs and benchmark accuracy even under greedy decoding, with particularly
+large effects for reasoning models. Ouyang et al. report substantial run-to-run variation in
+ChatGPT code generation and explicitly find that temperature zero does not guarantee deterministic
+outputs.
+
+**INFERENCE for Goal 1.** A frozen seed and nominally deterministic decoding are not sufficient
+experimental controls. Self-hosted confirmatory runs should freeze the serving/hardware/precision
+stack; hosted runs should treat backend execution as a residual uncertainty source, randomize paired
+arm order, and use a prospectively frozen replication/sensitivity plan. Otherwise backend execution
+noise can be misread as a mechanism effect even when the advertised model version never changes.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -280,7 +300,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - reusable lemma discovery can create cross-problem state and transfer effects (DreamProver);
 - a kernel-accepted Lean proof does not by itself establish that the benchmark statement faithfully encodes the intended problem (Ammanamanchi et al.);
 - fine-grained verification feedback can itself be an agentic capability channel (Kwok et al.);
-- hosted model services can change over time, and moving model aliases can silently change the data-generating system (Chen et al.; Gemini model-version documentation).
+- hosted model services can change over time, and moving model aliases can silently change the data-generating system (Chen et al.; Gemini model-version documentation);
+- backend execution details can induce output and accuracy variation even under nominally deterministic decoding (Yuan et al.; Ouyang et al.).
 
 ## What these sources do **not** establish for Supernova
 
@@ -329,6 +350,9 @@ to answer these prior-art-driven falsifiers:
 - **Temporal-drift falsifier:** does the effect persist when paired arms are interleaved or
   counterbalanced in narrow time blocks on the exact same stable model version, with returned model
   identity and call time recorded? (Chen et al.; Gemini model-version documentation.)
+- **Inference-reproducibility falsifier:** does the effect persist across the prospectively frozen
+  replication policy when self-hosted hardware/precision/serving settings are held fixed, or when
+  hosted-backend uncertainty is explicitly randomized across paired arms? (Yuan et al.; Ouyang et al.)
 
 If those falsifiers are not implemented, any positive result should be described as performance of
 the *bundled verified-chain system* rather than evidence that verified-product chaining itself is
