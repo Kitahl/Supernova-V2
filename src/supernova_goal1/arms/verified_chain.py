@@ -34,7 +34,7 @@ class InvalidParentError(ValueError):
 
 
 class VerificationSubjectMismatchError(ValueError):
-    """Raised when a verifier result is not bound to the current product content."""
+    """Raised when a verifier result is not bound to the exact chain subject."""
 
 
 def _validate_product_value(value: Any, path: str = "value") -> None:
@@ -97,6 +97,38 @@ class CanonicalProductValue:
         return json.loads(self.canonical_json)
 
 
+def _verification_subject_sha256(
+    *,
+    problem_id: str,
+    product_id: str,
+    step_index: int,
+    content_sha256: str,
+    producer_id: str,
+    parent_product_id: str | None,
+    parent_content_sha256: str | None,
+) -> str:
+    """Bind verification to both immutable content and its exact chain context."""
+
+    subject = {
+        "schema": "supernova-goal1-verification-subject-v1",
+        "problem_id": problem_id,
+        "product_id": product_id,
+        "step_index": step_index,
+        "content_sha256": content_sha256,
+        "producer_id": producer_id,
+        "parent_product_id": parent_product_id,
+        "parent_content_sha256": parent_content_sha256,
+    }
+    subject_bytes = json.dumps(
+        subject,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+    return hashlib.sha256(subject_bytes).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class ProductRef:
     product_id: str
@@ -107,13 +139,16 @@ class ProductRef:
 
 @dataclass(frozen=True, slots=True)
 class VerificationSubject:
-    """Exact immutable product snapshot that an external verifier must check."""
+    """Exact immutable product and chain context that an external verifier must check."""
 
+    problem_id: str
     product_id: str
     step_index: int
     content: CanonicalProductValue
     producer_id: str
     parent_product_id: str | None
+    parent_content_sha256: str | None
+    _subject_sha256: str
 
     @property
     def value(self) -> Any:
@@ -127,6 +162,10 @@ class VerificationSubject:
     def content_sha256(self) -> str:
         return self.content.sha256
 
+    @property
+    def subject_sha256(self) -> str:
+        return self._subject_sha256
+
 
 @dataclass(frozen=True, slots=True)
 class VerifiedProduct:
@@ -137,6 +176,7 @@ class VerifiedProduct:
     verifier_id: str
     evidence_id: str
     parent_product_id: str | None
+    verification_subject_sha256: str
 
     @property
     def value(self) -> Any:
@@ -152,6 +192,7 @@ class StepRecord:
     product_id: str
     step_index: int
     content_sha256: str
+    verification_subject_sha256: str
     outcome: VerificationOutcome
     producer_id: str
     verifier_id: str
@@ -175,9 +216,10 @@ class VerifiedChain:
 
     Each proposed value is immediately converted to an immutable, content-addressed
     snapshot. The verifier receives that exact snapshot through ``verification_subject``
-    and ``record_verification`` requires the resulting decision to cite its SHA-256
-    digest. PASS therefore binds verification to bytes that cannot be changed by later
-    mutation of the producer's source object or confused with another product snapshot.
+    together with its problem/step/parent context, and ``record_verification`` requires
+    the resulting decision to cite a SHA-256 digest over that complete subject. PASS
+    therefore cannot be replayed from another problem or parent chain merely because
+    the product bytes happen to match.
     Consumers receive a fresh decoded view of that verified snapshot, never the
     producer-owned mutable object.
 
@@ -272,6 +314,34 @@ class VerifiedChain:
         self._state = ChainState.AWAITING_VERIFICATION
         return ProductRef(product_id, step_index, self._state, content.sha256)
 
+    def _make_verification_subject(
+        self, pending: _PendingProduct
+    ) -> VerificationSubject:
+        parent_content_sha256 = (
+            self._last_consumed.content_sha256
+            if pending.parent_product_id is not None and self._last_consumed is not None
+            else None
+        )
+        subject_sha256 = _verification_subject_sha256(
+            problem_id=self._problem_id,
+            product_id=pending.product_id,
+            step_index=pending.step_index,
+            content_sha256=pending.content.sha256,
+            producer_id=pending.producer_id,
+            parent_product_id=pending.parent_product_id,
+            parent_content_sha256=parent_content_sha256,
+        )
+        return VerificationSubject(
+            problem_id=self._problem_id,
+            product_id=pending.product_id,
+            step_index=pending.step_index,
+            content=pending.content,
+            producer_id=pending.producer_id,
+            parent_product_id=pending.parent_product_id,
+            parent_content_sha256=parent_content_sha256,
+            _subject_sha256=subject_sha256,
+        )
+
     def verification_subject(self, product_id: str) -> VerificationSubject:
         if self._state is not ChainState.AWAITING_VERIFICATION or self._pending is None:
             raise InvalidTransitionError(
@@ -279,20 +349,13 @@ class VerifiedChain:
             )
         if product_id != self._pending.product_id:
             raise ValueError("verification product_id does not match current product")
-        pending = self._pending
-        return VerificationSubject(
-            product_id=pending.product_id,
-            step_index=pending.step_index,
-            content=pending.content,
-            producer_id=pending.producer_id,
-            parent_product_id=pending.parent_product_id,
-        )
+        return self._make_verification_subject(self._pending)
 
     def record_verification(
         self,
         product_id: str,
         *,
-        subject_content_sha256: str,
+        subject_sha256: str,
         outcome: VerificationOutcome | str,
         verifier_id: str,
         evidence_id: str,
@@ -303,11 +366,12 @@ class VerifiedChain:
             )
         if product_id != self._pending.product_id:
             raise ValueError("verification product_id does not match current product")
-        if not isinstance(subject_content_sha256, str) or not subject_content_sha256:
-            raise ValueError("subject_content_sha256 must be a non-empty string")
-        if subject_content_sha256 != self._pending.content.sha256:
+        if not isinstance(subject_sha256, str) or not subject_sha256:
+            raise ValueError("subject_sha256 must be a non-empty string")
+        expected_subject = self._make_verification_subject(self._pending)
+        if subject_sha256 != expected_subject.subject_sha256:
             raise VerificationSubjectMismatchError(
-                "verification subject digest does not match current product content"
+                "verification subject digest does not match current chain context"
             )
         if not isinstance(verifier_id, str) or not verifier_id:
             raise ValueError("verifier_id must be a non-empty string")
@@ -330,6 +394,7 @@ class VerifiedChain:
                 verifier_id=verifier_id,
                 evidence_id=evidence_id,
                 parent_product_id=pending.parent_product_id,
+                verification_subject_sha256=expected_subject.subject_sha256,
             )
             self._pending = None
             self._state = ChainState.VERIFIED
@@ -339,6 +404,7 @@ class VerifiedChain:
                     product_id=pending.product_id,
                     step_index=pending.step_index,
                     content_sha256=pending.content.sha256,
+                    verification_subject_sha256=expected_subject.subject_sha256,
                     outcome=normalized,
                     producer_id=pending.producer_id,
                     verifier_id=verifier_id,
@@ -370,6 +436,7 @@ class VerifiedChain:
                 product_id=verified.product_id,
                 step_index=verified.step_index,
                 content_sha256=verified.content_sha256,
+                verification_subject_sha256=verified.verification_subject_sha256,
                 outcome=VerificationOutcome.PASS,
                 producer_id=verified.producer_id,
                 verifier_id=verified.verifier_id,
@@ -412,6 +479,7 @@ class VerifiedChain:
                 product_id=verified.product_id,
                 step_index=verified.step_index,
                 content_sha256=verified.content_sha256,
+                verification_subject_sha256=verified.verification_subject_sha256,
                 outcome=VerificationOutcome.PASS,
                 producer_id=verified.producer_id,
                 verifier_id=verified.verifier_id,
