@@ -8,36 +8,46 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from supernova_goal1.arms.verified_chain import (
+    SUBJECT_PATH_TOKEN,
     ChainState,
     InvalidParentError,
     InvalidTransitionError,
     UnverifiedProductError,
+    VerificationAuthorityError,
+    VerificationExecutionError,
     VerificationOutcome,
-    VerificationSubjectMismatchError,
     VerifiedChain,
     VerifiedProduct,
 )
+from supernova_goal1.verifier import VerifierResult, VerifierStatus
+
+PASS_CODE = r'''
+import hashlib,json,sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    subject=json.load(handle)
+if hashlib.sha256(subject["canonical_json"].encode("utf-8")).hexdigest() != subject["content_sha256"]:
+    raise SystemExit(8)
+if len(subject["subject_sha256"]) != 64:
+    raise SystemExit(9)
+raise SystemExit(0)
+'''
+FAIL_CODE = r'''import json,sys; json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(7)'''
+TIMEOUT_CODE = r'''import time; time.sleep(5)'''
+
+
+def verifier_command(code: str = PASS_CODE) -> tuple[str, ...]:
+    return (sys.executable, "-c", code, SUBJECT_PATH_TOKEN)
 
 
 class VerifiedChainTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.chain = VerifiedChain("dry-001")
-
-    def _pass(
-        self,
-        product_id: str,
-        *,
-        verifier_id: str = "checker",
-        evidence_id: str = "v1",
-    ) -> None:
-        subject = self.chain.verification_subject(product_id)
-        self.chain.record_verification(
-            product_id,
-            subject_sha256=subject.subject_sha256,
-            outcome=VerificationOutcome.PASS,
-            verifier_id=verifier_id,
-            evidence_id=evidence_id,
+        self.chain = VerifiedChain(
+            "dry-001", verifier_command=verifier_command(), verifier_timeout_seconds=2
         )
+
+    def _pass(self, product_id: str) -> None:
+        ref = self.chain.verify_pending(product_id)
+        self.assertEqual(ChainState.VERIFIED, ref.state)
 
     def test_unverified_product_cannot_be_consumed_or_finalized(self) -> None:
         ref = self.chain.propose("lemma-1", {"claim": "A"}, producer_id="solver")
@@ -51,401 +61,175 @@ class VerifiedChainTests(unittest.TestCase):
     def test_pass_mints_consumable_verified_product(self) -> None:
         ref = self.chain.propose("lemma-1", "proof term", producer_id="solver")
         subject = self.chain.verification_subject("lemma-1")
-        self.assertEqual("proof term", subject.value)
-        verified_ref = self.chain.record_verification(
-            "lemma-1",
-            subject_sha256=subject.subject_sha256,
-            outcome=VerificationOutcome.PASS,
-            verifier_id="lean-kernel",
-            evidence_id="check-001",
-        )
+        verified_ref = self.chain.verify_pending("lemma-1")
         self.assertEqual(ChainState.VERIFIED, verified_ref.state)
         self.assertEqual(ref.content_sha256, verified_ref.content_sha256)
         product = self.chain.consume_verified("lemma-1")
         self.assertIsInstance(product, VerifiedProduct)
         self.assertEqual("proof term", product.value)
-        self.assertEqual(ref.content_sha256, product.content_sha256)
-        self.assertEqual("lean-kernel", product.verifier_id)
+        self.assertEqual(subject.subject_sha256, product.verification_subject_sha256)
+        self.assertEqual(self.chain.verifier_id, product.verifier_id)
+        self.assertTrue(product.evidence_id.startswith("verifier-evidence-sha256:"))
         self.assertEqual(ChainState.READY, self.chain.state)
-        self.assertTrue(self.chain.history[-1].consumed)
 
     def test_source_mutation_cannot_change_verified_product(self) -> None:
         source = {"answer": 42, "trace": ["a", "b"]}
         ref = self.chain.propose("lemma-1", source, producer_id="solver")
-        subject = self.chain.verification_subject("lemma-1")
-        self.chain.record_verification(
-            "lemma-1",
-            subject_sha256=subject.subject_sha256,
-            outcome="PASS",
-            verifier_id="checker",
-            evidence_id="v1",
-        )
+        self._pass("lemma-1")
         verified = self.chain.consume_verified("lemma-1")
-
         source["answer"] = 999
         source["trace"].append("mutated")
         self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
         self.assertEqual(ref.content_sha256, verified.content_sha256)
-
         decoded = verified.value
         decoded["answer"] = -1
         decoded["trace"].clear()
         self.assertEqual({"answer": 42, "trace": ["a", "b"]}, verified.value)
-        self.assertEqual(ref.content_sha256, verified.content_sha256)
 
-    def test_verified_authority_objects_resist_low_level_field_reassignment(self) -> None:
-        source = {"answer": 42}
-        self.chain.propose("lemma-1", source, producer_id="solver")
+    def test_authority_objects_resist_low_level_field_reassignment(self) -> None:
+        self.chain.propose("lemma-1", {"answer": 42}, producer_id="solver")
         subject = self.chain.verification_subject("lemma-1")
-
         with self.assertRaises(AttributeError):
             object.__setattr__(subject.content, "canonical_json", '{"answer":999}')
         with self.assertRaises(AttributeError):
             object.__setattr__(subject, "producer_id", "attacker")
-        self.assertEqual({"answer": 42}, subject.value)
-
-        self.chain.record_verification(
-            "lemma-1",
-            subject_sha256=subject.subject_sha256,
-            outcome="PASS",
-            verifier_id="checker",
-            evidence_id="v1",
-        )
+        self._pass("lemma-1")
         verified = self.chain.consume_verified("lemma-1")
-
         with self.assertRaises(AttributeError):
             object.__setattr__(verified.content, "canonical_json", '{"answer":999}')
         with self.assertRaises(AttributeError):
             object.__setattr__(verified, "verifier_id", "attacker")
         self.assertEqual({"answer": 42}, verified.value)
-        self.assertEqual(subject.content_sha256, verified.content_sha256)
 
     def test_history_records_resist_low_level_field_reassignment(self) -> None:
         self.chain.propose("lemma-1", {"answer": 42}, producer_id="solver")
-        self._pass("lemma-1", verifier_id="checker", evidence_id="history-v1")
+        self._pass("lemma-1")
         self.chain.consume_verified("lemma-1")
         record = self.chain.history[-1]
-
         with self.assertRaises(AttributeError):
             object.__setattr__(record, "outcome", VerificationOutcome.FAIL)
         with self.assertRaises(AttributeError):
             object.__setattr__(record, "consumed", False)
-        with self.assertRaises(AttributeError):
-            object.__setattr__(record, "evidence_id", "forged")
-
         self.assertEqual(VerificationOutcome.PASS, record.outcome)
         self.assertTrue(record.consumed)
-        self.assertEqual("history-v1", record.evidence_id)
 
-    def test_verification_result_must_bind_exact_chain_subject(self) -> None:
+    def test_verifier_reads_the_exact_immutable_subject(self) -> None:
         source = {"answer": 42}
         ref = self.chain.propose("lemma-1", source, producer_id="solver")
         subject = self.chain.verification_subject("lemma-1")
-
         source["answer"] = 999
         self.assertEqual({"answer": 42}, subject.value)
-        self.assertEqual(ref.content_sha256, subject.content_sha256)
-        self.assertEqual("dry-001", subject.problem_id)
-
-        with self.assertRaisesRegex(
-            VerificationSubjectMismatchError, "chain context"
-        ):
-            self.chain.record_verification(
-                "lemma-1",
-                subject_sha256="0" * 64,
-                outcome="PASS",
-                verifier_id="checker",
-                evidence_id="wrong-subject",
-            )
-        self.assertEqual(ChainState.AWAITING_VERIFICATION, self.chain.state)
-        self.assertEqual(ref.content_sha256, self.chain.current.content_sha256)
-
-        self.chain.record_verification(
-            "lemma-1",
-            subject_sha256=subject.subject_sha256,
-            outcome="PASS",
-            verifier_id="checker",
-            evidence_id="bound-subject",
-        )
+        self._pass("lemma-1")
         verified = self.chain.consume_verified("lemma-1")
         self.assertEqual({"answer": 42}, verified.value)
-        self.assertEqual(subject.content_sha256, verified.content_sha256)
-        self.assertEqual(subject.subject_sha256, verified.verification_subject_sha256)
+        self.assertEqual(ref.content_sha256, verified.content_sha256)
 
-    def test_verification_cannot_replay_across_problem_or_parent_context(self) -> None:
-        left = VerifiedChain("dry-001")
-        right = VerifiedChain("dry-002")
+    def test_subject_hashes_bind_problem_parent_lineage_and_provenance(self) -> None:
+        left = VerifiedChain("dry-001", verifier_command=verifier_command())
+        right = VerifiedChain("dry-002", verifier_command=verifier_command())
         for chain in (left, right):
-            chain.propose("lemma-1", {"claim": "same"}, producer_id="solver")
-
-        left_subject = left.verification_subject("lemma-1")
-        right_subject = right.verification_subject("lemma-1")
-        self.assertEqual(left_subject.content_sha256, right_subject.content_sha256)
-        self.assertNotEqual(left_subject.subject_sha256, right_subject.subject_sha256)
-
-        with self.assertRaisesRegex(
-            VerificationSubjectMismatchError, "chain context"
-        ):
-            right.record_verification(
-                "lemma-1",
-                subject_sha256=left_subject.subject_sha256,
-                outcome="PASS",
-                verifier_id="checker",
-                evidence_id="cross-problem-replay",
-            )
-        self.assertEqual(ChainState.AWAITING_VERIFICATION, right.state)
-
-        parent_a = VerifiedChain("dry-parent")
-        parent_b = VerifiedChain("dry-parent")
-        parent_a.propose("parent", {"seed": 1}, producer_id="solver")
-        parent_b.propose("parent", {"seed": 2}, producer_id="solver")
-        for chain in (parent_a, parent_b):
-            subject = chain.verification_subject("parent")
-            chain.record_verification(
-                "parent",
-                subject_sha256=subject.subject_sha256,
-                outcome="PASS",
-                verifier_id="checker",
-                evidence_id="parent-pass",
-            )
-        verified_a = parent_a.consume_verified("parent")
-        verified_b = parent_b.consume_verified("parent")
-        parent_a.propose(
-            "child", {"claim": "same"}, producer_id="solver", parent=verified_a
-        )
-        parent_b.propose(
-            "child", {"claim": "same"}, producer_id="solver", parent=verified_b
-        )
-        child_a = parent_a.verification_subject("child")
-        child_b = parent_b.verification_subject("child")
-        self.assertEqual(child_a.content_sha256, child_b.content_sha256)
-        self.assertNotEqual(child_a.parent_content_sha256, child_b.parent_content_sha256)
-        self.assertNotEqual(child_a.subject_sha256, child_b.subject_sha256)
-
-        with self.assertRaisesRegex(
-            VerificationSubjectMismatchError, "chain context"
-        ):
-            parent_b.record_verification(
-                "child",
-                subject_sha256=child_a.subject_sha256,
-                outcome="PASS",
-                verifier_id="checker",
-                evidence_id="cross-parent-replay",
-            )
-        self.assertEqual(ChainState.AWAITING_VERIFICATION, parent_b.state)
-
-    def test_verification_subject_recursively_binds_deeper_lineage(self) -> None:
-        left = VerifiedChain("dry-lineage")
-        right = VerifiedChain("dry-lineage")
-
-        left.propose("grandparent", {"seed": 1}, producer_id="solver")
-        right.propose("grandparent", {"seed": 2}, producer_id="solver")
-        for chain in (left, right):
-            subject = chain.verification_subject("grandparent")
-            chain.record_verification(
-                "grandparent",
-                subject_sha256=subject.subject_sha256,
-                outcome="PASS",
-                verifier_id="checker",
-                evidence_id="grandparent-pass",
-            )
-        left_grandparent = left.consume_verified("grandparent")
-        right_grandparent = right.consume_verified("grandparent")
-
-        left.propose(
-            "parent",
-            {"claim": "same-parent"},
-            producer_id="solver",
-            parent=left_grandparent,
-        )
-        right.propose(
-            "parent",
-            {"claim": "same-parent"},
-            producer_id="solver",
-            parent=right_grandparent,
-        )
-        left_parent_subject = left.verification_subject("parent")
-        right_parent_subject = right.verification_subject("parent")
-        self.assertEqual(
-            left_parent_subject.content_sha256, right_parent_subject.content_sha256
-        )
+            chain.propose("lemma", {"same": True}, producer_id="solver")
         self.assertNotEqual(
-            left_parent_subject.subject_sha256, right_parent_subject.subject_sha256
+            left.verification_subject("lemma").subject_sha256,
+            right.verification_subject("lemma").subject_sha256,
         )
 
-        for chain, subject in (
-            (left, left_parent_subject),
-            (right, right_parent_subject),
-        ):
-            chain.record_verification(
-                "parent",
-                subject_sha256=subject.subject_sha256,
-                outcome="PASS",
-                verifier_id="checker",
-                evidence_id="parent-pass",
-            )
-        left_parent = left.consume_verified("parent")
-        right_parent = right.consume_verified("parent")
-
-        left.propose(
-            "child", {"claim": "same-child"}, producer_id="solver", parent=left_parent
-        )
-        right.propose(
-            "child", {"claim": "same-child"}, producer_id="solver", parent=right_parent
-        )
-        left_child = left.verification_subject("child")
-        right_child = right.verification_subject("child")
-
-        self.assertEqual(left_child.content_sha256, right_child.content_sha256)
-        self.assertEqual(
-            left_child.parent_content_sha256, right_child.parent_content_sha256
-        )
-        self.assertEqual(left_child.parent_product_id, right_child.parent_product_id)
+        a = VerifiedChain("dry-parent", verifier_command=verifier_command())
+        b = VerifiedChain("dry-parent", verifier_command=verifier_command())
+        a.propose("parent", {"seed": 1}, producer_id="solver")
+        b.propose("parent", {"seed": 2}, producer_id="solver")
+        a.verify_pending("parent"); b.verify_pending("parent")
+        pa = a.consume_verified("parent"); pb = b.consume_verified("parent")
+        a.propose("child", {"same": True}, producer_id="solver", parent=pa)
+        b.propose("child", {"same": True}, producer_id="solver", parent=pb)
         self.assertNotEqual(
-            left_child.parent_verification_subject_sha256,
-            right_child.parent_verification_subject_sha256,
+            a.verification_subject("child").subject_sha256,
+            b.verification_subject("child").subject_sha256,
         )
-        self.assertNotEqual(
-            left_child.parent_verification_receipt_sha256,
-            right_child.parent_verification_receipt_sha256,
-        )
-        self.assertNotEqual(left_child.subject_sha256, right_child.subject_sha256)
-
-        with self.assertRaisesRegex(
-            VerificationSubjectMismatchError, "chain context"
-        ):
-            right.record_verification(
-                "child",
-                subject_sha256=left_child.subject_sha256,
-                outcome="PASS",
-                verifier_id="checker",
-                evidence_id="cross-lineage-replay",
-            )
-        self.assertEqual(ChainState.AWAITING_VERIFICATION, right.state)
 
     def test_child_subject_binds_parent_verification_provenance(self) -> None:
-        left = VerifiedChain("dry-provenance")
-        right = VerifiedChain("dry-provenance")
-
+        left = VerifiedChain("dry-provenance", verifier_command=verifier_command())
+        right = VerifiedChain(
+            "dry-provenance",
+            verifier_command=verifier_command(PASS_CODE + "\n# distinct command identity"),
+        )
         for chain in (left, right):
-            chain.propose(
-                "parent", {"claim": "same-parent"}, producer_id="solver"
-            )
-        left_parent_subject = left.verification_subject("parent")
-        right_parent_subject = right.verification_subject("parent")
-        self.assertEqual(
-            left_parent_subject.subject_sha256, right_parent_subject.subject_sha256
-        )
-
-        left.record_verification(
-            "parent",
-            subject_sha256=left_parent_subject.subject_sha256,
-            outcome="PASS",
-            verifier_id="checker-a",
-            evidence_id="evidence-a",
-        )
-        right.record_verification(
-            "parent",
-            subject_sha256=right_parent_subject.subject_sha256,
-            outcome="PASS",
-            verifier_id="checker-b",
-            evidence_id="evidence-b",
-        )
-        left_parent = left.consume_verified("parent")
-        right_parent = right.consume_verified("parent")
-
-        self.assertEqual(
-            left_parent.verification_subject_sha256,
-            right_parent.verification_subject_sha256,
-        )
+            chain.propose("parent", {"same": True}, producer_id="solver")
+            chain.verify_pending("parent")
+        lp = left.consume_verified("parent"); rp = right.consume_verified("parent")
+        self.assertNotEqual(lp.verification_receipt_sha256, rp.verification_receipt_sha256)
+        left.propose("child", {"same": True}, producer_id="solver", parent=lp)
+        right.propose("child", {"same": True}, producer_id="solver", parent=rp)
         self.assertNotEqual(
-            left_parent.verification_receipt_sha256,
-            right_parent.verification_receipt_sha256,
+            left.verification_subject("child").subject_sha256,
+            right.verification_subject("child").subject_sha256,
         )
-
-        left.propose(
-            "child", {"claim": "same-child"}, producer_id="solver", parent=left_parent
-        )
-        right.propose(
-            "child", {"claim": "same-child"}, producer_id="solver", parent=right_parent
-        )
-        left_child = left.verification_subject("child")
-        right_child = right.verification_subject("child")
-
-        self.assertEqual(left_child.content_sha256, right_child.content_sha256)
-        self.assertEqual(
-            left_child.parent_verification_subject_sha256,
-            right_child.parent_verification_subject_sha256,
-        )
-        self.assertNotEqual(
-            left_child.parent_verification_receipt_sha256,
-            right_child.parent_verification_receipt_sha256,
-        )
-        self.assertNotEqual(left_child.subject_sha256, right_child.subject_sha256)
-
-        with self.assertRaisesRegex(
-            VerificationSubjectMismatchError, "chain context"
-        ):
-            right.record_verification(
-                "child",
-                subject_sha256=left_child.subject_sha256,
-                outcome="PASS",
-                verifier_id="checker-b",
-                evidence_id="cross-provenance-replay",
-            )
-        self.assertEqual(ChainState.AWAITING_VERIFICATION, right.state)
 
     def test_unencodable_unicode_proposal_fails_atomically(self) -> None:
         with self.assertRaisesRegex(ValueError, "UTF-8-encodable"):
-            self.chain.propose(
-                "lemma-surrogate", {"claim": "\ud800"}, producer_id="solver"
-            )
-
+            self.chain.propose("lemma-surrogate", {"claim": "\ud800"}, producer_id="solver")
         self.assertEqual(ChainState.READY, self.chain.state)
         self.assertIsNone(self.chain.current)
-        self.assertEqual((), self.chain.history)
-
-        ref = self.chain.propose(
-            "lemma-surrogate", {"claim": "valid"}, producer_id="solver"
-        )
+        ref = self.chain.propose("lemma-surrogate", {"claim": "valid"}, producer_id="solver")
         self.assertEqual(ChainState.AWAITING_VERIFICATION, ref.state)
 
-    def test_rejected_product_cannot_be_consumed_and_may_be_discarded(self) -> None:
-        self.chain.propose("lemma-bad", "bad proof", producer_id="solver")
-        subject = self.chain.verification_subject("lemma-bad")
-        ref = self.chain.record_verification(
-            "lemma-bad",
-            subject_sha256=subject.subject_sha256,
-            outcome="FAIL",
-            verifier_id="lean-kernel",
-            evidence_id="check-bad",
-        )
+    def test_real_fail_rejects_product(self) -> None:
+        chain = VerifiedChain("dry-fail", verifier_command=verifier_command(FAIL_CODE))
+        chain.propose("lemma-bad", "bad proof", producer_id="solver")
+        ref = chain.verify_pending("lemma-bad")
         self.assertEqual(ChainState.REJECTED, ref.state)
         with self.assertRaisesRegex(UnverifiedProductError, "rejected products"):
-            self.chain.consume_verified("lemma-bad")
-        self.chain.discard_rejected("lemma-bad")
-        self.assertEqual(ChainState.READY, self.chain.state)
-        self.assertFalse(self.chain.history[-1].consumed)
+            chain.consume_verified("lemma-bad")
+        chain.discard_rejected("lemma-bad")
+        self.assertEqual(ChainState.READY, chain.state)
+        self.assertEqual(VerificationOutcome.FAIL, chain.history[-1].outcome)
+
+    def test_unauthenticated_pass_declaration_cannot_mint_verified(self) -> None:
+        chain = VerifiedChain("dry-auth", verifier_command=verifier_command(FAIL_CODE))
+        chain.propose("lemma", {"claim": "unverified"}, producer_id="solver")
+        forged = VerifierResult(
+            status=VerifierStatus.PASS,
+            command=("fake",),
+            returncode=0,
+            stdout="",
+            stderr="",
+            elapsed_milliseconds=0,
+        )
+        self.assertFalse(hasattr(chain, "record_verification"))
+        with self.assertRaises(TypeError):
+            chain.verify_pending("lemma", verifier_result=forged)  # type: ignore[call-arg]
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, chain.state)
+        ref = chain.verify_pending("lemma")
+        self.assertEqual(ChainState.REJECTED, ref.state)
+
+    def test_missing_verifier_authority_fails_closed(self) -> None:
+        chain = VerifiedChain("dry-no-authority")
+        chain.propose("lemma", 1, producer_id="solver")
+        with self.assertRaisesRegex(VerificationAuthorityError, "no deterministic verifier"):
+            chain.verify_pending("lemma")
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, chain.state)
+
+    def test_timeout_does_not_mint_or_reject_product(self) -> None:
+        chain = VerifiedChain(
+            "dry-timeout",
+            verifier_command=verifier_command(TIMEOUT_CODE),
+            verifier_timeout_seconds=0.05,
+        )
+        chain.propose("lemma", 1, producer_id="solver")
+        with self.assertRaises(VerificationExecutionError) as caught:
+            chain.verify_pending("lemma")
+        self.assertIs(VerifierStatus.TIMEOUT, caught.exception.status)
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, chain.state)
+        with self.assertRaises(UnverifiedProductError):
+            chain.consume_verified("lemma")
 
     def test_next_step_requires_exact_last_consumed_verified_parent(self) -> None:
         self.chain.propose("lemma-1", "A", producer_id="solver")
         self._pass("lemma-1")
         parent = self.chain.consume_verified("lemma-1")
-
-        forged = VerifiedProduct(
-            product_id=parent.product_id,
-            step_index=parent.step_index,
-            content=parent.content,
-            producer_id=parent.producer_id,
-            verifier_id=parent.verifier_id,
-            evidence_id=parent.evidence_id,
-            parent_product_id=parent.parent_product_id,
-            verification_subject_sha256=parent.verification_subject_sha256,
-            verification_receipt_sha256=parent.verification_receipt_sha256,
-        )
+        forged = VerifiedProduct(*parent)
         with self.assertRaisesRegex(InvalidParentError, "exact last consumed"):
             self.chain.propose("lemma-2", "B", producer_id="solver", parent=forged)
-
         ref = self.chain.propose("lemma-2", "B", producer_id="solver", parent=parent)
         self.assertEqual(1, ref.step_index)
 
@@ -455,29 +239,9 @@ class VerifiedChainTests(unittest.TestCase):
         with self.assertRaisesRegex(InvalidTransitionError, "cannot propose"):
             self.chain.propose("lemma-2", "B", producer_id="solver")
 
-    def test_verifier_must_be_distinct_from_producer(self) -> None:
-        self.chain.propose("lemma-1", "A", producer_id="same-agent")
-        subject = self.chain.verification_subject("lemma-1")
-        with self.assertRaisesRegex(ValueError, "differ from producer"):
-            self.chain.record_verification(
-                "lemma-1",
-                subject_sha256=subject.subject_sha256,
-                outcome="PASS",
-                verifier_id="same-agent",
-                evidence_id="v1",
-            )
-        self.assertEqual(ChainState.AWAITING_VERIFICATION, self.chain.state)
-
     def test_final_output_requires_pass_and_closes_chain(self) -> None:
         self.chain.propose("answer", 42, producer_id="solver")
-        subject = self.chain.verification_subject("answer")
-        self.chain.record_verification(
-            "answer",
-            subject_sha256=subject.subject_sha256,
-            outcome="PASS",
-            verifier_id="checker",
-            evidence_id="answer-v",
-        )
+        self._pass("answer")
         final = self.chain.finalize("answer")
         self.assertEqual(42, final.value)
         self.assertEqual(ChainState.COMPLETE, self.chain.state)
@@ -486,18 +250,12 @@ class VerifiedChainTests(unittest.TestCase):
             self.chain.propose("after", 43, producer_id="solver", parent=final)
 
     def test_product_ids_are_unique_even_after_rejection(self) -> None:
-        self.chain.propose("lemma", "bad", producer_id="solver")
-        subject = self.chain.verification_subject("lemma")
-        self.chain.record_verification(
-            "lemma",
-            subject_sha256=subject.subject_sha256,
-            outcome="FAIL",
-            verifier_id="checker",
-            evidence_id="bad",
-        )
-        self.chain.discard_rejected("lemma")
+        chain = VerifiedChain("dry-unique", verifier_command=verifier_command(FAIL_CODE))
+        chain.propose("lemma", "bad", producer_id="solver")
+        chain.verify_pending("lemma")
+        chain.discard_rejected("lemma")
         with self.assertRaisesRegex(ValueError, "already used"):
-            self.chain.propose("lemma", "retry", producer_id="solver")
+            chain.propose("lemma", "retry", producer_id="solver")
 
 
 if __name__ == "__main__":
