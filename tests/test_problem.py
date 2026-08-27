@@ -92,7 +92,7 @@ class SplitContractTests(unittest.TestCase):
             SplitContract("bench", "v1", "test", (wrong_split,))
 
     def test_contract_rejects_a_scalar_membership_string(self) -> None:
-        with self.assertRaisesRegex(TypeError, "iterable of problem-id strings"):
+        with self.assertRaisesRegex(TypeError, "sequence of problem-id strings"):
             SplitContract.from_native_ids(
                 benchmark="bench", version="v1", split="test", native_ids="p1"
             )
@@ -100,15 +100,32 @@ class SplitContractTests(unittest.TestCase):
     def test_contract_rejects_unordered_membership(self) -> None:
         for native_ids in ({"p1", "p2"}, frozenset({"p1", "p2"})):
             with self.subTest(container=type(native_ids).__name__):
-                with self.assertRaisesRegex(
-                    TypeError, "must preserve deterministic iteration order"
-                ):
+                with self.assertRaisesRegex(TypeError, "ordered sequence"):
                     SplitContract.from_native_ids(
                         benchmark="bench",
                         version="v1",
                         split="test",
-                        native_ids=native_ids,
+                        native_ids=native_ids,  # type: ignore[arg-type]
                     )
+
+    def test_contract_rejects_iterator_wrapped_unordered_membership(self) -> None:
+        unordered = {"p1", "p2"}
+        with self.assertRaisesRegex(TypeError, "ordered sequence"):
+            SplitContract.from_native_ids(
+                benchmark="bench",
+                version="v1",
+                split="test",
+                native_ids=iter(unordered),  # type: ignore[arg-type]
+            )
+
+        problems = {
+            BenchmarkProblemIdentity("bench", "v1", "test", "p1"),
+            BenchmarkProblemIdentity("bench", "v1", "test", "p2"),
+        }
+        with self.assertRaisesRegex(TypeError, "ordered sequence"):
+            SplitContract(
+                "bench", "v1", "test", iter(problems)  # type: ignore[arg-type]
+            )
 
     def test_direct_contract_rejects_unordered_membership(self) -> None:
         problems = {
@@ -117,9 +134,7 @@ class SplitContractTests(unittest.TestCase):
         }
         for unordered in (problems, frozenset(problems)):
             with self.subTest(container=type(unordered).__name__):
-                with self.assertRaisesRegex(
-                    TypeError, "must preserve deterministic iteration order"
-                ):
+                with self.assertRaisesRegex(TypeError, "ordered sequence"):
                     SplitContract("bench", "v1", "test", unordered)  # type: ignore[arg-type]
 
     def test_contract_requires_nonempty_membership_and_is_frozen(self) -> None:
