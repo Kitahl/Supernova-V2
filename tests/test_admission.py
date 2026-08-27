@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import hmac
 import json
 import sys
 import unittest
@@ -16,9 +17,13 @@ from supernova_goal1.admission import evaluate_product_admission
 
 ARTIFACT = "a" * 64
 DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v1"
+VERIFIER_KEYS = {
+    "verifier-kernel": b"unit-test-kernel-authority-key-v1",
+    "verifier-fidelity": b"unit-test-fidelity-authority-key-v1",
+}
 
 
-def evidence_digest(record: dict[str, object]) -> str:
+def canonical_evidence(record: dict[str, object]) -> bytes:
     payload = {
         "artifact_sha256": record["artifact_sha256"],
         "check_id": record["check_id"],
@@ -28,18 +33,26 @@ def evidence_digest(record: dict[str, object]) -> str:
         "schema": DIGEST_DOMAIN,
         "verifier_id": record["verifier_id"],
     }
-    canonical = json.dumps(
+    return json.dumps(
         payload,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
     ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
 
 
-def with_digest(record: dict[str, object]) -> dict[str, object]:
+def evidence_digest(record: dict[str, object]) -> str:
+    return hashlib.sha256(canonical_evidence(record)).hexdigest()
+
+
+def evidence_hmac(record: dict[str, object], key: bytes) -> str:
+    return hmac.new(key, canonical_evidence(record), hashlib.sha256).hexdigest()
+
+
+def with_auth(record: dict[str, object], key: bytes) -> dict[str, object]:
     record = copy.deepcopy(record)
     record["evidence_sha256"] = evidence_digest(record)
+    record["verifier_hmac_sha256"] = evidence_hmac(record, key)
     return record
 
 
@@ -57,9 +70,14 @@ class ProductAdmissionTests(unittest.TestCase):
                 "kernel": ["verifier-kernel"],
                 "statement_fidelity": ["verifier-fidelity"],
             },
+            "verifier_key_sha256": {
+                verifier_id: hashlib.sha256(key).hexdigest()
+                for verifier_id, key in VERIFIER_KEYS.items()
+            },
         }
+        self.auth_keys = dict(VERIFIER_KEYS)
         self.evidence = [
-            with_digest(
+            with_auth(
                 {
                     "evidence_id": "ev-kernel",
                     "check_id": "kernel",
@@ -67,9 +85,10 @@ class ProductAdmissionTests(unittest.TestCase):
                     "artifact_sha256": ARTIFACT,
                     "verifier_id": "verifier-kernel",
                     "outcome": "PASS",
-                }
+                },
+                VERIFIER_KEYS["verifier-kernel"],
             ),
-            with_digest(
+            with_auth(
                 {
                     "evidence_id": "ev-fidelity",
                     "check_id": "statement_fidelity",
@@ -77,57 +96,110 @@ class ProductAdmissionTests(unittest.TestCase):
                     "artifact_sha256": ARTIFACT,
                     "verifier_id": "verifier-fidelity",
                     "outcome": "PASS",
-                }
+                },
+                VERIFIER_KEYS["verifier-fidelity"],
             ),
         ]
 
+    def evaluate(
+        self,
+        product=None,
+        evidence=None,
+        policy=None,
+        *,
+        auth_keys=None,
+    ):
+        return evaluate_product_admission(
+            self.product if product is None else product,
+            self.evidence if evidence is None else evidence,
+            self.policy if policy is None else policy,
+            verifier_auth_keys=self.auth_keys if auth_keys is None else auth_keys,
+        )
+
     def test_complete_independent_pass_evidence_admits(self) -> None:
-        result = evaluate_product_admission(self.product, self.evidence, self.policy)
+        result = self.evaluate()
         self.assertEqual("ADMITTED", result["admission"])
         self.assertTrue(result["admitted"])
         self.assertEqual(["ev-fidelity", "ev-kernel"], result["evidence_ids"])
         self.assertEqual([], result["reasons"])
 
-    def test_producer_cannot_self_admit_even_if_policy_authorizes_identity(self) -> None:
+    def test_producer_cannot_self_admit_even_with_valid_verifier_key(self) -> None:
         product = copy.deepcopy(self.product)
         product["producer_id"] = "verifier-kernel"
-        result = evaluate_product_admission(product, self.evidence, self.policy)
+        result = self.evaluate(product=product)
         self.assertEqual("REJECTED", result["admission"])
         self.assertIn(
             "producer cannot verify its own product: kernel",
             result["reasons"],
         )
 
-    def test_fake_verifier_identity_rejects_even_with_matching_content_digest(self) -> None:
+    def test_fake_verifier_identity_rejects_even_with_matching_digest_and_hmac(self) -> None:
+        attacker_key = b"unit-test-attacker-key"
         evidence = copy.deepcopy(self.evidence)
         evidence[0]["verifier_id"] = "verifier-pretender"
         evidence[0]["evidence_sha256"] = evidence_digest(evidence[0])
-        result = evaluate_product_admission(self.product, evidence, self.policy)
+        evidence[0]["verifier_hmac_sha256"] = evidence_hmac(
+            evidence[0], attacker_key
+        )
+        result = self.evaluate(evidence=evidence)
         self.assertEqual("REJECTED", result["admission"])
         self.assertIn(
             "unauthorized verifier for check: kernel=verifier-pretender",
             result["reasons"],
         )
 
+    def test_authorized_name_impersonation_rejects_without_verifier_key(self) -> None:
+        attacker_key = b"unit-test-attacker-key"
+        evidence = copy.deepcopy(self.evidence)
+        evidence[0]["verifier_hmac_sha256"] = evidence_hmac(
+            evidence[0], attacker_key
+        )
+        result = self.evaluate(evidence=evidence)
+        self.assertEqual("REJECTED", result["admission"])
+        self.assertIn(
+            "verifier authentication failed: ev-kernel",
+            result["reasons"],
+        )
+
+    def test_runtime_key_substitution_rejects_against_policy_commitment(self) -> None:
+        attacker_key = b"unit-test-attacker-key"
+        evidence = copy.deepcopy(self.evidence)
+        evidence[0]["verifier_hmac_sha256"] = evidence_hmac(
+            evidence[0], attacker_key
+        )
+        keys = dict(self.auth_keys)
+        keys["verifier-kernel"] = attacker_key
+        result = self.evaluate(evidence=evidence, auth_keys=keys)
+        self.assertEqual("REJECTED", result["admission"])
+        self.assertIn(
+            "verifier key commitment mismatch: verifier-kernel",
+            result["reasons"],
+        )
+
+    def test_missing_runtime_verifier_key_rejects(self) -> None:
+        keys = {"verifier-fidelity": self.auth_keys["verifier-fidelity"]}
+        result = self.evaluate(auth_keys=keys)
+        self.assertEqual("REJECTED", result["admission"])
+        self.assertIn(
+            "missing verifier authentication key: verifier-kernel",
+            result["reasons"],
+        )
+
     def test_forged_digest_and_tampered_content_reject(self) -> None:
         forged_digest = copy.deepcopy(self.evidence)
         forged_digest[0]["evidence_sha256"] = "f" * 64
-        result = evaluate_product_admission(
-            self.product,
-            forged_digest,
-            self.policy,
-        )
+        result = self.evaluate(evidence=forged_digest)
         self.assertIn("evidence digest mismatch: ev-kernel", result["reasons"])
 
         tampered_content = copy.deepcopy(self.evidence)
         tampered_content[0]["evidence_id"] = "ev-kernel-tampered"
-        result = evaluate_product_admission(
-            self.product,
-            tampered_content,
-            self.policy,
-        )
+        result = self.evaluate(evidence=tampered_content)
         self.assertIn(
             "evidence digest mismatch: ev-kernel-tampered",
+            result["reasons"],
+        )
+        self.assertIn(
+            "verifier authentication failed: ev-kernel-tampered",
             result["reasons"],
         )
 
@@ -137,7 +209,10 @@ class ProductAdmissionTests(unittest.TestCase):
                 evidence = copy.deepcopy(self.evidence)
                 evidence[0]["outcome"] = outcome
                 evidence[0]["evidence_sha256"] = evidence_digest(evidence[0])
-                result = evaluate_product_admission(self.product, evidence, self.policy)
+                evidence[0]["verifier_hmac_sha256"] = evidence_hmac(
+                    evidence[0], self.auth_keys["verifier-kernel"]
+                )
+                result = self.evaluate(evidence=evidence)
                 self.assertFalse(result["admitted"])
                 self.assertIn(f"check did not PASS: kernel={outcome}", result["reasons"])
 
@@ -145,28 +220,37 @@ class ProductAdmissionTests(unittest.TestCase):
         wrong_product = copy.deepcopy(self.evidence)
         wrong_product[0]["product_id"] = "another-product"
         wrong_product[0]["evidence_sha256"] = evidence_digest(wrong_product[0])
-        result = evaluate_product_admission(self.product, wrong_product, self.policy)
+        wrong_product[0]["verifier_hmac_sha256"] = evidence_hmac(
+            wrong_product[0], self.auth_keys["verifier-kernel"]
+        )
+        result = self.evaluate(evidence=wrong_product)
         self.assertIn("product_id mismatch for check: kernel", result["reasons"])
 
         wrong_digest = copy.deepcopy(self.evidence)
         wrong_digest[0]["artifact_sha256"] = "d" * 64
         wrong_digest[0]["evidence_sha256"] = evidence_digest(wrong_digest[0])
-        result = evaluate_product_admission(self.product, wrong_digest, self.policy)
+        wrong_digest[0]["verifier_hmac_sha256"] = evidence_hmac(
+            wrong_digest[0], self.auth_keys["verifier-kernel"]
+        )
+        result = self.evaluate(evidence=wrong_digest)
         self.assertIn("artifact digest mismatch for check: kernel", result["reasons"])
 
     def test_missing_duplicate_and_unexpected_checks_reject(self) -> None:
-        result = evaluate_product_admission(self.product, self.evidence[:1], self.policy)
+        result = self.evaluate(evidence=self.evidence[:1])
         self.assertIn("missing required check: statement_fidelity", result["reasons"])
 
         duplicate = [*copy.deepcopy(self.evidence), copy.deepcopy(self.evidence[0])]
         duplicate[-1]["evidence_id"] = "ev-kernel-2"
         duplicate[-1]["evidence_sha256"] = evidence_digest(duplicate[-1])
-        result = evaluate_product_admission(self.product, duplicate, self.policy)
+        duplicate[-1]["verifier_hmac_sha256"] = evidence_hmac(
+            duplicate[-1], self.auth_keys["verifier-kernel"]
+        )
+        result = self.evaluate(evidence=duplicate)
         self.assertIn("duplicate required check: kernel", result["reasons"])
 
         unexpected = copy.deepcopy(self.evidence)
         unexpected.append(
-            with_digest(
+            with_auth(
                 {
                     "evidence_id": "ev-scientific-score",
                     "check_id": "scientific_score",
@@ -174,24 +258,26 @@ class ProductAdmissionTests(unittest.TestCase):
                     "artifact_sha256": ARTIFACT,
                     "verifier_id": "scientific-evaluator",
                     "outcome": "PASS",
-                }
+                },
+                b"unit-test-scientific-key",
             )
         )
-        result = evaluate_product_admission(self.product, unexpected, self.policy)
+        result = self.evaluate(evidence=unexpected)
         self.assertIn("unexpected check: scientific_score", result["reasons"])
 
     def test_duplicate_evidence_ids_reject(self) -> None:
         evidence = copy.deepcopy(self.evidence)
         evidence[1]["evidence_id"] = evidence[0]["evidence_id"]
         evidence[1]["evidence_sha256"] = evidence_digest(evidence[1])
-        result = evaluate_product_admission(self.product, evidence, self.policy)
+        evidence[1]["verifier_hmac_sha256"] = evidence_hmac(
+            evidence[1], self.auth_keys["verifier-fidelity"]
+        )
+        result = self.evaluate(evidence=evidence)
         self.assertIn("duplicate evidence_id", result["reasons"])
 
     def test_input_order_does_not_change_decision(self) -> None:
-        forward = evaluate_product_admission(self.product, self.evidence, self.policy)
-        reverse = evaluate_product_admission(
-            self.product, reversed(self.evidence), self.policy
-        )
+        forward = self.evaluate()
+        reverse = self.evaluate(evidence=reversed(self.evidence))
         self.assertEqual(forward, reverse)
 
     def test_scientific_scoring_fields_are_not_admission_inputs(self) -> None:
@@ -211,18 +297,23 @@ class ProductAdmissionTests(unittest.TestCase):
                 else:
                     evidence[0][field] = 1.0
                 with self.assertRaisesRegex(ValueError, "fields must be exactly"):
-                    evaluate_product_admission(product, evidence, policy)
+                    self.evaluate(product=product, evidence=evidence, policy=policy)
 
-    def test_digest_format_is_strict_and_lowercase(self) -> None:
+    def test_digest_and_authentication_formats_are_strict_lowercase_sha256(self) -> None:
         product = copy.deepcopy(self.product)
         product["artifact_sha256"] = "A" * 64
         with self.assertRaisesRegex(ValueError, "lowercase hex"):
-            evaluate_product_admission(product, self.evidence, self.policy)
+            self.evaluate(product=product)
 
         evidence = copy.deepcopy(self.evidence)
         evidence[0]["evidence_sha256"] = "not-a-digest"
         with self.assertRaisesRegex(ValueError, "64-character SHA-256"):
-            evaluate_product_admission(self.product, evidence, self.policy)
+            self.evaluate(evidence=evidence)
+
+        evidence = copy.deepcopy(self.evidence)
+        evidence[0]["verifier_hmac_sha256"] = "NOT-A-MAC"
+        with self.assertRaisesRegex(ValueError, "64-character SHA-256"):
+            self.evaluate(evidence=evidence)
 
     def test_policy_requires_closed_verifier_authority_for_every_check(self) -> None:
         missing = copy.deepcopy(self.policy)
@@ -231,7 +322,7 @@ class ProductAdmissionTests(unittest.TestCase):
             ValueError,
             "authorized_verifiers keys must exactly match required_checks",
         ):
-            evaluate_product_admission(self.product, self.evidence, missing)
+            self.evaluate(policy=missing)
 
         duplicate = copy.deepcopy(self.policy)
         duplicate["authorized_verifiers"]["kernel"] = [
@@ -239,7 +330,15 @@ class ProductAdmissionTests(unittest.TestCase):
             "verifier-kernel",
         ]
         with self.assertRaisesRegex(ValueError, "must be unique"):
-            evaluate_product_admission(self.product, self.evidence, duplicate)
+            self.evaluate(policy=duplicate)
+
+        missing_commitment = copy.deepcopy(self.policy)
+        del missing_commitment["verifier_key_sha256"]["verifier-kernel"]
+        with self.assertRaisesRegex(
+            ValueError,
+            "verifier_key_sha256 keys must exactly match authorized verifier identities",
+        ):
+            self.evaluate(policy=missing_commitment)
 
 
 if __name__ == "__main__":
