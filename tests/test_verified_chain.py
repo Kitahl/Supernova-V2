@@ -120,6 +120,23 @@ class VerifiedChainTests(unittest.TestCase):
         self.assertEqual({"answer": 42}, verified.value)
         self.assertEqual(subject.content_sha256, verified.content_sha256)
 
+    def test_history_records_resist_low_level_field_reassignment(self) -> None:
+        self.chain.propose("lemma-1", {"answer": 42}, producer_id="solver")
+        self._pass("lemma-1", verifier_id="checker", evidence_id="history-v1")
+        self.chain.consume_verified("lemma-1")
+        record = self.chain.history[-1]
+
+        with self.assertRaises(AttributeError):
+            object.__setattr__(record, "outcome", VerificationOutcome.FAIL)
+        with self.assertRaises(AttributeError):
+            object.__setattr__(record, "consumed", False)
+        with self.assertRaises(AttributeError):
+            object.__setattr__(record, "evidence_id", "forged")
+
+        self.assertEqual(VerificationOutcome.PASS, record.outcome)
+        self.assertTrue(record.consumed)
+        self.assertEqual("history-v1", record.evidence_id)
+
     def test_verification_result_must_bind_exact_chain_subject(self) -> None:
         source = {"answer": 42}
         ref = self.chain.propose("lemma-1", source, producer_id="solver")
