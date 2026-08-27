@@ -100,9 +100,8 @@ class BenchmarkImporterTests(unittest.TestCase):
             self._tree(source)
 
             with mock.patch.object(
-                Path,
-                "is_junction",
-                autospec=True,
+                MODULE,
+                "_PATH_IS_JUNCTION",
                 side_effect=lambda path: path == source,
             ):
                 with self.assertRaisesRegex(ValueError, "source must not be a junction"):
@@ -110,13 +109,36 @@ class BenchmarkImporterTests(unittest.TestCase):
 
             nested = source / "zeta"
             with mock.patch.object(
-                Path,
-                "is_junction",
-                autospec=True,
+                MODULE,
+                "_PATH_IS_JUNCTION",
                 side_effect=lambda path: path == nested,
             ):
                 with self.assertRaisesRegex(ValueError, "junction directory: zeta"):
                     MODULE.build_lock(source, name="bench", version="v1", split="test")
+
+    def test_python_311_windows_junction_fallback_uses_reparse_metadata(self) -> None:
+        class JunctionStat:
+            st_file_attributes = MODULE._WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT
+            st_reparse_tag = MODULE._WINDOWS_IO_REPARSE_TAG_MOUNT_POINT
+
+        candidate = Path("junction")
+        with (
+            mock.patch.object(MODULE, "_PATH_IS_JUNCTION", None),
+            mock.patch.object(MODULE.os, "name", "nt"),
+            mock.patch.object(Path, "lstat", return_value=JunctionStat()),
+        ):
+            self.assertTrue(MODULE._is_junction(candidate))
+
+        class OrdinaryStat:
+            st_file_attributes = 0
+            st_reparse_tag = 0
+
+        with (
+            mock.patch.object(MODULE, "_PATH_IS_JUNCTION", None),
+            mock.patch.object(MODULE.os, "name", "nt"),
+            mock.patch.object(Path, "lstat", return_value=OrdinaryStat()),
+        ):
+            self.assertFalse(MODULE._is_junction(candidate))
 
     def test_walk_errors_fail_closed_instead_of_producing_partial_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
