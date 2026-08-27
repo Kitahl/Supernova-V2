@@ -89,6 +89,14 @@ therefore produces typed unknown telemetry and cannot close a report. An explici
 must be supplied to assert an observed zero. Fields that are irrelevant to an event kind
 may remain `None`; a nonzero cross-category value is rejected.
 
+Every present numeric measurement must also be an **exact built-in `int`**, not merely an
+object for which `isinstance(value, int)` is true. Python permits subclasses of `int` to
+override rich-comparison behavior; trusting `value < 0` on such an object would let the
+object participate in its own validation. The module therefore rejects `bool`, `IntEnum`,
+and custom `int` subclasses at event and externally supplied `CompleteCost` boundaries,
+then snapshots only already-validated built-in integers. This is part of the same
+non-polymorphic accounting boundary as the record snapshots above.
+
 `0` is reserved for an actually observed zero. A caller must not convert unavailable
 provider usage or missing timing telemetry to zero. This matters especially for failed
 or retried work: the issued attempt must remain in the expected-event manifest, and if
@@ -126,15 +134,16 @@ corresponding ceilings.
 
 Budget checks and componentwise cost comparisons do not trust a caller-supplied
 `CompleteCost` object merely because its fields are type-annotated. Before use, the cost
-module requires an exact concrete `CompleteCost`, revalidates every dimension as a
-non-negative integer (rejecting booleans), and snapshots the five values once. The same
-snapshotted ceiling is then used for every arm in a report. This closes two runtime API
-aliases that would otherwise violate the common-budget invariant: Python does not enforce
-type annotations at runtime, so a directly constructed or post-construction-mutated
-`CompleteCost` could contain negative, boolean, or non-integer dimensions; and a subclass
-could override `as_tuple()` so the apparent ceiling or comparison vector differs from its
-stored fields or even changes between calls. The validated snapshot boundary prevents
-those objects from participating in budget or Pareto decisions.
+module requires an exact concrete `CompleteCost`, revalidates every dimension as an exact
+built-in non-negative integer (rejecting booleans and integer subclasses), and snapshots
+the five values once. The same snapshotted ceiling is then used for every arm in a report.
+This closes runtime API aliases that would otherwise violate the common-budget invariant:
+Python does not enforce type annotations at runtime, so a directly constructed or
+post-construction-mutated `CompleteCost` could contain negative, boolean, subclassed, or
+non-integer dimensions; and a `CompleteCost` subclass could override `as_tuple()` so the
+apparent ceiling or comparison vector differs from its stored fields or even changes
+between calls. The validated snapshot boundary prevents those objects from participating
+in budget or Pareto decisions.
 
 The implementation deliberately defines **no scalar weighted total**. There is no
 scientific basis in this repository for deciding, for example, that one verifier
