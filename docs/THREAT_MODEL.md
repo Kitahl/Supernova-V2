@@ -395,6 +395,33 @@ accounted. Any unregistered egress, dropped telemetry, post-hoc manifest mutatio
 dispatch must block scientific accounting. If that provenance boundary cannot be built, describe
 the result as telemetry-consistent accounting rather than a complete-cost certificate.
 
+### T26 — Shared serving quotas and queues can create cross-arm interference (`CRITICAL` for hosted/concurrent runs)
+
+**EVIDENCE — repository.** Proposed G1-009 / PR #6 separates blinded evaluation order from execution
+order, but neither `goal1/GOAL1.json` nor the current arm contracts freeze an execution-concurrency
+or provider-quota-isolation policy. Proposed G1-007 / PR #2 also lists concurrency semantics among
+the still-unfrozen accounting prerequisites. **EVIDENCE — external.** OpenAI documents that API rate
+limits are defined at organization/project scope, that some model families share rate-limit pools,
+and that unsuccessful requests still consume rate-limit capacity:
+<https://platform.openai.com/docs/guides/rate-limits>. Anthropic documents organization-level limits,
+short-burst enforcement, model-class RPM/ITPM/OTPM limits, and cache-aware token accounting:
+<https://docs.anthropic.com/en/api/rate-limits>.
+
+**INFERENCE.** Paired cells are not isolated if they share a hosted serving quota, queue, cache, or
+retry budget. A request-heavy verified chain can consume RPM/TPM headroom or trigger backoff that
+changes the latency, failure probability, or available retry budget of a control executed nearby;
+conversely an arm can benefit from warm cache state produced by another arm. This can occur without
+semantic state leakage and is therefore distinct from T7. Blinding evaluation order does not repair
+execution-time interference.
+
+**Required falsifier/mitigation.** Prospectively freeze execution order/concurrency and the serving
+isolation boundary. Prefer separate provider projects/keys or isolated self-hosted serving pools per
+paired cell when practical; otherwise serialize/counterbalance cells with a frozen cooldown/reset
+policy and record rate-limit headers, 429/overload responses, automatic retries, cache-hit/write
+telemetry, queue/batch identity, and trusted request time. Treat provider throttling/overload as an
+infrastructure event under a symmetric preregistered rerun/censoring rule rather than selectively
+rerunning losing cells, and charge all retries/wait time that lies inside the declared cost boundary.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -417,7 +444,8 @@ The confirmatory run should not start until all of the following are frozen and 
 16. an explicit estimand for verifier-conditioned reject/retry: either matched as a nuisance variable or declared part of the treatment;
 17. an independent benchmark sampling unit plus cluster/family-aware inference when multiple items share a latent source/template;
 18. request-shape-aware model-compute accounting, or an explicit statement that the frozen cost construct is a token/call proxy rather than complete compute;
-19. a trusted pre-execution dispatch ledger reconciled to all cost events/provider-runtime request evidence, with dropped or unregistered telemetry blocking closure.
+19. a trusted pre-execution dispatch ledger reconciled to all cost events/provider-runtime request evidence, with dropped or unregistered telemetry blocking closure;
+20. an execution-isolation plan for shared provider quotas, caches, queues, backoff/retry state, and concurrent serving interference.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
