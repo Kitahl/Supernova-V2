@@ -659,3 +659,37 @@ reuse the same verifier identity.
 **Addendum to minimum design conditions.** 26. a hermetic, content-addressed verifier runtime binding
 covering executable/toolchain bytes, cwd, allowlisted environment, proof-library/import state, and
 runtime/container identity, with drift rejected during replay.
+
+### T33 — Elapsed verifier/orchestration milliseconds are not resource-normalized compute (`HIGH`; `CRITICAL` if complete cost means compute parity)
+
+**EVIDENCE — repository.** `CompleteCost` represents non-model work only as
+`verifier_milliseconds` and `orchestration_milliseconds`. `CostEvent` accepts one elapsed
+`milliseconds` value for verifier/orchestration events; it carries no CPU/core time, accelerator
+usage, memory, energy, thread/quota allocation, or resource-container identity. The merged
+`docs/COST_MODEL.md` already requires the measurement environment, host class, timing method, and
+concurrency semantics to be frozen before scientific use, and explicitly keeps the cost model
+unfrozen until those assumptions are justified. **EVIDENCE — external.** Python's official `time`
+documentation distinguishes elapsed/performance time from CPU time: `perf_counter()` includes time
+elapsed during sleep, while `process_time()` measures system plus user CPU time and excludes sleep:
+<https://docs.python.org/3/library/time.html>. Linux cgroup v2 exposes `cpu.stat` usage (`usage_usec`,
+`user_usec`, `system_usec`) and throttling separately (`nr_throttled`, `throttled_usec`):
+<https://kernel.org/doc/html/next/admin-guide/cgroup-v2.html>.
+
+**INFERENCE.** Equal elapsed milliseconds do not establish equal non-model compute. One arm can use
+more CPU cores/threads or accelerator parallelism over the same elapsed interval; conversely,
+queueing, sleeping, or cgroup throttling can increase elapsed time without proportionally increasing
+executed compute. Summing overlapping per-operation elapsed durations closes a makespan discount but
+does not normalize resource intensity. This is distinct from T24, which concerns model-token and
+request-shape proxies for LLM inference compute; T33 concerns verifier/orchestration resources.
+
+**Required falsifier/mitigation.** Prospectively freeze per-cell CPU quota/core count, thread policy,
+accelerator allocation, host/container/cgroup identity, and relevant runtime settings. Preserve
+elapsed latency separately, but also record resource-normalized usage where material—for example
+cgroup/process CPU time and accelerator time/energy or another auditable hardware measure—and bind
+that provenance to the cost record. Fail closed or stratify on allocation drift. If only elapsed
+milliseconds are available, narrow the claim to an elapsed-time/token cost proxy and do not describe
+it as complete compute parity.
+
+**Addendum to minimum design conditions.** 27. resource-normalized verifier/orchestration accounting,
+or an explicit elapsed-time proxy limitation, with CPU/accelerator allocation and measured usage
+bound into the scientific cost record.
