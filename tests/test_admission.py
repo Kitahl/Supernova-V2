@@ -17,7 +17,7 @@ from supernova_goal1.admission import evaluate_product_admission
 
 ARTIFACT = "a" * 64
 PRODUCT_DOMAIN = "supernova_goal1.product_candidate.v1"
-EVIDENCE_DOMAIN = "supernova_goal1.admission_evidence.v2"
+EVIDENCE_DOMAIN = "supernova_goal1.admission_evidence.v3"
 POLICY_DOMAIN = "supernova_goal1.admission_policy.v2"
 
 PRODUCER_AUTHORITY = "authority-producer"
@@ -66,6 +66,7 @@ def canonical_evidence(record: dict[str, object]) -> bytes:
             "check_id": record["check_id"],
             "evidence_id": record["evidence_id"],
             "outcome": record["outcome"],
+            "policy_sha256": record["policy_sha256"],
             "product_id": record["product_id"],
             "schema": EVIDENCE_DOMAIN,
             "verifier_id": record["verifier_id"],
@@ -139,9 +140,7 @@ class ProductAdmissionTests(unittest.TestCase):
                 "kernel": ["verifier-kernel"],
                 "statement_fidelity": ["verifier-fidelity"],
             },
-            "producer_authorities": {
-                "producer-A": PRODUCER_AUTHORITY,
-            },
+            "producer_authorities": {"producer-A": PRODUCER_AUTHORITY},
             "verifier_authorities": {
                 "verifier-kernel": KERNEL_AUTHORITY,
                 "verifier-fidelity": FIDELITY_AUTHORITY,
@@ -161,6 +160,7 @@ class ProductAdmissionTests(unittest.TestCase):
                     "artifact_sha256": ARTIFACT,
                     "verifier_id": "verifier-kernel",
                     "outcome": "PASS",
+                    "policy_sha256": self.trusted_policy_sha256,
                 },
                 AUTH_KEYS[KERNEL_AUTHORITY],
             ),
@@ -172,6 +172,7 @@ class ProductAdmissionTests(unittest.TestCase):
                     "artifact_sha256": ARTIFACT,
                     "verifier_id": "verifier-fidelity",
                     "outcome": "PASS",
+                    "policy_sha256": self.trusted_policy_sha256,
                 },
                 AUTH_KEYS[FIDELITY_AUTHORITY],
             ),
@@ -203,6 +204,7 @@ class ProductAdmissionTests(unittest.TestCase):
         self.assertEqual("ADMITTED", result["admission"])
         self.assertTrue(result["admitted"])
         self.assertEqual(["ev-fidelity", "ev-kernel"], result["evidence_ids"])
+        self.assertEqual(self.trusted_policy_sha256, result["policy_sha256"])
         self.assertEqual([], result["reasons"])
         self.assertNotIn("score", result)
 
@@ -216,12 +218,42 @@ class ProductAdmissionTests(unittest.TestCase):
         evidence = copy.deepcopy(self.evidence)
         evidence[0]["evidence_id"] = "ev-kernel-tampered"
         result = self.evaluate(evidence=evidence)
-        self.assertIn(
-            "evidence digest mismatch: ev-kernel-tampered", result["reasons"]
-        )
+        self.assertIn("evidence digest mismatch: ev-kernel-tampered", result["reasons"])
         self.assertIn(
             "authority authentication failed: evidence=ev-kernel-tampered",
             result["reasons"],
+        )
+
+    def test_evidence_is_bound_to_exact_trusted_policy_digest(self) -> None:
+        new_key = b"unit-test-kernel-secondary-key-v2"
+        new_authority = "authority-kernel-secondary"
+        new_policy = copy.deepcopy(self.policy)
+        new_policy["authorized_verifiers"]["kernel"].append("verifier-kernel-secondary")
+        new_policy["verifier_authorities"]["verifier-kernel-secondary"] = new_authority
+        new_policy["authority_key_sha256"][new_authority] = hashlib.sha256(new_key).hexdigest()
+        new_policy_sha256 = policy_digest(new_policy)
+        keys = dict(self.auth_keys)
+        keys[new_authority] = new_key
+
+        # Old evidence is still content-valid and signed by an authority that remains
+        # authorized, but it attests to the old policy and must not be replayable.
+        result = self.evaluate(
+            policy=new_policy,
+            auth_keys=keys,
+            trusted_policy_sha256=new_policy_sha256,
+        )
+        self.assertIn("evidence policy digest mismatch: ev-kernel", result["reasons"])
+        self.assertIn("evidence policy digest mismatch: ev-fidelity", result["reasons"])
+        self.assertEqual("REJECTED", result["admission"])
+
+    def test_policy_digest_field_is_covered_by_digest_and_verifier_auth(self) -> None:
+        evidence = copy.deepcopy(self.evidence)
+        evidence[0]["policy_sha256"] = "b" * 64
+        result = self.evaluate(evidence=evidence)
+        self.assertIn("evidence digest mismatch: ev-kernel", result["reasons"])
+        self.assertIn("evidence policy digest mismatch: ev-kernel", result["reasons"])
+        self.assertIn(
+            "authority authentication failed: evidence=ev-kernel", result["reasons"]
         )
 
     def test_fake_verifier_identity_rejects_even_with_attacker_digest_and_hmac(self) -> None:
@@ -235,6 +267,7 @@ class ProductAdmissionTests(unittest.TestCase):
                 "artifact_sha256": ARTIFACT,
                 "verifier_id": "verifier-pretender",
                 "outcome": "PASS",
+                "policy_sha256": self.trusted_policy_sha256,
             },
             attacker_key,
         )
@@ -250,8 +283,7 @@ class ProductAdmissionTests(unittest.TestCase):
         evidence[0] = sign_evidence(evidence[0], attacker_key)
         result = self.evaluate(evidence=evidence)
         self.assertIn(
-            "authority authentication failed: evidence=ev-kernel",
-            result["reasons"],
+            "authority authentication failed: evidence=ev-kernel", result["reasons"]
         )
 
     def test_runtime_key_substitution_rejects_against_policy_commitment(self) -> None:
@@ -262,8 +294,7 @@ class ProductAdmissionTests(unittest.TestCase):
         keys[KERNEL_AUTHORITY] = attacker_key
         result = self.evaluate(evidence=evidence, auth_keys=keys)
         self.assertIn(
-            f"authority key commitment mismatch: {KERNEL_AUTHORITY}",
-            result["reasons"],
+            f"authority key commitment mismatch: {KERNEL_AUTHORITY}", result["reasons"]
         )
 
     def test_missing_runtime_authority_key_rejects(self) -> None:
@@ -271,8 +302,7 @@ class ProductAdmissionTests(unittest.TestCase):
         del keys[KERNEL_AUTHORITY]
         result = self.evaluate(auth_keys=keys)
         self.assertIn(
-            f"missing authority authentication key: {KERNEL_AUTHORITY}",
-            result["reasons"],
+            f"missing authority authentication key: {KERNEL_AUTHORITY}", result["reasons"]
         )
 
     def test_short_runtime_authority_key_rejects(self) -> None:
@@ -280,8 +310,7 @@ class ProductAdmissionTests(unittest.TestCase):
         keys[KERNEL_AUTHORITY] = b"k" * 16
         result = self.evaluate(auth_keys=keys)
         self.assertIn(
-            f"authority authentication key too short: {KERNEL_AUTHORITY}",
-            result["reasons"],
+            f"authority authentication key too short: {KERNEL_AUTHORITY}", result["reasons"]
         )
 
     def test_producer_provenance_is_authenticated(self) -> None:
@@ -302,17 +331,23 @@ class ProductAdmissionTests(unittest.TestCase):
             AUTH_KEYS[PRODUCER_AUTHORITY],
         )
         result = self.evaluate(product=product)
-        self.assertIn(
-            "unauthorized producer identity: producer-pretender", result["reasons"]
-        )
+        self.assertIn("unauthorized producer identity: producer-pretender", result["reasons"])
 
     def test_producer_authority_cannot_verify_its_own_product(self) -> None:
         policy = copy.deepcopy(self.policy)
         policy["verifier_authorities"]["verifier-kernel"] = PRODUCER_AUTHORITY
         del policy["authority_key_sha256"][KERNEL_AUTHORITY]
+        policy_sha256 = policy_digest(policy)
 
         evidence = copy.deepcopy(self.evidence)
-        evidence[0] = sign_evidence(evidence[0], AUTH_KEYS[PRODUCER_AUTHORITY])
+        for index, item in enumerate(evidence):
+            item["policy_sha256"] = policy_sha256
+            key = (
+                AUTH_KEYS[PRODUCER_AUTHORITY]
+                if item["check_id"] == "kernel"
+                else AUTH_KEYS[FIDELITY_AUTHORITY]
+            )
+            evidence[index] = sign_evidence(item, key)
         keys = dict(self.auth_keys)
         del keys[KERNEL_AUTHORITY]
 
@@ -320,11 +355,10 @@ class ProductAdmissionTests(unittest.TestCase):
             evidence=evidence,
             policy=policy,
             auth_keys=keys,
-            trusted_policy_sha256=policy_digest(policy),
+            trusted_policy_sha256=policy_sha256,
         )
         self.assertIn(
-            "producer authority cannot verify its own product: kernel",
-            result["reasons"],
+            "producer authority cannot verify its own product: kernel", result["reasons"]
         )
 
     def test_distinct_authority_names_cannot_share_same_hmac_secret(self) -> None:
@@ -335,10 +369,7 @@ class ProductAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError, "must not share authentication key commitments"
         ):
-            self.evaluate(
-                policy=policy,
-                trusted_policy_sha256=policy_digest(policy),
-            )
+            self.evaluate(policy=policy, trusted_policy_sha256=policy_digest(policy))
 
     def test_forged_policy_authority_rejects_against_trusted_policy_digest(self) -> None:
         attacker_key = b"unit-test-attacker-authority-key-v2"
@@ -351,6 +382,7 @@ class ProductAdmissionTests(unittest.TestCase):
         policy["authority_key_sha256"][attacker_authority] = hashlib.sha256(
             attacker_key
         ).hexdigest()
+        forged_policy_sha256 = policy_digest(policy)
 
         evidence = copy.deepcopy(self.evidence)
         evidence[0] = sign_evidence(
@@ -361,9 +393,14 @@ class ProductAdmissionTests(unittest.TestCase):
                 "artifact_sha256": ARTIFACT,
                 "verifier_id": "verifier-pretender",
                 "outcome": "PASS",
+                "policy_sha256": forged_policy_sha256,
             },
             attacker_key,
         )
+        # Make the other evidence internally consistent with the forged policy so the
+        # trusted root mismatch is the decisive reason in the first evaluation.
+        evidence[1]["policy_sha256"] = forged_policy_sha256
+        evidence[1] = sign_evidence(evidence[1], AUTH_KEYS[FIDELITY_AUTHORITY])
         keys = dict(self.auth_keys)
         del keys[KERNEL_AUTHORITY]
         keys[attacker_authority] = attacker_key
@@ -375,7 +412,7 @@ class ProductAdmissionTests(unittest.TestCase):
             evidence=evidence,
             policy=policy,
             auth_keys=keys,
-            trusted_policy_sha256=policy_digest(policy),
+            trusted_policy_sha256=forged_policy_sha256,
         )
         self.assertEqual("ADMITTED", result_with_forged_root["admission"])
 
@@ -403,28 +440,20 @@ class ProductAdmissionTests(unittest.TestCase):
             with self.subTest(outcome=outcome):
                 evidence = copy.deepcopy(self.evidence)
                 evidence[0]["outcome"] = outcome
-                evidence[0] = sign_evidence(
-                    evidence[0], AUTH_KEYS[KERNEL_AUTHORITY]
-                )
+                evidence[0] = sign_evidence(evidence[0], AUTH_KEYS[KERNEL_AUTHORITY])
                 result = self.evaluate(evidence=evidence)
-                self.assertIn(
-                    f"check did not PASS: kernel={outcome}", result["reasons"]
-                )
+                self.assertIn(f"check did not PASS: kernel={outcome}", result["reasons"])
 
     def test_subject_identity_and_artifact_digest_are_bound(self) -> None:
         wrong_product = copy.deepcopy(self.evidence)
         wrong_product[0]["product_id"] = "another-product"
-        wrong_product[0] = sign_evidence(
-            wrong_product[0], AUTH_KEYS[KERNEL_AUTHORITY]
-        )
+        wrong_product[0] = sign_evidence(wrong_product[0], AUTH_KEYS[KERNEL_AUTHORITY])
         result = self.evaluate(evidence=wrong_product)
         self.assertIn("product_id mismatch for check: kernel", result["reasons"])
 
         wrong_digest = copy.deepcopy(self.evidence)
         wrong_digest[0]["artifact_sha256"] = "d" * 64
-        wrong_digest[0] = sign_evidence(
-            wrong_digest[0], AUTH_KEYS[KERNEL_AUTHORITY]
-        )
+        wrong_digest[0] = sign_evidence(wrong_digest[0], AUTH_KEYS[KERNEL_AUTHORITY])
         result = self.evaluate(evidence=wrong_digest)
         self.assertIn("artifact digest mismatch for check: kernel", result["reasons"])
 
@@ -434,9 +463,7 @@ class ProductAdmissionTests(unittest.TestCase):
 
         duplicate = [*copy.deepcopy(self.evidence), copy.deepcopy(self.evidence[0])]
         duplicate[-1]["evidence_id"] = "ev-kernel-2"
-        duplicate[-1] = sign_evidence(
-            duplicate[-1], AUTH_KEYS[KERNEL_AUTHORITY]
-        )
+        duplicate[-1] = sign_evidence(duplicate[-1], AUTH_KEYS[KERNEL_AUTHORITY])
         result = self.evaluate(evidence=duplicate)
         self.assertIn("duplicate required check: kernel", result["reasons"])
 
@@ -450,6 +477,7 @@ class ProductAdmissionTests(unittest.TestCase):
                     "artifact_sha256": ARTIFACT,
                     "verifier_id": "verifier-fidelity",
                     "outcome": "PASS",
+                    "policy_sha256": self.trusted_policy_sha256,
                 },
                 AUTH_KEYS[FIDELITY_AUTHORITY],
             )
@@ -460,9 +488,7 @@ class ProductAdmissionTests(unittest.TestCase):
     def test_duplicate_evidence_ids_reject(self) -> None:
         evidence = copy.deepcopy(self.evidence)
         evidence[1]["evidence_id"] = evidence[0]["evidence_id"]
-        evidence[1] = sign_evidence(
-            evidence[1], AUTH_KEYS[FIDELITY_AUTHORITY]
-        )
+        evidence[1] = sign_evidence(evidence[1], AUTH_KEYS[FIDELITY_AUTHORITY])
         result = self.evaluate(evidence=evidence)
         self.assertIn("duplicate evidence_id", result["reasons"])
 
@@ -504,10 +530,7 @@ class ProductAdmissionTests(unittest.TestCase):
         policy = copy.deepcopy(self.policy)
         policy["authority_key_sha256"][KERNEL_AUTHORITY] = "F" * 64
         with self.assertRaisesRegex(ValueError, "lowercase hex"):
-            self.evaluate(
-                policy=policy,
-                trusted_policy_sha256=policy_digest(policy),
-            )
+            self.evaluate(policy=policy, trusted_policy_sha256=policy_digest(policy))
 
     def test_identifier_whitespace_is_rejected(self) -> None:
         evidence = copy.deepcopy(self.evidence)
@@ -521,10 +544,7 @@ class ProductAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError, "keys must exactly match authorized verifier identities"
         ):
-            self.evaluate(
-                policy=missing,
-                trusted_policy_sha256=policy_digest(missing),
-            )
+            self.evaluate(policy=missing, trusted_policy_sha256=policy_digest(missing))
 
         extra_commitment = copy.deepcopy(self.policy)
         extra_commitment["authority_key_sha256"]["authority-unused"] = "b" * 64
