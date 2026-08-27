@@ -30,9 +30,9 @@ class CostRelation(StrEnum):
 
 
 def _natural(value: int, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    if type(value) is not int or value < 0:
         raise ValueError(f"{field} must be a non-negative integer")
-    return value
+    return int(value)
 
 
 def _optional_natural(value: int | None, field: str) -> int | None:
