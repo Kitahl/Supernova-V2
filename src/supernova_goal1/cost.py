@@ -78,7 +78,7 @@ class ExpectedCostEvent:
     kind: CostEventKind
 
     def __post_init__(self) -> None:
-        if not isinstance(self.event_id, str) or not self.event_id.strip():
+        if type(self.event_id) is not str or not self.event_id.strip():
             raise ValueError("expected event_id must be a non-empty string")
         object.__setattr__(self, "kind", _normalize_event_kind(self.kind))
 
@@ -104,7 +104,7 @@ class CostEvent:
     milliseconds: int | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.event_id, str) or not self.event_id.strip():
+        if type(self.event_id) is not str or not self.event_id.strip():
             raise ValueError("event_id must be a non-empty string")
         object.__setattr__(self, "kind", _normalize_event_kind(self.kind))
         object.__setattr__(
