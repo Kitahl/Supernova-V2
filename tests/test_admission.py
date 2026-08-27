@@ -17,6 +17,7 @@ from supernova_goal1.admission import evaluate_product_admission
 
 ARTIFACT = "a" * 64
 DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v1"
+POLICY_DIGEST_DOMAIN = "supernova_goal1.admission_policy.v1"
 VERIFIER_KEYS = {
     "verifier-kernel": b"unit-test-kernel-authority-key-v1",
     "verifier-fidelity": b"unit-test-fidelity-authority-key-v1",
@@ -56,6 +57,36 @@ def with_auth(record: dict[str, object], key: bytes) -> dict[str, object]:
     return record
 
 
+def canonical_policy(policy: dict[str, object]) -> bytes:
+    authorized = policy["authorized_verifiers"]
+    commitments = policy["verifier_key_sha256"]
+    assert isinstance(authorized, dict)
+    assert isinstance(commitments, dict)
+    payload = {
+        "authorized_verifiers": {
+            check_id: sorted(authorized[check_id])
+            for check_id in sorted(authorized)
+        },
+        "policy_id": policy["policy_id"],
+        "required_checks": sorted(policy["required_checks"]),
+        "schema": POLICY_DIGEST_DOMAIN,
+        "verifier_key_sha256": {
+            verifier_id: commitments[verifier_id]
+            for verifier_id in sorted(commitments)
+        },
+    }
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def policy_digest(policy: dict[str, object]) -> str:
+    return hashlib.sha256(canonical_policy(policy)).hexdigest()
+
+
 class ProductAdmissionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.product = {
@@ -75,6 +106,7 @@ class ProductAdmissionTests(unittest.TestCase):
                 for verifier_id, key in VERIFIER_KEYS.items()
             },
         }
+        self.trusted_policy_sha256 = policy_digest(self.policy)
         self.auth_keys = dict(VERIFIER_KEYS)
         self.evidence = [
             with_auth(
@@ -108,11 +140,17 @@ class ProductAdmissionTests(unittest.TestCase):
         policy=None,
         *,
         auth_keys=None,
+        trusted_policy_sha256=None,
     ):
         return evaluate_product_admission(
             self.product if product is None else product,
             self.evidence if evidence is None else evidence,
             self.policy if policy is None else policy,
+            trusted_policy_sha256=(
+                self.trusted_policy_sha256
+                if trusted_policy_sha256 is None
+                else trusted_policy_sha256
+            ),
             verifier_auth_keys=self.auth_keys if auth_keys is None else auth_keys,
         )
 
@@ -184,6 +222,49 @@ class ProductAdmissionTests(unittest.TestCase):
             "missing verifier authentication key: verifier-kernel",
             result["reasons"],
         )
+
+    def test_forged_policy_authority_rejects_against_trusted_policy_digest(self) -> None:
+        attacker_key = b"unit-test-attacker-key"
+        policy = copy.deepcopy(self.policy)
+        policy["authorized_verifiers"]["kernel"] = ["verifier-pretender"]
+        del policy["verifier_key_sha256"]["verifier-kernel"]
+        policy["verifier_key_sha256"]["verifier-pretender"] = hashlib.sha256(
+            attacker_key
+        ).hexdigest()
+
+        evidence = copy.deepcopy(self.evidence)
+        evidence[0]["verifier_id"] = "verifier-pretender"
+        evidence[0]["evidence_sha256"] = evidence_digest(evidence[0])
+        evidence[0]["verifier_hmac_sha256"] = evidence_hmac(
+            evidence[0], attacker_key
+        )
+        keys = {
+            "verifier-pretender": attacker_key,
+            "verifier-fidelity": self.auth_keys["verifier-fidelity"],
+        }
+
+        result = self.evaluate(evidence=evidence, policy=policy, auth_keys=keys)
+        self.assertEqual("REJECTED", result["admission"])
+        self.assertIn("admission policy digest mismatch", result["reasons"])
+
+        result_with_forged_root = self.evaluate(
+            evidence=evidence,
+            policy=policy,
+            auth_keys=keys,
+            trusted_policy_sha256=policy_digest(policy),
+        )
+        self.assertEqual("ADMITTED", result_with_forged_root["admission"])
+        self.assertEqual([], result_with_forged_root["reasons"])
+
+    def test_policy_digest_is_semantic_order_invariant(self) -> None:
+        reordered = copy.deepcopy(self.policy)
+        reordered["required_checks"] = list(reversed(reordered["required_checks"]))
+        reordered["authorized_verifiers"] = {
+            "statement_fidelity": reordered["authorized_verifiers"]["statement_fidelity"],
+            "kernel": reordered["authorized_verifiers"]["kernel"],
+        }
+        self.assertEqual(self.trusted_policy_sha256, policy_digest(reordered))
+        self.assertEqual("ADMITTED", self.evaluate(policy=reordered)["admission"])
 
     def test_forged_digest_and_tampered_content_reject(self) -> None:
         forged_digest = copy.deepcopy(self.evidence)
@@ -314,6 +395,9 @@ class ProductAdmissionTests(unittest.TestCase):
         evidence[0]["verifier_hmac_sha256"] = "NOT-A-MAC"
         with self.assertRaisesRegex(ValueError, "64-character SHA-256"):
             self.evaluate(evidence=evidence)
+
+        with self.assertRaisesRegex(ValueError, "64-character SHA-256"):
+            self.evaluate(trusted_policy_sha256="not-a-policy-digest")
 
     def test_policy_requires_closed_verifier_authority_for_every_check(self) -> None:
         missing = copy.deepcopy(self.policy)
