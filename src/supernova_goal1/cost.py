@@ -41,6 +41,26 @@ def _optional_natural(value: int | None, field: str) -> int | None:
     return _natural(value, field)
 
 
+def _snapshot_complete_cost(value: CompleteCost, field: str) -> CompleteCost:
+    """Copy one trusted concrete cost vector and revalidate every runtime value."""
+
+    if type(value) is not CompleteCost:
+        raise ValueError(f"{field} must be an exact CompleteCost value")
+    return CompleteCost(
+        model_calls=_natural(value.model_calls, f"{field}.model_calls"),
+        input_tokens=_natural(value.input_tokens, f"{field}.input_tokens"),
+        output_tokens=_natural(value.output_tokens, f"{field}.output_tokens"),
+        verifier_milliseconds=_natural(
+            value.verifier_milliseconds,
+            f"{field}.verifier_milliseconds",
+        ),
+        orchestration_milliseconds=_natural(
+            value.orchestration_milliseconds,
+            f"{field}.orchestration_milliseconds",
+        ),
+    )
+
+
 def _normalize_event_kind(kind: CostEventKind | str) -> CostEventKind:
     if isinstance(kind, CostEventKind):
         return kind
@@ -424,6 +444,8 @@ class CompleteCostReport:
         return {trace.arm: trace.total for trace in self.traces}
 
     def budget_violations(self, ceiling: CompleteCost) -> dict[Arm, tuple[str, ...]]:
+        frozen_ceiling = _snapshot_complete_cost(ceiling, "ceiling")
+        allowed_tuple = frozen_ceiling.as_tuple()
         violations: dict[Arm, tuple[str, ...]] = {}
         for arm, actual in self.totals().items():
             exceeded = tuple(
@@ -431,7 +453,7 @@ class CompleteCostReport:
                 for dimension, used, allowed in zip(
                     COST_DIMENSIONS,
                     actual.as_tuple(),
-                    ceiling.as_tuple(),
+                    allowed_tuple,
                     strict=True,
                 )
                 if used > allowed
@@ -449,8 +471,8 @@ class CompleteCostReport:
 def compare_complete_cost(left: CompleteCost, right: CompleteCost) -> CostRelation:
     """Compare costs componentwise; intentionally does not invent scalar weights."""
 
-    left_tuple = left.as_tuple()
-    right_tuple = right.as_tuple()
+    left_tuple = _snapshot_complete_cost(left, "left").as_tuple()
+    right_tuple = _snapshot_complete_cost(right, "right").as_tuple()
     if left_tuple == right_tuple:
         return CostRelation.EQUAL
     left_no_more = all(a <= b for a, b in zip(left_tuple, right_tuple, strict=True))
