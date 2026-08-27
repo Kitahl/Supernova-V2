@@ -14,35 +14,42 @@ from supernova_goal1.cost import (
     CostEvent,
     CostEventKind,
     CostRelation,
+    ExpectedCostEvent,
     compare_complete_cost,
 )
 
 
 class CompleteCostAccountingTests(unittest.TestCase):
-    def _empty_report(self) -> CompleteCostReport:
-        return CompleteCostReport.from_traces(
-            ArmCostTrace.from_events(arm, (), accounting_complete=True) for arm in Arm
+    def _zero_trace(self, arm: Arm) -> ArmCostTrace:
+        event_id = f"{arm.value}-accounting"
+        return ArmCostTrace.from_events(
+            arm,
+            (CostEvent.orchestration(event_id, milliseconds=0),),
+            expected_events=(ExpectedCostEvent.orchestration(event_id),),
+            accounting_complete=True,
         )
+
+    def _zero_report(self) -> CompleteCostReport:
+        return CompleteCostReport.from_traces(self._zero_trace(arm) for arm in Arm)
 
     def test_report_requires_all_five_arms_exactly_once(self) -> None:
         with self.assertRaisesRegex(ValueError, "exactly all five arms"):
             CompleteCostReport.from_traces(
-                ArmCostTrace.from_events(
-                    arm, (), accounting_complete=True
-                )
-                for arm in tuple(Arm)[:-1]
+                self._zero_trace(arm) for arm in tuple(Arm)[:-1]
             )
 
-        duplicated = [
-            ArmCostTrace.from_events(arm, (), accounting_complete=True) for arm in Arm
-        ]
-        duplicated.append(
-            ArmCostTrace.from_events(Arm.ORDINARY, (), accounting_complete=True)
-        )
+        duplicated = [self._zero_trace(arm) for arm in Arm]
+        duplicated.append(self._zero_trace(Arm.ORDINARY))
         with self.assertRaisesRegex(ValueError, "each arm must appear exactly once"):
             CompleteCostReport.from_traces(duplicated)
 
     def test_trace_aggregates_every_attempt_and_resource_class(self) -> None:
+        expected = (
+            ExpectedCostEvent.model_call("call-1"),
+            ExpectedCostEvent.model_call("retry-1"),
+            ExpectedCostEvent.verifier("verify-1"),
+            ExpectedCostEvent.orchestration("route-1"),
+        )
         trace = ArmCostTrace.from_events(
             Arm.VERIFIED_CHAIN,
             (
@@ -51,8 +58,10 @@ class CompleteCostAccountingTests(unittest.TestCase):
                 CostEvent.verifier("verify-1", milliseconds=125),
                 CostEvent.orchestration("route-1", milliseconds=40),
             ),
+            expected_events=expected,
             accounting_complete=True,
         )
+        self.assertTrue(trace.coverage_complete)
         self.assertEqual(
             CompleteCost(
                 model_calls=2,
@@ -72,6 +81,7 @@ class CompleteCostAccountingTests(unittest.TestCase):
                     CostEvent.model_call("same", input_tokens=1, output_tokens=1),
                     CostEvent.verifier("same", milliseconds=1),
                 ),
+                expected_events=(ExpectedCostEvent.model_call("same"),),
                 accounting_complete=True,
             )
 
@@ -93,14 +103,16 @@ class CompleteCostAccountingTests(unittest.TestCase):
             )
 
     def test_budget_is_checked_componentwise_for_each_arm(self) -> None:
-        traces = [
-            ArmCostTrace.from_events(arm, (), accounting_complete=True) for arm in Arm
-        ]
+        traces = [self._zero_trace(arm) for arm in Arm]
         traces[-1] = ArmCostTrace.from_events(
             Arm.VERIFIED_CHAIN,
             (
                 CostEvent.model_call("call", input_tokens=101, output_tokens=2),
                 CostEvent.verifier("verify", milliseconds=11),
+            ),
+            expected_events=(
+                ExpectedCostEvent.model_call("call"),
+                ExpectedCostEvent.verifier("verify"),
             ),
             accounting_complete=True,
         )
@@ -126,17 +138,51 @@ class CompleteCostAccountingTests(unittest.TestCase):
         )
 
     def test_incomplete_arm_accounting_cannot_be_closed(self) -> None:
-        traces = [
-            ArmCostTrace.from_events(arm, (), accounting_complete=True) for arm in Arm
-        ]
+        traces = [self._zero_trace(arm) for arm in Arm]
         traces[0] = ArmCostTrace.from_events(
-            Arm.ORDINARY, (), accounting_complete=False
+            Arm.ORDINARY,
+            (),
+            expected_events=(ExpectedCostEvent.orchestration("ordinary-accounting"),),
+            accounting_complete=True,
         )
         with self.assertRaisesRegex(ValueError, "incomplete arm accounting"):
             CompleteCostReport.from_traces(traces)
 
-    def test_zero_event_trace_is_explicit_zero_not_missing(self) -> None:
-        report = self._empty_report()
+    def test_empty_all_arms_cannot_be_reported_as_complete_zero_cost(self) -> None:
+        traces = [
+            ArmCostTrace.from_events(
+                arm,
+                (),
+                expected_events=(ExpectedCostEvent.orchestration(f"{arm.value}-accounting"),),
+                accounting_complete=True,
+            )
+            for arm in Arm
+        ]
+        with self.assertRaisesRegex(ValueError, "incomplete arm accounting"):
+            CompleteCostReport.from_traces(traces)
+
+    def test_empty_expected_event_manifest_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "coverage manifest"):
+            ArmCostTrace.from_events(
+                Arm.ORDINARY,
+                (),
+                expected_events=(),
+                accounting_complete=True,
+            )
+
+    def test_event_kind_mismatch_does_not_satisfy_coverage(self) -> None:
+        trace = ArmCostTrace.from_events(
+            Arm.ORDINARY,
+            (CostEvent.verifier("attempt-1", milliseconds=1),),
+            expected_events=(ExpectedCostEvent.model_call("attempt-1"),),
+            accounting_complete=True,
+        )
+        self.assertFalse(trace.coverage_complete)
+        self.assertEqual(("attempt-1",), trace.missing_expected_events)
+        self.assertEqual(("attempt-1",), trace.unexpected_events)
+
+    def test_zero_cost_requires_coverage_evidence_not_an_empty_trace(self) -> None:
+        report = self._zero_report()
         self.assertEqual(
             CompleteCost(0, 0, 0, 0, 0), report.total_for(Arm.PORTFOLIO)
         )
