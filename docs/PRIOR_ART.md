@@ -298,6 +298,27 @@ variants, or other shared-source items, ordinary problem-level McNemar can overs
 sample size. Robustness variants should not silently count as independent n. Freeze the independent
 sampling unit and use family-level or cluster-aware inference when needed.
 
+### 23. Vaswani et al.; Sarathi-Serve; DistServe — token totals are not a compute invariant
+
+Primary sources: Ashish Vaswani et al., *Attention Is All You Need*.
+<https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html>;
+Amey Agrawal et al., *Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve*, OSDI
+2024. <https://www.usenix.org/conference/osdi24/presentation/agrawal>; Yinmin Zhong et al.,
+*DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving*,
+OSDI 2024. <https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin>.
+
+**EVIDENCE.** The Transformer paper gives full self-attention complexity as dependent on sequence
+length. Sarathi-Serve distinguishes compute-intensive prompt prefill from one-token-at-a-time decode
+and demonstrates large serving-efficiency changes from batching/scheduling. DistServe independently
+shows that prefill and decode have different resource and parallelism characteristics.
+
+**INFERENCE for Goal 1.** Aggregate model-call/input-token/output-token totals are not an
+architecture-independent compute meter. Two arms can match those totals while using different
+request-length distributions, prefill/decode mixtures, batching/cache conditions, and therefore
+actual accelerator work. Because chaining itself changes request segmentation, request shape can be
+correlated with treatment. The confirmatory protocol should either measure/match model compute with
+request-shape-aware telemetry or narrow the cost claim to a provider-metered token/call proxy.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -313,7 +334,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - opaque hidden-reasoning telemetry can limit independent cost auditability;
 - intermediate representation/premise exposure can affect prover capability;
 - verification-conditioned feedback/retry can improve proof search;
-- ordinary McNemar inference assumes independent matched pairs and needs adjustment for clustered pairs.
+- ordinary McNemar inference assumes independent matched pairs and needs adjustment for clustered pairs;
+- aggregate token/call totals do not uniquely identify LLM inference compute or serving work.
 
 ## What these sources do **not** establish for Supernova
 
@@ -349,6 +371,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Retry-semantics falsifier:** is verifier-conditioned reject/discard/retry matched, or explicitly declared part of the treatment? (Leanabell-Prover-V2; Snell.)
 - **Contract-equivalence falsifier:** are payload representation, parentage, chain length, stopping, and finalization matched across the primary causal pair? (TheoremBench.)
 - **Compute falsifier:** does the effect persist at matched realized generator+verifier resources or a preregistered cost frontier? (Snell; AlphaGeometry; Singhi.)
+- **Request-shape compute falsifier:** do conclusions survive request-shape-aware compute measurement/matching, or are they explicitly limited to a token/call budget claim? (Vaswani; Sarathi-Serve; DistServe.)
 - **Contamination falsifier:** does the effect persist on fresh/hidden or prospectively protected items? (LiveBench; MathArena; LeanDojo.)
 - **Soft-contamination falsifier:** does it survive semantic/family-level overlap checks or post-model-cutoff data? (Spiesberger.)
 - **Benchmark-fidelity falsifier:** does it survive removal/correction of malformed or unsafe formal items? (Ammanamanchi et al.)
