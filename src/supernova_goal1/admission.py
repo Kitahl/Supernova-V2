@@ -8,8 +8,11 @@ The bounded module models authority explicitly. Producer and verifier identities
 mapped by trusted policy to authority identities, and both product provenance and
 verification evidence are authenticated against runtime-only authority material. Distinct
 authority identities must also have distinct key commitments: with shared-secret HMAC,
-two names backed by the same secret are not independent authorities. HMAC-SHA256 runtime
-keys shorter than the hash output are rejected rather than accepted as weak authorities.
+two names backed by the same secret are not independent authorities.
+
+Verification evidence is bound to the exact trusted policy digest. This prevents a valid
+attestation created under one policy version from being replayed after the admission
+policy changes while retaining the same check/verifier names.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ from typing import Any
 
 
 _PRODUCT_AUTH_DOMAIN = "supernova_goal1.product_candidate.v1"
-_EVIDENCE_DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v2"
+_EVIDENCE_DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v3"
 _POLICY_DIGEST_DOMAIN = "supernova_goal1.admission_policy.v2"
 _HMAC_SHA256_MIN_KEY_BYTES = hashlib.sha256().digest_size
 
@@ -100,6 +103,7 @@ def _canonical_evidence_bytes(
     artifact_sha256: str,
     verifier_id: str,
     outcome: EvidenceOutcome,
+    policy_sha256: str,
 ) -> bytes:
     return _canonical_json(
         {
@@ -107,6 +111,7 @@ def _canonical_evidence_bytes(
             "check_id": check_id,
             "evidence_id": evidence_id,
             "outcome": outcome.value,
+            "policy_sha256": policy_sha256,
             "product_id": product_id,
             "schema": _EVIDENCE_DIGEST_DOMAIN,
             "verifier_id": verifier_id,
@@ -192,6 +197,7 @@ class AdmissionEvidence:
     artifact_sha256: str
     verifier_id: str
     outcome: EvidenceOutcome
+    policy_sha256: str
     evidence_sha256: str
     verifier_hmac_sha256: str
 
@@ -205,6 +211,7 @@ class AdmissionEvidence:
             "artifact_sha256",
             "verifier_id",
             "outcome",
+            "policy_sha256",
             "evidence_sha256",
             "verifier_hmac_sha256",
         }
@@ -220,6 +227,7 @@ class AdmissionEvidence:
             artifact_sha256=_sha256(raw["artifact_sha256"], "evidence.artifact_sha256"),
             verifier_id=_identifier(raw["verifier_id"], "evidence.verifier_id"),
             outcome=outcome,
+            policy_sha256=_sha256(raw["policy_sha256"], "evidence.policy_sha256"),
             evidence_sha256=_sha256(raw["evidence_sha256"], "evidence.evidence_sha256"),
             verifier_hmac_sha256=_sha256(
                 raw["verifier_hmac_sha256"], "evidence.verifier_hmac_sha256"
@@ -234,6 +242,7 @@ class AdmissionEvidence:
             artifact_sha256=self.artifact_sha256,
             verifier_id=self.verifier_id,
             outcome=self.outcome,
+            policy_sha256=self.policy_sha256,
         )
 
     def canonical_sha256(self) -> str:
@@ -438,9 +447,10 @@ def evaluate_product_admission(
     product = ProductCandidate.from_mapping(product_raw)
     policy = AdmissionPolicy.from_mapping(policy_raw)
     evidence = [AdmissionEvidence.from_mapping(raw) for raw in evidence_raw]
+    actual_policy_sha256 = policy.canonical_sha256()
 
     reasons: set[str] = set()
-    if not hmac.compare_digest(policy.canonical_sha256(), trusted_policy_sha256):
+    if not hmac.compare_digest(actual_policy_sha256, trusted_policy_sha256):
         reasons.add("admission policy digest mismatch")
 
     producer_authority = policy.producer_authorities.get(product.producer_id)
@@ -471,6 +481,8 @@ def evaluate_product_admission(
         expected_digest = hashlib.sha256(canonical_bytes).hexdigest()
         if not hmac.compare_digest(item.evidence_sha256, expected_digest):
             reasons.add(f"evidence digest mismatch: {item.evidence_id}")
+        if not hmac.compare_digest(item.policy_sha256, trusted_policy_sha256):
+            reasons.add(f"evidence policy digest mismatch: {item.evidence_id}")
 
         if item.check_id not in required:
             reasons.add(f"unexpected check: {item.check_id}")
@@ -517,6 +529,7 @@ def evaluate_product_admission(
     return {
         "product_id": product.product_id,
         "policy_id": policy.policy_id,
+        "policy_sha256": actual_policy_sha256,
         "admission": (
             AdmissionStatus.ADMITTED.value
             if admitted
