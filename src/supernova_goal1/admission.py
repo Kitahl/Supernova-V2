@@ -5,9 +5,10 @@ required by a trusted admission policy. It does not decide whether the product i
 scientifically useful, whether an experiment arm solved a problem, or how any result
 should be scored.
 
-Verifier authentication keys are runtime-only authority capabilities. They must be
-provisioned independently of the product producer and must never be persisted as part of
-admission evidence or policy.
+Verifier authentication keys and the trusted policy digest are runtime-only authority
+capabilities. They must be provisioned independently of the product producer and must
+never be persisted as part of admission evidence. The serialized policy is verified
+against that trusted digest before it can authorize any verifier.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from typing import Any, Iterable, Mapping
 
 
 _EVIDENCE_DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v1"
+_POLICY_DIGEST_DOMAIN = "supernova_goal1.admission_policy.v1"
 
 
 class EvidenceOutcome(StrEnum):
@@ -73,6 +75,41 @@ def _canonical_evidence_bytes(
         "product_id": product_id,
         "schema": _EVIDENCE_DIGEST_DOMAIN,
         "verifier_id": verifier_id,
+    }
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def _canonical_policy_bytes(
+    *,
+    policy_id: str,
+    required_checks: tuple[str, ...],
+    authorized_verifiers: Mapping[str, tuple[str, ...]],
+    verifier_key_sha256: Mapping[str, str],
+) -> bytes:
+    """Return a semantic-normalized policy representation for trust-root binding.
+
+    Check and verifier list order are not admission semantics, so they are sorted before
+    hashing. Key commitments are part of the policy root because changing the verifier
+    key for an otherwise identical identity changes who is trusted to attest.
+    """
+
+    payload = {
+        "authorized_verifiers": {
+            check_id: sorted(authorized_verifiers[check_id])
+            for check_id in sorted(authorized_verifiers)
+        },
+        "policy_id": policy_id,
+        "required_checks": sorted(required_checks),
+        "schema": _POLICY_DIGEST_DOMAIN,
+        "verifier_key_sha256": {
+            verifier_id: verifier_key_sha256[verifier_id]
+            for verifier_id in sorted(verifier_key_sha256)
+        },
     }
     return json.dumps(
         payload,
@@ -232,15 +269,31 @@ class AdmissionPolicy:
             verifier_key_sha256=parsed_commitments,
         )
 
+    def canonical_bytes(self) -> bytes:
+        return _canonical_policy_bytes(
+            policy_id=self.policy_id,
+            required_checks=self.required_checks,
+            authorized_verifiers=self.authorized_verifiers,
+            verifier_key_sha256=self.verifier_key_sha256,
+        )
+
+    def canonical_sha256(self) -> str:
+        return hashlib.sha256(self.canonical_bytes()).hexdigest()
+
 
 def evaluate_product_admission(
     product_raw: Mapping[str, Any],
     evidence_raw: Iterable[Mapping[str, Any]],
     policy_raw: Mapping[str, Any],
     *,
+    trusted_policy_sha256: str,
     verifier_auth_keys: Mapping[str, bytes],
 ) -> dict[str, Any]:
     """Return a deterministic evidence-policy decision with no scientific score.
+
+    ``policy_raw`` is serialized policy content, not a trust root. The admission boundary
+    must supply ``trusted_policy_sha256`` from independently provisioned configuration;
+    the parsed policy must match that digest before it can authorize a verifier.
 
     ``verifier_auth_keys`` is runtime trust material owned by the admission boundary,
     not caller-authored evidence. The policy stores only SHA-256 commitments to those
@@ -248,6 +301,9 @@ def evaluate_product_admission(
     under a runtime key whose commitment is authorized by the trusted policy.
     """
 
+    trusted_policy_sha256 = _sha256(
+        trusted_policy_sha256, "trusted_policy_sha256"
+    )
     if not isinstance(verifier_auth_keys, Mapping):
         raise ValueError("verifier_auth_keys must be a mapping")
 
@@ -256,6 +312,9 @@ def evaluate_product_admission(
     evidence = [AdmissionEvidence.from_mapping(raw) for raw in evidence_raw]
 
     reasons: set[str] = set()
+    if not hmac.compare_digest(policy.canonical_sha256(), trusted_policy_sha256):
+        reasons.add("admission policy digest mismatch")
+
     required = set(policy.required_checks)
     by_check: dict[str, list[AdmissionEvidence]] = {
         check_id: [] for check_id in policy.required_checks
