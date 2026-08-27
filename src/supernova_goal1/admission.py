@@ -8,7 +8,8 @@ The bounded module models authority explicitly. Producer and verifier identities
 mapped by trusted policy to authority identities, and both product provenance and
 verification evidence are authenticated against runtime-only authority material. Distinct
 authority identities must also have distinct key commitments: with shared-secret HMAC,
-two names backed by the same secret are not independent authorities.
+two names backed by the same secret are not independent authorities. HMAC-SHA256 runtime
+keys shorter than the hash output are rejected rather than accepted as weak authorities.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from typing import Any
 _PRODUCT_AUTH_DOMAIN = "supernova_goal1.product_candidate.v1"
 _EVIDENCE_DIGEST_DOMAIN = "supernova_goal1.admission_evidence.v2"
 _POLICY_DIGEST_DOMAIN = "supernova_goal1.admission_policy.v2"
+_HMAC_SHA256_MIN_KEY_BYTES = hashlib.sha256().digest_size
 
 
 class EvidenceOutcome(StrEnum):
@@ -397,6 +399,9 @@ def _authenticate_authority(
         return
     if not isinstance(key, bytes) or not key:
         reasons.add(f"invalid authority authentication key: {authority_id}")
+        return
+    if len(key) < _HMAC_SHA256_MIN_KEY_BYTES:
+        reasons.add(f"authority authentication key too short: {authority_id}")
         return
 
     expected_commitment = policy.authority_key_sha256[authority_id]
