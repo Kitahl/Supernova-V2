@@ -195,6 +195,18 @@ class ArmCostTrace:
     accounting_complete: bool
 
     def __post_init__(self) -> None:
+        # frozen dataclasses do not deep-freeze caller-owned collections. Snapshot the
+        # public constructor inputs so a closed report cannot later lose telemetry by
+        # mutation through an alias to a list supplied by the caller.
+        object.__setattr__(self, "events", tuple(self.events))
+        object.__setattr__(self, "expected_events", tuple(self.expected_events))
+        if not all(isinstance(event, CostEvent) for event in self.events):
+            raise ValueError("events must contain only CostEvent values")
+        if not all(
+            isinstance(event, ExpectedCostEvent) for event in self.expected_events
+        ):
+            raise ValueError("expected_events must contain only ExpectedCostEvent values")
+
         if not isinstance(self.arm, Arm):
             try:
                 normalized = Arm(self.arm)
@@ -299,6 +311,12 @@ class CompleteCostReport:
     traces: tuple[ArmCostTrace, ...]
 
     def __post_init__(self) -> None:
+        # Snapshot direct-constructor input for the same reason ArmCostTrace snapshots
+        # its event collections: report closure must bind an immutable trace set.
+        object.__setattr__(self, "traces", tuple(self.traces))
+        if not all(isinstance(trace, ArmCostTrace) for trace in self.traces):
+            raise ValueError("traces must contain only ArmCostTrace values")
+
         incomplete = [
             (
                 trace.arm.value,
