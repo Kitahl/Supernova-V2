@@ -20,12 +20,40 @@ Every arm is accounted in the existing five-dimensional `CompleteCost` vector:
 
 The accounting unit is an event. Model-call, verifier, and orchestration events have
 separate shapes so the same quantity cannot be silently charged to two categories.
-Event IDs are unique within an arm trace. Every arm trace must be explicitly closed
-with `accounting_complete=true`; an unknown or missing telemetry source must not be
-converted to zero. A zero-event closed trace therefore means measured zero, not
-"missing".
+Event IDs are unique within an arm trace.
 
-A `CompleteCostReport` closes only when **exactly all five arms** are present:
+## Telemetry coverage invariant
+
+`accounting_complete=true` is only a stream-close marker. It is **not evidence** that
+telemetry is complete and cannot by itself close a `CompleteCostReport`.
+
+Every arm trace must also carry a non-empty expected-event manifest. Each manifest entry
+binds an event ID to its required event kind (`model_call`, `verifier`, or
+`orchestration`). Report closure deterministically requires the observed event-ID/kind
+mapping to equal that manifest exactly:
+
+- every expected event must have one observed telemetry event of the same kind;
+- no unexpected event may appear;
+- expected event IDs and observed event IDs must each be unique;
+- a manifest with zero expected events is invalid.
+
+Therefore an empty trace for an executed arm cannot be asserted complete and silently
+converted to exact zero cost. If five callers submit empty traces with
+`accounting_complete=true`, report closure fails because the expected telemetry is
+missing. A measured zero is still representable, but it needs coverage evidence: for
+example, an expected orchestration event observed with `milliseconds=0` contributes
+zero while proving that the accounting event was actually present.
+
+The execution harness must construct the expected-event manifest from the planned or
+issued operations rather than infer it from telemetry after the fact. For dynamic
+retries, the retry event must be registered in the manifest at dispatch, before its
+telemetry is collected. The current cost module can deterministically verify manifest
+coverage; it cannot by itself prove that an external harness preregistered the manifest
+at the correct time. That provenance requirement must be frozen in the experiment
+runtime before scientific use.
+
+A `CompleteCostReport` closes only when **exactly all five arms** are present and every
+arm satisfies both the close marker and exact manifest coverage:
 `ordinary`, `portfolio`, `product_only`, `multi_fidelity`, and `verified_chain`.
 
 ## Fair-budget rule: componentwise, not weighted
@@ -63,8 +91,10 @@ environment. At minimum, the experimental protocol must freeze and record:
 - concurrency semantics. Verifier and orchestration durations are cumulative
   per-operation elapsed time, so overlapping portfolio work is summed rather than
   receiving a free makespan discount;
-- telemetry completeness rules. If the provider/runtime cannot report a required
-  quantity, that arm's accounting remains incomplete rather than substituting zero.
+- telemetry completeness rules, including how the execution harness constructs and
+  freezes or dispatch-registers expected events. If the provider/runtime cannot report
+  a required quantity, that arm's accounting remains incomplete rather than
+  substituting zero.
 
 Under heterogeneous models, hardware, verifier implementations, or tool access, the raw
 vector can still be reported, but cross-arm fairness is not established merely by this
@@ -83,19 +113,38 @@ prospectively justified normalization is adopted.
 
 ```python
 from supernova_goal1.contracts import Arm, CompleteCost
-from supernova_goal1.cost import ArmCostTrace, CompleteCostReport, CostEvent
+from supernova_goal1.cost import (
+    ArmCostTrace,
+    CompleteCostReport,
+    CostEvent,
+    ExpectedCostEvent,
+)
 
 traces = []
 for arm in Arm:
-    events = ()
+    event_id = f"{arm.value}-driver"
+    events = (CostEvent.orchestration(event_id, milliseconds=0),)
+    expected = (ExpectedCostEvent.orchestration(event_id),)
+
     if arm is Arm.ORDINARY:
         events = (
             CostEvent.model_call("call-1", input_tokens=1200, output_tokens=300),
             CostEvent.verifier("verify-1", milliseconds=42),
             CostEvent.orchestration("driver-1", milliseconds=18),
         )
+        expected = (
+            ExpectedCostEvent.model_call("call-1"),
+            ExpectedCostEvent.verifier("verify-1"),
+            ExpectedCostEvent.orchestration("driver-1"),
+        )
+
     traces.append(
-        ArmCostTrace.from_events(arm, events, accounting_complete=True)
+        ArmCostTrace.from_events(
+            arm,
+            events,
+            expected_events=expected,
+            accounting_complete=True,
+        )
     )
 
 report = CompleteCostReport.from_traces(traces)
@@ -103,5 +152,6 @@ ceiling = CompleteCost(16, 200_000, 100_000, 600_000, 600_000)
 assert report.within_budget(ceiling)[Arm.ORDINARY]
 ```
 
-The example demonstrates the accounting API only. It is not an instruction to freeze
-the bootstrap ceiling or any scalar exchange rate.
+The zero-valued orchestration events in the example are explicit coverage evidence, not
+permission to use an empty trace. The example demonstrates the accounting API only. It
+is not an instruction to freeze the bootstrap ceiling or any scalar exchange rate.
