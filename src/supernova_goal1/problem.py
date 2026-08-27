@@ -62,6 +62,8 @@ class SplitContract:
     def __post_init__(self) -> None:
         for field in ("benchmark", "version", "split"):
             object.__setattr__(self, field, _token(getattr(self, field), field))
+        if isinstance(self.problems, AbstractSet):
+            raise TypeError("problems must preserve deterministic iteration order")
         object.__setattr__(self, "problems", tuple(self.problems))
         if not self.problems:
             raise ValueError("problems must contain at least one benchmark problem")
