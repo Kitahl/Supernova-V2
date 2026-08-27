@@ -221,6 +221,36 @@ class BenchmarkImporterTests(unittest.TestCase):
             self.assertEqual(check_result.returncode, 2)
             self.assertIn("must be outside benchmark source", check_result.stderr)
 
+    def test_lock_write_does_not_follow_predictable_temporary_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "BENCHMARK.lock.json"
+            victim = root / "victim.txt"
+            victim.write_text("sentinel", encoding="utf-8")
+            predictable = output.with_name(output.name + ".tmp")
+            try:
+                os.symlink(victim, predictable)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable on this platform")
+
+            lock = {
+                "schema_version": 1,
+                "status": "LOCKED",
+                "benchmark": {"name": "bench", "version": "v1", "split": "test"},
+                "content": {
+                    "algorithm": "sha256",
+                    "root_sha256": "0" * 64,
+                    "file_count": 1,
+                    "total_bytes": 1,
+                    "files": [{"path": "a.txt", "sha256": "1" * 64, "bytes": 1}],
+                },
+            }
+            MODULE._write_lock(output, lock)
+
+            self.assertEqual(victim.read_text(encoding="utf-8"), "sentinel")
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), lock)
+            self.assertTrue(predictable.is_symlink())
+
     def test_check_rejects_ambiguous_or_non_standard_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
