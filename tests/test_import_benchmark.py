@@ -131,6 +131,26 @@ class BenchmarkImporterTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "changed while hashing"):
                     MODULE.build_lock(source, name="bench", version="v1", split="test")
 
+    def test_tree_entry_change_while_hashing_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "benchmark"
+            source.mkdir()
+            (source / "first.txt").write_bytes(b"first")
+            real_hash = MODULE._sha256_file
+            calls = 0
+
+            def mutating_hash(path):
+                nonlocal calls
+                result = real_hash(path)
+                calls += 1
+                if calls == 1:
+                    (source / "late.txt").write_bytes(b"late")
+                return result
+
+            with mock.patch.object(MODULE, "_sha256_file", mutating_hash):
+                with self.assertRaisesRegex(ValueError, "tree changed while hashing"):
+                    MODULE.build_lock(source, name="bench", version="v1", split="test")
+
     def test_control_file_inside_source_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
