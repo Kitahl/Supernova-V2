@@ -42,7 +42,16 @@ def _sha256_file(path: Path) -> tuple[str, int]:
 
 def _enumerate_files(root: Path) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
-    for current, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
+    for current, dirnames, filenames in os.walk(
+        root,
+        topdown=True,
+        onerror=raise_walk_error,
+        followlinks=False,
+    ):
         current_path = Path(current)
         dirnames.sort()
         filenames.sort()
