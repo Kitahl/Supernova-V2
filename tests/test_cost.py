@@ -243,10 +243,12 @@ class CompleteCostAccountingTests(unittest.TestCase):
             CompleteCostReport.from_traces(traces)
 
     def test_closed_report_snapshots_mutable_constructor_inputs(self) -> None:
-        ordinary_events = [
-            CostEvent.model_call("call-1", input_tokens=100, output_tokens=20)
-        ]
-        ordinary_expected = [ExpectedCostEvent.model_call("call-1")]
+        ordinary_event = CostEvent.model_call(
+            "call-1", input_tokens=100, output_tokens=20
+        )
+        ordinary_expected_event = ExpectedCostEvent.model_call("call-1")
+        ordinary_events = [ordinary_event]
+        ordinary_expected = [ordinary_expected_event]
         ordinary_trace = ArmCostTrace(
             Arm.ORDINARY,
             ordinary_events,
@@ -260,16 +262,54 @@ class CompleteCostAccountingTests(unittest.TestCase):
         ordinary_events.clear()
         ordinary_expected.clear()
         report_inputs.clear()
+        object.__setattr__(ordinary_event, "input_tokens", 0)
+        object.__setattr__(ordinary_expected_event, "event_id", "mutated")
+        object.__setattr__(ordinary_trace, "events", ())
+        object.__setattr__(ordinary_trace, "expected_events", ())
 
-        self.assertIsInstance(ordinary_trace.events, tuple)
-        self.assertIsInstance(ordinary_trace.expected_events, tuple)
         self.assertIsInstance(report.traces, tuple)
         self.assertEqual(5, len(report.traces))
-        self.assertTrue(ordinary_trace.coverage_complete)
+        self.assertTrue(report.traces[0].coverage_complete)
         self.assertEqual(
             CompleteCost(1, 100, 20, 0, 0),
             report.total_for(Arm.ORDINARY),
         )
+
+    def test_polymorphic_records_cannot_override_accounting_semantics(self) -> None:
+        class ForgedCostEvent(CostEvent):
+            def cost_increment(self) -> CompleteCost:
+                return CompleteCost(0, 0, 0, 0, 0)
+
+        forged_event = ForgedCostEvent(
+            event_id="call-1",
+            kind=CostEventKind.MODEL_CALL,
+            input_tokens=100,
+            output_tokens=20,
+        )
+        with self.assertRaisesRegex(ValueError, "exact CostEvent"):
+            ArmCostTrace.from_events(
+                Arm.ORDINARY,
+                (forged_event,),
+                expected_events=(ExpectedCostEvent.model_call("call-1"),),
+                accounting_complete=True,
+            )
+
+        class ForgedArmCostTrace(ArmCostTrace):
+            @property
+            def total(self) -> CompleteCost:
+                return CompleteCost(0, 0, 0, 0, 0)
+
+        base_trace = self._zero_trace(Arm.ORDINARY)
+        forged_trace = ForgedArmCostTrace(
+            base_trace.arm,
+            base_trace.events,
+            base_trace.expected_events,
+            base_trace.accounting_complete,
+        )
+        traces = [forged_trace]
+        traces.extend(self._zero_trace(arm) for arm in tuple(Arm)[1:])
+        with self.assertRaisesRegex(ValueError, "exact ArmCostTrace"):
+            CompleteCostReport.from_traces(traces)
 
     def test_zero_cost_requires_coverage_evidence_not_an_empty_trace(self) -> None:
         report = self._zero_report()
