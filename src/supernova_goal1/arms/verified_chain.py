@@ -60,6 +60,7 @@ class CanonicalProductValue:
     """Immutable deterministic snapshot used as the verified product identity."""
 
     canonical_json: str
+    _sha256: str
 
     @classmethod
     def from_value(cls, value: Any) -> "CanonicalProductValue":
@@ -71,11 +72,20 @@ class CanonicalProductValue:
             ensure_ascii=False,
             allow_nan=False,
         )
-        return cls(canonical_json=canonical_json)
+        try:
+            canonical_bytes = canonical_json.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                "value must contain only UTF-8-encodable Unicode scalar values"
+            ) from exc
+        return cls(
+            canonical_json=canonical_json,
+            _sha256=hashlib.sha256(canonical_bytes).hexdigest(),
+        )
 
     @property
     def sha256(self) -> str:
-        return hashlib.sha256(self.canonical_json.encode("utf-8")).hexdigest()
+        return self._sha256
 
     def to_python(self) -> Any:
         # Decode a new value on every access so callers never receive mutable storage
