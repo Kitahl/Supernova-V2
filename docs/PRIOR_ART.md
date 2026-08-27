@@ -319,6 +319,25 @@ reported token usage is evidence about provider-reported consumption, not indepe
 compute. Confirmatory claims should either use auditable/self-hosted telemetry or preserve this
 opacity as an explicit uncertainty and sensitivity bound.
 
+### 20. TheoremBench (2026) — explicit supporting premises are a capability-relevant representation change
+
+Primary source: QuocViet Pham, Elvir Karimov, Andrey Galichin, and Ivan Oseledets,
+*TheoremBench: Evaluating LLMs on Theorem Proving in Formal Mathematics*.
+<https://arxiv.org/abs/2606.09450>
+
+**EVIDENCE.** TheoremBench provides aligned plain-main and premised forms of theorem families. In the
+premised form, relevant prior results are exposed explicitly as premise binders. The paper reports
+that these explicit premises substantially improve final-theorem performance for several
+Lean4-capable provers and also change token-efficiency/proof-structure behavior.
+
+**INFERENCE for Goal 1.** Intermediate representation and premise exposure are not neutral plumbing.
+If the verified-chain arm and the product-only causal control use different payload types,
+serialization, product-count rules, or finalization semantics, those differences can change the
+solver's effective information interface independently of verification. The strongest product-only
+control should therefore share the treatment's intermediate-product representation and execution
+contract, with the verification gate itself removed or replaced by the prospectively specified
+non-gating condition.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -338,7 +357,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - hosted model services can change over time, and moving model aliases can silently change the data-generating system (Chen et al.; Gemini model-version documentation);
 - backend execution details can induce output and accuracy variation even under nominally deterministic decoding (Yuan et al.; Ouyang et al.);
 - semantic duplicates can survive lexical decontamination and measurably improve benchmark performance (Spiesberger et al.);
-- hidden reasoning-token usage in opaque commercial APIs can require independent auditing if it is used as a scientific cost variable (Sun et al.).
+- hidden reasoning-token usage in opaque commercial APIs can require independent auditing if it is used as a scientific cost variable (Sun et al.);
+- explicit supporting premises can materially change formal-prover performance, so intermediate representation is itself an experimental variable (TheoremBench).
 
 ## What these sources do **not** establish for Supernova
 
@@ -376,6 +396,10 @@ to answer these prior-art-driven falsifiers:
   object match the chain? (Lightman et al.)
 - **Decomposition falsifier:** can the same lemma/subgoal decomposition and retries, but without
   verify-before-consume gating, match the chain? (Seed-Prover / Prover Agent / Goedel-Architect.)
+- **Contract-equivalence falsifier:** does the product-only control use the same intermediate payload
+  representation/serialization, product-count policy, stopping/finalization semantics, and retry
+  policy as the verified chain, differing only in the predeclared verification-gating mechanism?
+  (TheoremBench; Snell et al.)
 - **Compute falsifier:** does the effect persist when actual generator-plus-verifier test-time
   resource use is matched rather than merely capped? (Snell et al.; AlphaGeometry; Singhi et al.)
 - **Contamination falsifier:** does the effect persist on a fresh/hidden or otherwise prospectively
