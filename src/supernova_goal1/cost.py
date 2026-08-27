@@ -79,9 +79,9 @@ class ExpectedCostEvent:
 class CostEvent:
     event_id: str
     kind: CostEventKind
-    input_tokens: int | None = 0
-    output_tokens: int | None = 0
-    milliseconds: int | None = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    milliseconds: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.event_id, str) or not self.event_id.strip():
@@ -104,16 +104,16 @@ class CostEvent:
         )
 
         if self.kind is CostEventKind.MODEL_CALL:
-            if self.milliseconds != 0:
+            if self.milliseconds not in (None, 0):
                 raise ValueError(
                     "model_call events carry token counts only; elapsed non-model work "
                     "must be recorded separately"
                 )
         elif self.kind is CostEventKind.VERIFIER:
-            if self.input_tokens != 0 or self.output_tokens != 0:
+            if self.input_tokens not in (None, 0) or self.output_tokens not in (None, 0):
                 raise ValueError("verifier events cannot carry model token counts")
         elif self.kind is CostEventKind.ORCHESTRATION:
-            if self.input_tokens != 0 or self.output_tokens != 0:
+            if self.input_tokens not in (None, 0) or self.output_tokens not in (None, 0):
                 raise ValueError("orchestration events cannot carry model token counts")
 
     @classmethod
