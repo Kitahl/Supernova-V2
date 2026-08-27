@@ -47,6 +47,18 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             object.__setattr__(problem, "native_id", "43")
 
+    def test_namedtuple_helpers_preserve_identity_validation(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError, "native_id must be a non-empty trimmed string"
+        ):
+            BenchmarkProblemIdentity._make(("bench", "v1", "test", " 42 "))
+
+        problem = BenchmarkProblemIdentity("bench", "v1", "test", "42")
+        with self.assertRaisesRegex(
+            ValueError, "native_id must be a non-empty trimmed string"
+        ):
+            problem._replace(native_id=" 43 ")
+
 
 class SplitContractTests(unittest.TestCase):
     def test_factory_snapshots_ordered_membership(self) -> None:
@@ -163,6 +175,17 @@ class SplitContractTests(unittest.TestCase):
             object.__setattr__(contract.problems[0], "native_id", "p2")
         self.assertEqual("p1", contract.problems[0].native_id)
         self.assertEqual(original_contract_id, contract.contract_id)
+
+    def test_namedtuple_helpers_preserve_contract_validation(self) -> None:
+        wrong_split = BenchmarkProblemIdentity("bench", "v1", "train", "p1")
+        with self.assertRaisesRegex(ValueError, "contract benchmark/version/split"):
+            SplitContract._make(("bench", "v1", "test", (wrong_split,)))
+
+        contract = SplitContract.from_native_ids(
+            benchmark="bench", version="v1", split="test", native_ids=["p1"]
+        )
+        with self.assertRaisesRegex(ValueError, "contract benchmark/version/split"):
+            contract._replace(problems=(wrong_split,))
 
 
 if __name__ == "__main__":
