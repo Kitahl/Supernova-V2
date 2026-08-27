@@ -59,6 +59,17 @@ def _validate_product_value(value: Any, path: str = "value") -> None:
     )
 
 
+def _hash_record(record: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        record,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class CanonicalProductValue:
     """Immutable deterministic snapshot used as the verified product identity."""
@@ -107,28 +118,44 @@ def _verification_subject_sha256(
     parent_product_id: str | None,
     parent_content_sha256: str | None,
     parent_verification_subject_sha256: str | None,
+    parent_verification_receipt_sha256: str | None,
 ) -> str:
-    """Bind verification to both immutable content and its exact chain context."""
+    """Bind verification to immutable content and the full verified parent lineage."""
 
-    subject = {
-        "schema": "supernova-goal1-verification-subject-v2",
-        "problem_id": problem_id,
-        "product_id": product_id,
-        "step_index": step_index,
-        "content_sha256": content_sha256,
-        "producer_id": producer_id,
-        "parent_product_id": parent_product_id,
-        "parent_content_sha256": parent_content_sha256,
-        "parent_verification_subject_sha256": parent_verification_subject_sha256,
-    }
-    subject_bytes = json.dumps(
-        subject,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        allow_nan=False,
-    ).encode("ascii")
-    return hashlib.sha256(subject_bytes).hexdigest()
+    return _hash_record(
+        {
+            "schema": "supernova-goal1-verification-subject-v3",
+            "problem_id": problem_id,
+            "product_id": product_id,
+            "step_index": step_index,
+            "content_sha256": content_sha256,
+            "producer_id": producer_id,
+            "parent_product_id": parent_product_id,
+            "parent_content_sha256": parent_content_sha256,
+            "parent_verification_subject_sha256": parent_verification_subject_sha256,
+            "parent_verification_receipt_sha256": parent_verification_receipt_sha256,
+        }
+    )
+
+
+def _verification_receipt_sha256(
+    *,
+    subject_sha256: str,
+    outcome: VerificationOutcome,
+    verifier_id: str,
+    evidence_id: str,
+) -> str:
+    """Bind the verification decision to its subject and declared provenance."""
+
+    return _hash_record(
+        {
+            "schema": "supernova-goal1-verification-receipt-v1",
+            "subject_sha256": subject_sha256,
+            "outcome": outcome.value,
+            "verifier_id": verifier_id,
+            "evidence_id": evidence_id,
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +178,7 @@ class VerificationSubject:
     parent_product_id: str | None
     parent_content_sha256: str | None
     parent_verification_subject_sha256: str | None
+    parent_verification_receipt_sha256: str | None
     _subject_sha256: str
 
     @property
@@ -180,6 +208,7 @@ class VerifiedProduct:
     evidence_id: str
     parent_product_id: str | None
     verification_subject_sha256: str
+    verification_receipt_sha256: str
 
     @property
     def value(self) -> Any:
@@ -196,6 +225,7 @@ class StepRecord:
     step_index: int
     content_sha256: str
     verification_subject_sha256: str
+    verification_receipt_sha256: str
     outcome: VerificationOutcome
     producer_id: str
     verifier_id: str
@@ -220,15 +250,16 @@ class VerifiedChain:
     Each proposed value is immediately converted to an immutable, content-addressed
     snapshot. The verifier receives that exact snapshot through ``verification_subject``
     together with its problem/step/parent context, and ``record_verification`` requires
-    the resulting decision to cite a SHA-256 digest over that complete subject. Parent
-    subjects are linked recursively, so PASS cannot be replayed from another problem
-    or deeper lineage merely because the immediate product/parent bytes happen to match.
-    Consumers receive a fresh decoded view of that verified snapshot, never the
-    producer-owned mutable object.
+    the resulting decision to cite a SHA-256 digest over that complete subject.
 
-    A following step must cite the exact ``VerifiedProduct`` object returned by
-    ``consume_verified`` as its parent, preserving a concrete verified chain instead
-    of a bag of unrelated products.
+    Parent links commit recursively to both the exact parent subject and the parent's
+    verification receipt. The receipt binds the parent's PASS to its verifier and
+    evidence identity, so a child verification cannot be replayed across an otherwise
+    byte-identical chain with different verification provenance.
+
+    Consumers receive a fresh decoded view of the verified snapshot, never the
+    producer-owned mutable object. A following step must cite the exact
+    ``VerifiedProduct`` returned by ``consume_verified`` as its parent.
     """
 
     def __init__(self, problem_id: str) -> None:
@@ -330,6 +361,11 @@ class VerifiedChain:
             if pending.parent_product_id is not None and self._last_consumed is not None
             else None
         )
+        parent_verification_receipt_sha256 = (
+            self._last_consumed.verification_receipt_sha256
+            if pending.parent_product_id is not None and self._last_consumed is not None
+            else None
+        )
         subject_sha256 = _verification_subject_sha256(
             problem_id=self._problem_id,
             product_id=pending.product_id,
@@ -339,6 +375,7 @@ class VerifiedChain:
             parent_product_id=pending.parent_product_id,
             parent_content_sha256=parent_content_sha256,
             parent_verification_subject_sha256=parent_verification_subject_sha256,
+            parent_verification_receipt_sha256=parent_verification_receipt_sha256,
         )
         return VerificationSubject(
             problem_id=self._problem_id,
@@ -349,6 +386,7 @@ class VerifiedChain:
             parent_product_id=pending.parent_product_id,
             parent_content_sha256=parent_content_sha256,
             parent_verification_subject_sha256=parent_verification_subject_sha256,
+            parent_verification_receipt_sha256=parent_verification_receipt_sha256,
             _subject_sha256=subject_sha256,
         )
 
@@ -394,6 +432,12 @@ class VerifiedChain:
         except (TypeError, ValueError) as exc:
             raise ValueError(f"unknown verification outcome: {outcome!r}") from exc
 
+        receipt_sha256 = _verification_receipt_sha256(
+            subject_sha256=expected_subject.subject_sha256,
+            outcome=normalized,
+            verifier_id=verifier_id,
+            evidence_id=evidence_id,
+        )
         pending = self._pending
         if normalized is VerificationOutcome.PASS:
             self._verified = VerifiedProduct(
@@ -405,6 +449,7 @@ class VerifiedChain:
                 evidence_id=evidence_id,
                 parent_product_id=pending.parent_product_id,
                 verification_subject_sha256=expected_subject.subject_sha256,
+                verification_receipt_sha256=receipt_sha256,
             )
             self._pending = None
             self._state = ChainState.VERIFIED
@@ -415,6 +460,7 @@ class VerifiedChain:
                     step_index=pending.step_index,
                     content_sha256=pending.content.sha256,
                     verification_subject_sha256=expected_subject.subject_sha256,
+                    verification_receipt_sha256=receipt_sha256,
                     outcome=normalized,
                     producer_id=pending.producer_id,
                     verifier_id=verifier_id,
@@ -447,6 +493,7 @@ class VerifiedChain:
                 step_index=verified.step_index,
                 content_sha256=verified.content_sha256,
                 verification_subject_sha256=verified.verification_subject_sha256,
+                verification_receipt_sha256=verified.verification_receipt_sha256,
                 outcome=VerificationOutcome.PASS,
                 producer_id=verified.producer_id,
                 verifier_id=verified.verifier_id,
@@ -490,6 +537,7 @@ class VerifiedChain:
                 step_index=verified.step_index,
                 content_sha256=verified.content_sha256,
                 verification_subject_sha256=verified.verification_subject_sha256,
+                verification_receipt_sha256=verified.verification_receipt_sha256,
                 outcome=VerificationOutcome.PASS,
                 producer_id=verified.producer_id,
                 verifier_id=verified.verifier_id,
