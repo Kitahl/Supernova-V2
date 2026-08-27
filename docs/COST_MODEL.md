@@ -37,14 +37,22 @@ mapping to equal that manifest exactly:
 - expected event IDs and observed event IDs must each be unique;
 - a manifest with zero expected events is invalid.
 
-Closure is snapshot-based. `ArmCostTrace` copies the supplied telemetry and expected-event
-collections into immutable tuples, and `CompleteCostReport` likewise snapshots its trace
-collection. This applies even when callers use the public dataclass constructors directly
-rather than the convenience constructors. Mutating a caller-owned list after report
-closure therefore cannot delete an expensive event, erase its expected-manifest entry,
-or remove an arm from a previously accepted report. `frozen=True` is not treated as a
-substitute for this copy because freezing a dataclass does not deep-freeze mutable objects
-held in its fields.
+Closure is snapshot-based and non-polymorphic. `ArmCostTrace` snapshots both the supplied
+collections and each concrete `CostEvent` / `ExpectedCostEvent` value into fresh base-class
+records. `CompleteCostReport` likewise rebuilds each concrete `ArmCostTrace` into a fresh
+snapshot before validating closure. Subclasses of those accounting record types are
+rejected rather than trusted through `isinstance`, because a subclass can override
+aggregation or completeness properties after satisfying the base constructor. This is a
+deterministic value boundary: caller-owned list aliases, event aliases, manifest-entry
+aliases, or trace aliases cannot later erase or reduce accounting already captured by the
+report.
+
+Python `dataclass(frozen=True)` is not treated as proof of true immutability. It blocks
+ordinary field assignment, but Python itself documents frozen dataclasses as emulated
+immutability rather than a mechanism for creating truly immutable objects. The accounting
+module therefore takes fresh concrete value snapshots instead of retaining caller-owned
+record objects. This is defensive API isolation, not a claim that hostile code with direct
+access to the report object cannot deliberately violate Python's object model.
 
 Identity coverage is necessary but not sufficient. Every cost-bearing measurement on an
 observed event must also be known. `None` is the typed representation of unavailable
