@@ -556,3 +556,29 @@ bind the resolved executable/toolchain, project/library snapshot, cwd, allowlist
 runtime/container identity, and does independent replay fail closed when any of those differ? Python
 subprocess and Lean Elan semantics make this a necessary reproducibility check rather than an
 optional metadata field.
+
+### 32. Python time clocks and Linux cgroup CPU accounting — elapsed time is not CPU resource use
+
+Primary sources: Python Software Foundation, `time` documentation.
+<https://docs.python.org/3/library/time.html>; Linux kernel, *Control Group v2* documentation.
+<https://kernel.org/doc/html/next/admin-guide/cgroup-v2.html>.
+
+**EVIDENCE.** Python's standard-library documentation distinguishes a performance/elapsed clock from
+CPU time: `perf_counter()` includes time elapsed during sleep, whereas `process_time()` measures
+system plus user CPU time and excludes sleep. Linux cgroup v2 independently exposes CPU usage
+(`usage_usec`, `user_usec`, `system_usec`) and throttling (`nr_throttled`, `throttled_usec`) as
+separate accounting signals.
+
+**INFERENCE for Goal 1.** These are operating-system/runtime accounting precedents, not evidence
+about Supernova's mechanism. They expose a narrower cost-construct gap: current
+`verifier_milliseconds` and `orchestration_milliseconds` are elapsed-duration fields. Equal elapsed
+milliseconds can correspond to unequal CPU/core or accelerator work, while scheduler delay or
+throttling can increase elapsed time without equivalent executed compute. The present fields are
+therefore legitimate latency/accounting proxies but not, by themselves, a certificate of
+resource-normalized compute parity.
+
+**Strong-control addendum — non-model resource falsifier.** Are verifier/orchestration resource
+allocations prospectively fixed and recorded, and does the cost record include an auditable
+resource-normalized quantity such as cgroup/process CPU time plus accelerator usage where material?
+If not, is the scientific claim explicitly limited to an elapsed-time/token proxy rather than
+"complete compute" parity?
