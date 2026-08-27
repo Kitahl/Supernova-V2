@@ -5,12 +5,14 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from supernova_goal1.evaluate import evaluate_experiment
+from supernova_goal1.statistics import HolmResult
 
 
 class EvaluateExperimentTests(unittest.TestCase):
@@ -50,6 +52,31 @@ class EvaluateExperimentTests(unittest.TestCase):
         records[0]["cost"]["model_calls"] = 17
         with self.assertRaisesRegex(ValueError, "cost ceiling exceeded"):
             evaluate_experiment(self.spec, records)
+
+    def test_complete_evaluation_uses_shared_statistics_library(self) -> None:
+        spec = copy.deepcopy(self.spec)
+        spec["cost_model_frozen"] = True
+        corrections = tuple(
+            HolmResult(p_value=0.01, threshold=0.0125, rejects_null=True)
+            for _ in range(4)
+        )
+
+        with (
+            patch(
+                "supernova_goal1.evaluate.mcnemar_exact_two_sided",
+                return_value=0.01,
+            ) as mcnemar,
+            patch(
+                "supernova_goal1.evaluate.holm_step_down",
+                return_value=corrections,
+            ) as holm,
+        ):
+            result = evaluate_experiment(spec, self.records)
+
+        self.assertEqual("PASS", result["decision"])
+        self.assertEqual(4, mcnemar.call_count)
+        self.assertTrue(all(call.args == (2, 0) for call in mcnemar.call_args_list))
+        holm.assert_called_once_with((0.01, 0.01, 0.01, 0.01), 0.05)
 
 
 if __name__ == "__main__":
