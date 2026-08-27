@@ -21,11 +21,11 @@ from supernova_goal1.cost import (
 
 class CompleteCostAccountingTests(unittest.TestCase):
     def _zero_trace(self, arm: Arm) -> ArmCostTrace:
-        event_id = f"{arm.value}-accounting"
+        event_id = f"{arm.value}-attempt"
         return ArmCostTrace.from_events(
             arm,
-            (CostEvent.orchestration(event_id, milliseconds=0),),
-            expected_events=(ExpectedCostEvent.orchestration(event_id),),
+            (CostEvent.model_call(event_id, input_tokens=0, output_tokens=0),),
+            expected_events=(ExpectedCostEvent.model_call(event_id),),
             accounting_complete=True,
         )
 
@@ -143,7 +143,7 @@ class CompleteCostAccountingTests(unittest.TestCase):
         traces[0] = ArmCostTrace.from_events(
             Arm.ORDINARY,
             (),
-            expected_events=(ExpectedCostEvent.orchestration("ordinary-accounting"),),
+            expected_events=(ExpectedCostEvent.model_call("ordinary-attempt"),),
             accounting_complete=True,
         )
         with self.assertRaisesRegex(ValueError, "incomplete arm accounting"):
@@ -154,7 +154,7 @@ class CompleteCostAccountingTests(unittest.TestCase):
             ArmCostTrace.from_events(
                 arm,
                 (),
-                expected_events=(ExpectedCostEvent.orchestration(f"{arm.value}-accounting"),),
+                expected_events=(ExpectedCostEvent.model_call(f"{arm.value}-attempt"),),
                 accounting_complete=True,
             )
             for arm in Arm
@@ -170,6 +170,18 @@ class CompleteCostAccountingTests(unittest.TestCase):
                 expected_events=(),
                 accounting_complete=True,
             )
+
+    def test_orchestration_only_manifest_cannot_stand_in_for_solver_attempt(self) -> None:
+        for arm in Arm:
+            with self.subTest(arm=arm):
+                event_id = f"{arm.value}-accounting"
+                with self.assertRaisesRegex(ValueError, "expected model_call attempt"):
+                    ArmCostTrace.from_events(
+                        arm,
+                        (CostEvent.orchestration(event_id, milliseconds=0),),
+                        expected_events=(ExpectedCostEvent.orchestration(event_id),),
+                        accounting_complete=True,
+                    )
 
     def test_event_kind_mismatch_does_not_satisfy_coverage(self) -> None:
         trace = ArmCostTrace.from_events(
@@ -202,8 +214,14 @@ class CompleteCostAccountingTests(unittest.TestCase):
     def test_unknown_elapsed_time_cannot_be_coerced_to_zero_complete_cost(self) -> None:
         trace = ArmCostTrace.from_events(
             Arm.ORDINARY,
-            (CostEvent.orchestration("route-1", milliseconds=None),),
-            expected_events=(ExpectedCostEvent.orchestration("route-1"),),
+            (
+                CostEvent.model_call("call-1", input_tokens=0, output_tokens=0),
+                CostEvent.orchestration("route-1", milliseconds=None),
+            ),
+            expected_events=(
+                ExpectedCostEvent.model_call("call-1"),
+                ExpectedCostEvent.orchestration("route-1"),
+            ),
             accounting_complete=True,
         )
         self.assertTrue(trace.coverage_complete)
@@ -311,10 +329,10 @@ class CompleteCostAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exact ArmCostTrace"):
             CompleteCostReport.from_traces(traces)
 
-    def test_zero_cost_requires_coverage_evidence_not_an_empty_trace(self) -> None:
+    def test_closed_arm_cost_includes_at_least_one_observed_model_attempt(self) -> None:
         report = self._zero_report()
         self.assertEqual(
-            CompleteCost(0, 0, 0, 0, 0), report.total_for(Arm.PORTFOLIO)
+            CompleteCost(1, 0, 0, 0, 0), report.total_for(Arm.PORTFOLIO)
         )
 
 
