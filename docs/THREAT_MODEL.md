@@ -422,6 +422,42 @@ telemetry, queue/batch identity, and trusted request time. Treat provider thrott
 infrastructure event under a symmetric preregistered rerun/censoring rule rather than selectively
 rerunning losing cells, and charge all retries/wait time that lies inside the declared cost boundary.
 
+### T27 — Scientific outcomes are not yet bound to final-verifier evidence (`CRITICAL`)
+
+**EVIDENCE — repository.** `OutcomeRecord` currently carries only `solved`, `verifier_passed`,
+identity strings, and aggregate cost. Its only verification invariant is that `solved=true` cannot
+coexist with `verifier_passed=false`. `evaluate_experiment` then consumes those booleans directly
+when computing paired wins and a final PASS; it does not require a proof/artifact digest, verifier
+identity/version, verifier result object, challenge/problem digest, or attestation binding the PASS
+to the exact submitted artifact. Proposed G1-003 / PR #9 does produce a richer `VerifierResult`
+(status, command, return code, stdout/stderr, elapsed time), but there is no repository contract yet
+that binds that result to an `OutcomeRecord` or to the exact formal artifact/problem subject.
+**EVIDENCE — external.** Lean's official reference states that tactics construct independently
+checkable proof terms and that each proof is checked by the kernel; its high-assurance validation
+guidance additionally replays the proof against the trusted challenge and checks that the proved
+theorem statement matches that challenge: <https://lean-lang.org/doc/reference/latest/ValidatingProofs/>.
+SLSA's approved Verification Summary Attestation similarly binds a verification result to an
+artifact `subject` digest, verifier identity/version, and verification policy:
+<https://slsa.dev/spec/v1.2/verification_summary>.
+
+**INFERENCE.** The current scientific evaluator can distinguish a contradictory boolean pair, but it
+cannot establish that `verifier_passed=true` came from any kernel execution, much less from the
+correct problem/artifact. A harness defect, record-construction bug, or replayed PASS can therefore
+manufacture an apparently solved cell without violating `OutcomeRecord`. This is distinct from T4
+and T11: those threats concern verifier independence and checker exploitation after a real verifier
+interaction; T27 is the missing evidence-binding edge between final verification and the statistic.
+As written, a future evaluator PASS would not itself prove Goal 1's stated requirement of "kernel
+verification for every solved outcome."
+
+**Required falsifier/mitigation.** Replace the naked scientific boolean with an evidence-bound final
+outcome contract. At minimum bind every solved cell to the exact problem/challenge digest, final
+artifact/proof digest, final-verifier implementation/version and policy/environment identity, and an
+authoritative PASS receipt/attestation digest. The scientific evaluator should validate that binding
+(or consume an independently generated final-verifier ledger) before counting the cell as solved.
+For high-assurance formal runs, replay the exact final artifact against the frozen challenge in a
+clean verifier environment. Missing, mismatched, replayed, or unverifiable evidence must fail closed;
+search-time verifier evidence must remain distinct from final-outcome evidence.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -445,7 +481,8 @@ The confirmatory run should not start until all of the following are frozen and 
 17. an independent benchmark sampling unit plus cluster/family-aware inference when multiple items share a latent source/template;
 18. request-shape-aware model-compute accounting, or an explicit statement that the frozen cost construct is a token/call proxy rather than complete compute;
 19. a trusted pre-execution dispatch ledger reconciled to all cost events/provider-runtime request evidence, with dropped or unregistered telemetry blocking closure;
-20. an execution-isolation plan for shared provider quotas, caches, queues, backoff/retry state, and concurrent serving interference.
+20. an execution-isolation plan for shared provider quotas, caches, queues, backoff/retry state, and concurrent serving interference;
+21. evidence-bound final outcomes tying every solved cell to the exact challenge, proof/artifact digest, final-verifier identity/policy, and independently checkable PASS evidence.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
