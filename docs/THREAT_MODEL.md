@@ -552,6 +552,41 @@ Arm-specific mechanism instructions should be represented as a separately frozen
 allowlisted delta so only the intended causal treatment differs. Preserve the final rendered input
 (or an independently reconstructable digest/provenance record) for audit and replay.
 
+### T31 — Repeated confirmatory looks can turn fixed-horizon PASS into optional-stopping bias (`CRITICAL`)
+
+**EVIDENCE — repository.** `goal1/GOAL1.json` freezes one `familywise_alpha=0.05` and requires
+Holm-corrected exact paired tests, but it does not freeze the number of outcome-bearing confirmatory
+analyses, a maximum number of whole-run reruns, an alpha-spending rule, or an anytime-valid
+procedure. `ExperimentSpec` likewise has no confirmatory run/analysis nonce, look index, maximum
+looks, or sequential-testing contract. `evaluate_experiment` applies the same fixed-horizon exact
+McNemar plus Holm decision rule whenever it receives a complete record set; nothing in that contract
+prevents another stochastic/nondeterministic complete run from being evaluated after a FAIL.
+**EVIDENCE — external.** Johari, Koomen, Pekelis, and Walsh show that ordinary frequentist p-values
+and confidence intervals lose their nominal guarantees when sample size/stopping is chosen by
+continuous monitoring, and develop always-valid sequential alternatives:
+<https://pubsonline.informs.org/doi/10.1287/opre.2021.2135>. FDA group-sequential guidance likewise
+describes planned interim looks as requiring prospective design while controlling the study-wide
+Type I error rate:
+<https://www.fda.gov/files/medical%20devices/published/Adaptive-Designs-for-Medical-Device-Clinical-Studies---Guidance-for-Industry-and-Food-and-Drug-Administration-Staff.pdf>.
+
+**INFERENCE.** Holm correction controls multiplicity across the four control comparisons *within one
+analysis*; it is not a correction for repeatedly rerunning or re-evaluating the confirmatory claim
+and stopping at the first PASS. This threat remains even if the benchmark, prompts, model, and
+analysis code never change: stochastic model outputs, hosted-runtime nondeterminism, or symmetric
+whole-run retries can create multiple looks whose continuation decision depends on observed
+outcomes. T31 is therefore distinct from T12 (how stochastic samples are reduced inside one cell)
+and T13 (protocol/holdout adaptation after seeing results).
+
+**Required falsifier/mitigation.** Freeze one of two valid regimes before confirmation. Prefer a
+one-shot primary analysis: assign one immutable confirmatory run/analysis ID, one frozen record set,
+and exactly one authorized primary statistical evaluation, with infrastructure reruns governed by a
+symmetric prospective rule that does not depend on scientific outcomes and preserves failed/aborted
+attempts in an audit ledger. If multiple outcome-bearing looks are scientifically intended, freeze a
+valid group-sequential/alpha-spending or anytime-valid procedure, including maximum looks or stopping
+boundaries and how Holm/multiple-control correction composes with the sequential rule. Never discard
+a failed complete look and restart at full alpha. Within-look Holm must not be represented as
+sequential error control.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -579,7 +614,8 @@ The confirmatory run should not start until all of the following are frozen and 
 21. evidence-bound final outcomes tying every solved cell to the exact challenge, proof/artifact digest, final-verifier identity/policy, and independently checkable PASS evidence;
 22. an experiment-level benchmark-content binding tying every scientific outcome to the exact benchmark lock, split contract, and any preprocessing/formalization transform identity;
 23. a prospectively justified effect-size/precision target and confirmatory problem count, with uncertainty reported alongside every paired comparison;
-24. a content-addressed common problem/prompt payload bound into every paired arm request/outcome, with arm-specific prompt differences restricted to a frozen causal-delta contract.
+24. a content-addressed common problem/prompt payload bound into every paired arm request/outcome, with arm-specific prompt differences restricted to a frozen causal-delta contract;
+25. a one-shot confirmatory analysis identity or a prospectively valid sequential/alpha-spending rule covering every outcome-bearing look/rerun, with failed/aborted runs preserved rather than selectively discarded.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
