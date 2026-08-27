@@ -367,6 +367,34 @@ or a validated architecture-specific FLOP estimator; prospectively match or stra
 distributions across the causal controls. For opaque hosted models, report the token/call vector as
 a proxy plus a frozen sensitivity bound rather than a complete-compute certificate.
 
+### T25 — Self-declared event manifests cannot certify complete cost (`CRITICAL` until dispatch provenance exists)
+
+**EVIDENCE — repository.** Proposed G1-007 / PR #2 closes an `ArmCostTrace` when observed event IDs
+and kinds exactly match the caller-supplied `expected_events` manifest and required measurements are
+present. The module does not bind that manifest to a trusted pre-execution dispatch ledger or prove
+that a cost-bearing operation omitted from the manifest never occurred; PR #2 explicitly leaves
+external preregistration/non-fabrication of expected events as an unresolved harness assumption.
+**EVIDENCE — external.** The OpenTelemetry tracing SDK specification states that a batching span
+processor has a bounded `maxQueueSize` and drops spans after that queue is full:
+<https://opentelemetry.io/docs/specs/otel/trace/sdk/>. OpenTelemetry's Collector internal-telemetry
+documentation separately exposes enqueue/send failure counters precisely so operators can detect
+telemetry that did not make it through the pipeline:
+<https://opentelemetry.io/docs/collector/internal-telemetry/>.
+
+**INFERENCE.** Exact `observed == expected` equality is not a provenance certificate when the same
+external harness chooses the expected set. A harness can omit an expensive model/verifier/tool call
+from both sides and still close a report; telemetry loss can create the same shape without fraud.
+Therefore the current contract can establish consistency with a supplied manifest, not complete
+cost of all executed work.
+
+**Required falsifier/mitigation.** Route every cost-bearing external operation through a trusted
+dispatch wrapper that allocates and durably records an append-only event ID *before* the side effect.
+At closure, reconcile that dispatch ledger against provider request IDs/verifier invocations and the
+cost-event trace, and require telemetry/export drop counters to be zero or otherwise fully
+accounted. Any unregistered egress, dropped telemetry, post-hoc manifest mutation, or unmatched
+dispatch must block scientific accounting. If that provenance boundary cannot be built, describe
+the result as telemetry-consistent accounting rather than a complete-cost certificate.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -388,7 +416,8 @@ The confirmatory run should not start until all of the following are frozen and 
 15. contract-equivalent intermediate representation, chain-length, stopping, parentage, and finalization semantics for the primary verified-chain/product-only causal pair;
 16. an explicit estimand for verifier-conditioned reject/retry: either matched as a nuisance variable or declared part of the treatment;
 17. an independent benchmark sampling unit plus cluster/family-aware inference when multiple items share a latent source/template;
-18. request-shape-aware model-compute accounting, or an explicit statement that the frozen cost construct is a token/call proxy rather than complete compute.
+18. request-shape-aware model-compute accounting, or an explicit statement that the frozen cost construct is a token/call proxy rather than complete compute;
+19. a trusted pre-execution dispatch ledger reconciled to all cost events/provider-runtime request evidence, with dropped or unregistered telemetry blocking closure.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
