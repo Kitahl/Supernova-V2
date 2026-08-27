@@ -289,7 +289,7 @@ a confirmatory causal claim, or require the conclusion to survive a frozen sensi
 
 ### T22 — Product-only alignment improved, but verifier-conditioned retry remains non-equivalent (`CRITICAL` for a pure gating claim)
 
-**EVIDENCE — repository.** Current proposed G1-005 / PR #12 now matches proposed G1-006 on the
+**EVIDENCE — repository.** Current merged G1-005 / PR #12 matches proposed G1-006 on the
 JSON-compatible product value domain, deterministic canonicalization/content identity, runtime
 product-ID choice, bounded dynamic chain length, and early finalization. This closes the earlier
 representation, predeclared-ID, and forced-full-chain portions of the control mismatch. However,
@@ -521,6 +521,37 @@ meaningful effect can be justified, narrow PASS to "statistically detectable pos
 under the frozen test" rather than treating it as evidence of a practically/scientifically material
 mechanism advantage.
 
+### T30 — Paired cells are not bound to the same problem/prompt payload (`CRITICAL`)
+
+**EVIDENCE — repository.** Current `OrdinaryRequest`, `PortfolioRequest`, `ProductOnlyRequest`, and
+`MultiFidelityRequest` each accept an independently supplied free-form `problem_statement` string.
+Their result validators bind request/result identity through `request_id`, `experiment_id`,
+`problem_id`, and `budget_id` (plus arm-specific attempt/product/stage identifiers), but do not bind
+or compare a digest of the exact problem text or rendered prompt payload. `OutcomeRecord` and
+`evaluate_experiment` likewise join paired cells by logical `problem_id` and arm without carrying a
+request/prompt digest. Proposed G1-006 / PR #5 is even narrower at its verification boundary:
+`VerifiedChain` is constructed from `problem_id`, and its verification subject commits to that
+logical ID plus product/lineage fields, not to the exact problem statement or model-visible prompt
+bytes. **EVIDENCE — external.** Sclar et al., ICLR 2024, found that meaning-preserving prompt-format
+changes can produce very large performance differences, including up to 76 accuracy points in their
+evaluated setting: <https://openreview.net/pdf?id=RIu5lyNXjT>.
+
+**INFERENCE.** A nominally paired `(problem_id, arm)` comparison can therefore count outcomes from
+non-identical causal inputs. One arm could receive a differently normalized theorem, altered premise
+order, additional hint, different wrapper/instruction text, truncated context, or other prompt
+projection while retaining the same `problem_id`. That can create or erase a measured arm effect
+without changing the intended verified-product mechanism. This remains possible even if T8 freezes a
+global prompt template and T28 binds the benchmark tree: neither currently proves that the exact
+per-cell model-visible problem/prompt payload is identical wherever the causal design requires it.
+
+**Required falsifier/mitigation.** Derive each benchmark problem payload once from the frozen content
+lock, canonicalize the exact model-visible problem statement plus common instruction/context wrapper,
+and assign a content digest before arm dispatch. Every arm request and scientific outcome should
+carry that digest; admission/evaluation should reject paired cells whose common-input digest differs.
+Arm-specific mechanism instructions should be represented as a separately frozen, explicit,
+allowlisted delta so only the intended causal treatment differs. Preserve the final rendered input
+(or an independently reconstructable digest/provenance record) for audit and replay.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -547,7 +578,8 @@ The confirmatory run should not start until all of the following are frozen and 
 20. an execution-isolation plan for shared provider quotas, caches, queues, backoff/retry state, and concurrent serving interference;
 21. evidence-bound final outcomes tying every solved cell to the exact challenge, proof/artifact digest, final-verifier identity/policy, and independently checkable PASS evidence;
 22. an experiment-level benchmark-content binding tying every scientific outcome to the exact benchmark lock, split contract, and any preprocessing/formalization transform identity;
-23. a prospectively justified effect-size/precision target and confirmatory problem count, with uncertainty reported alongside every paired comparison.
+23. a prospectively justified effect-size/precision target and confirmatory problem count, with uncertainty reported alongside every paired comparison;
+24. a content-addressed common problem/prompt payload bound into every paired arm request/outcome, with arm-specific prompt differences restricted to a frozen causal-delta contract.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm

@@ -258,7 +258,7 @@ Primary source: QuocViet Pham, Elvir Karimov, Andrey Galichin, and Ivan Oseledet
 supporting premises explicitly.
 
 **INFERENCE for Goal 1.** Intermediate representation is not neutral plumbing. This motivated the
-earlier G1-012 T22 concern. **Repository update:** current proposed G1-005 / PR #12 now aligns the
+earlier G1-012 T22 concern. **Repository update:** current merged G1-005 / PR #12 now aligns the
 product-only control with proposed G1-006 on JSON-compatible product values, deterministic
 canonicalization/content identity, dynamic product IDs, bounded chain length, and early
 finalization. Those representation/forced-chain portions of T22 are therefore no longer open. The
@@ -414,6 +414,23 @@ uninformative when the confirmatory set is too small for the effect sizes that m
 quantity, smallest meaningful margin or explicit no-margin interpretation, and sample-size/
 uncertainty plan should therefore be frozen before confirmation.
 
+### 29. Sclar et al. (ICLR 2024) — semantically equivalent prompt formats can materially change measured performance
+
+Primary source: Melanie Sclar, Yejin Choi, Yulia Tsvetkov, and Alane Suhr,
+*Quantifying Language Models' Sensitivity to Spurious Features in Prompt Design or: How I Learned to
+Start Worrying about Prompt Formatting*, ICLR 2024.
+<https://openreview.net/pdf?id=RIu5lyNXjT>
+
+**EVIDENCE.** Sclar et al. systematically vary meaning-preserving prompt formatting and report very
+large performance spreads in some settings, including up to 76 accuracy points for LLaMA-2-13B,
+with substantial sensitivity across tasks and models.
+
+**INFERENCE for Goal 1.** Logical `problem_id` and benchmark identity are not sufficient to establish
+paired-input equivalence. If arms can receive independently rendered problem statements or wrappers,
+a prompt-formatting difference can masquerade as a mechanism effect. The confirmatory protocol
+should bind every causal pair to one canonical common model-visible problem/prompt payload digest,
+with only a separately frozen, explicit treatment-specific prompt delta allowed to differ.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -435,7 +452,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - hosted API quota/cache/queue state can be shared across requests, so concurrent experimental arms can interfere operationally;
 - high-assurance verification practice binds a PASS to an exact artifact/challenge subject and verifier/policy evidence rather than trusting an unbound boolean;
 - reproducible dataset tracking binds evaluation data to a digest/fingerprint and source lineage rather than relying on a dataset name alone;
-- p-value threshold crossing does not by itself quantify effect magnitude or scientific importance, and sample-size justification should match the inferential target.
+- p-value threshold crossing does not by itself quantify effect magnitude or scientific importance, and sample-size justification should match the inferential target;
+- meaning-preserving prompt formatting can materially change benchmark performance, so exact model-visible input identity is a causal experimental variable.
 
 ## What these sources do **not** establish for Supernova
 
@@ -483,6 +501,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Shared-serving interference falsifier:** do conclusions persist when paired cells are isolated from shared provider quotas/caches/queues, or under a frozen counterbalanced execution/throttling policy with complete retry/rate-limit telemetry? (OpenAI/Anthropic rate-limit docs.)
 - **Outcome-evidence binding falsifier:** can every counted solved cell be replayed from an evidence-bound final-verifier record tied to the exact challenge and proof/artifact digest, with verifier/version/policy identity preserved? (Lean proof validation; SLSA VSA.)
 - **Benchmark-content binding falsifier:** can every scientific record be joined to the exact benchmark-lock root digest, split-contract identity, and preprocessing/formalization identity, with mismatches rejected rather than accepted under the same logical problem labels? (MLflow; Hugging Face Datasets.)
+- **Problem/prompt-payload identity falsifier:** are all paired cells bound to the same canonical common model-visible problem/prompt digest, with arm-specific prompt differences limited to a frozen explicit causal delta? (Sclar et al.)
 - **Effect-size/sensitivity falsifier:** is the paired solve-rate effect, a justified smallest meaningful margin or explicit no-margin interpretation, and the confirmatory sample-size/uncertainty target frozen before outcomes are observed? (ASA p-value statement; Lakens.)
 
 If those falsifiers are not implemented, a positive result should be described as performance of the
