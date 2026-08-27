@@ -35,7 +35,16 @@ mapping to equal that manifest exactly:
 - every expected event must have one observed telemetry event of the same kind;
 - no unexpected event may appear;
 - expected event IDs and observed event IDs must each be unique;
-- a manifest with zero expected events is invalid.
+- a manifest with zero expected events is invalid;
+- because a closed Goal-1 arm trace denotes an executed solver arm, the manifest must
+  contain at least one expected `model_call` attempt. An orchestration-only bookkeeping
+  sentinel cannot stand in for execution, and a skipped/not-run arm is incomplete rather
+  than a complete zero-cost arm.
+
+The final bullet is a Goal-1 execution invariant, not a generic claim that every future
+cost-accounting application must call a model. If a later protocol deliberately permits a
+zero-model-call arm, that must be represented prospectively with a different execution
+contract rather than silently weakening this closure rule after observing results.
 
 Closure is snapshot-based and non-polymorphic. `ArmCostTrace` snapshots both the supplied
 collections and each concrete `CostEvent` / `ExpectedCostEvent` value into fresh base-class
@@ -76,26 +85,26 @@ its required resource measurement cannot be recovered, the arm remains incomplet
 rather than receiving a free zero-cost attempt.
 
 Therefore an empty trace for an executed arm cannot be asserted complete and silently
-converted to exact zero cost. If five callers submit empty traces with
-`accounting_complete=true`, report closure fails because the expected telemetry is
-missing. A measured zero is still representable, but it needs both coverage evidence
-and known measurements: for example, an expected orchestration event observed with
-`milliseconds=0` contributes zero while proving that the accounting event was actually
-present.
+converted to exact zero cost. The same is true for a synthetic orchestration-only
+sentinel: it is rejected because it does not identify any expected model attempt. Every
+closed Goal-1 arm therefore has `model_calls >= 1`. Individual token or elapsed-time
+dimensions may still be zero when zero was actually observed, but an executed arm cannot
+produce the all-zero `CompleteCost` vector.
 
 The execution harness must construct the expected-event manifest from the planned or
 issued operations rather than infer it from telemetry after the fact. For dynamic
 retries, the retry event must be registered in the manifest at dispatch, before its
 telemetry is collected. The current cost module can deterministically verify manifest
-coverage and reject typed unknown measurements; it cannot by itself prove that an
-external harness preregistered the manifest at the correct time or that a harness did
-not fabricate an observed zero. That provenance requirement must be frozen and enforced
-in the experiment runtime before scientific use.
+coverage, reject orchestration-only pseudo-execution, and reject typed unknown
+measurements; it cannot by itself prove that an external harness preregistered the
+manifest at the correct time or that a harness did not fabricate an observed zero or
+omit an issued retry from the manifest. That provenance requirement must be frozen and
+enforced in the experiment runtime before scientific use.
 
 A `CompleteCostReport` closes only when **exactly all five arms** are present and every
-arm satisfies the close marker, exact manifest coverage, and complete resource
-measurements: `ordinary`, `portfolio`, `product_only`, `multi_fidelity`, and
-`verified_chain`.
+arm satisfies the close marker, exact manifest coverage, the executed-arm model-attempt
+invariant, and complete resource measurements: `ordinary`, `portfolio`, `product_only`,
+`multi_fidelity`, and `verified_chain`.
 
 ## Fair-budget rule: componentwise, not weighted
 
@@ -136,7 +145,10 @@ environment. At minimum, the experimental protocol must freeze and record:
   freezes or dispatch-registers expected events, how dropped telemetry is detected, and
   how unavailable quantities are represented as typed unknowns rather than zero. If the
   provider/runtime cannot report a required quantity, that arm's accounting remains
-  incomplete.
+  incomplete;
+- execution semantics for skipped/no-op arms. The present Goal-1 contract treats every
+  closed arm as an executed solver arm with at least one issued model call. A skipped arm
+  is not a valid complete-cost observation and must remain incomplete/missing.
 
 Under heterogeneous models, hardware, verifier implementations, or tool access, the raw
 vector can still be reported, but cross-arm fairness is not established merely by this
@@ -164,9 +176,9 @@ from supernova_goal1.cost import (
 
 traces = []
 for arm in Arm:
-    event_id = f"{arm.value}-driver"
-    events = (CostEvent.orchestration(event_id, milliseconds=0),)
-    expected = (ExpectedCostEvent.orchestration(event_id),)
+    event_id = f"{arm.value}-attempt"
+    events = (CostEvent.model_call(event_id, input_tokens=0, output_tokens=0),)
+    expected = (ExpectedCostEvent.model_call(event_id),)
 
     if arm is Arm.ORDINARY:
         events = (
@@ -194,7 +206,7 @@ ceiling = CompleteCost(16, 200_000, 100_000, 600_000, 600_000)
 assert report.within_budget(ceiling)[Arm.ORDINARY]
 ```
 
-The zero-valued orchestration events in the example are explicit coverage evidence with
-known measurements, not permission to use an empty trace or to substitute zero for
-unknown telemetry. The example demonstrates the accounting API only. It is not an
+The zero-token model events in the example are explicit model-attempt coverage with known
+measurements; they contribute one `model_calls` unit and therefore do not create a
+complete all-zero arm. The example demonstrates the accounting API only. It is not an
 instruction to freeze the bootstrap ceiling or any scalar exchange rate.
