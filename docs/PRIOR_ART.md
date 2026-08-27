@@ -2,10 +2,10 @@
 
 Ticket: `G1-012` (`EXT01`)
 
-This is an independent literature audit for the Goal 1 claim. It distinguishes **EVIDENCE**
-(what a cited source directly demonstrates or states) from **INFERENCE** (what that means for
-Supernova V2). It is not a claim of novelty and it does not establish that any cited system is a
-fair experimental control without reproducing its exact setup.
+This is an independent literature audit for the Goal 1 claim. It separates **EVIDENCE** (what a
+cited primary/direct source demonstrates or states) from **INFERENCE** (what that means for
+Supernova V2). It is not a novelty certificate and it does not assume any cited system is a fair
+control without reproducing the relevant setup.
 
 ## Current Goal 1 claim
 
@@ -13,11 +13,11 @@ fair experimental control without reproducing its exact setup.
 independently verified intermediate products solves more problems than ordinary, portfolio,
 product-only, and multi-fidelity controls under a frozen complete-cost budget.
 
-**INFERENCE.** The scientifically defensible novelty target should be narrower than "verification
-helps reasoning" or "verified intermediate lemmas help theorem proving." Both ideas already have
-strong prior art. A potentially distinctive contribution would instead be a prospective causal
-comparison that isolates *verify-before-consume chaining* from decomposition, verifier feedback,
-search, and test-time compute while enforcing genuinely matched complete-cost conditions.
+**INFERENCE.** The defensible novelty target is narrower than "verification helps reasoning" or
+"verified intermediate lemmas help theorem proving." Those mechanism classes already have strong
+prior art. A potentially distinctive contribution would be a prospective causal comparison that
+isolates *verify-before-consume* from decomposition, verifier feedback, adaptive search, retry,
+representation, and test-time compute under genuinely matched conditions.
 
 ## Nearest direct prior art
 
@@ -26,60 +26,46 @@ search, and test-time compute while enforcing genuinely matched complete-cost co
 Primary source: Karl Cobbe et al., *Training Verifiers to Solve Math Word Problems*.
 <https://arxiv.org/abs/2110.14168>
 
-**EVIDENCE.** The paper generates many candidate solutions at test time and trains a verifier to
-rank/select among them. It reports that verification improves GSM8K performance and that verifier
-scaling can be effective.
+**EVIDENCE.** The paper generates many candidate solutions and uses a trained verifier to rank or
+select them, improving GSM8K answer selection.
 
-**INFERENCE for Goal 1.** A portfolio of independent attempts plus verifier-based selection is a
-strong and directly relevant control. If the verified-chain treatment receives intermediate
-verifier access while the portfolio is forced to select without an equivalent verifier budget, the
-comparison does not isolate chaining. Supernova should therefore distinguish "verification as
-selection" from "verification followed by downstream consumption."
+**INFERENCE for Goal 1.** Verification-as-selection is already a strong baseline. A portfolio denied
+comparable verifier access is too weak to isolate downstream verified-product consumption.
 
 ### 2. Lightman et al. (2023) — process supervision
 
 Primary source: Hunter Lightman et al., *Let's Verify Step by Step*.
 <https://arxiv.org/abs/2305.20050>
 
-**EVIDENCE.** The paper compares outcome supervision with process supervision that provides
-feedback on intermediate reasoning steps, reporting stronger results from process supervision on a
-representative subset of MATH and releasing PRM800K.
+**EVIDENCE.** The paper studies feedback on intermediate reasoning steps and reports stronger process
+supervision than outcome supervision in its evaluated setting.
 
-**INFERENCE for Goal 1.** Intermediate feedback is already known to be useful in at least some math
-settings. This paper does not prove Supernova's proposed mechanism because the feedback is a
-learned reward/process-supervision setup rather than a frozen formal kernel that mints consumable
-verified products. It does, however, make a no-intermediate-feedback control too weak to support a
-claim that *verification itself* caused any observed gain.
+**INFERENCE for Goal 1.** Intermediate feedback itself can be capability-relevant. A no-feedback
+control cannot establish that a gain was caused specifically by a consumable verified product.
 
 ### 3. LeanDojo (2023) — reproducible Lean interaction and split discipline
 
 Primary source: Kaiyu Yang et al., *LeanDojo: Theorem Proving with Retrieval-Augmented Language
-Models*, NeurIPS 2023 Datasets and Benchmarks.
+Models*, NeurIPS 2023.
 <https://proceedings.neurips.cc/paper_files/paper/2023/file/4441469427094f8873d0fecb0c4e1cee-Paper-Datasets_and_Benchmarks.pdf>
 
-**EVIDENCE.** LeanDojo provides an open Lean environment for programmatic theorem proving,
-retrieval-augmented proving, and a benchmark including a difficult split intended to test
-generalization to theorems that rely on novel premises.
+**EVIDENCE.** LeanDojo provides a reproducible Lean environment and a benchmark split designed to
+probe generalization to novel premises.
 
-**INFERENCE for Goal 1.** Formal-kernel interaction and reproducible proof environments are mature
-prior-art components, not unique Supernova mechanisms. LeanDojo's split design is also a warning
-that random theorem splits can overstate generalization when premise/library overlap remains high.
-Goal 1 should freeze its proof-library commit and contamination/generalization split explicitly.
+**INFERENCE for Goal 1.** Formal-kernel interaction is prior art, and random theorem splits can be
+weak when premise/library overlap remains high. Goal 1 should freeze library and retrieval scope.
 
-### 4. AlphaGeometry (2024) — neuro-symbolic iterative reasoning with compute-matched baselines
+### 4. AlphaGeometry (2024) — neuro-symbolic iteration with compute-aware comparison
 
 Primary source: Trieu H. Trinh et al., *Solving olympiad geometry without human demonstrations*,
 Nature 625 (2024).
 <https://www.nature.com/articles/s41586-023-06747-5>
 
-**EVIDENCE.** AlphaGeometry combines a neural language model that proposes auxiliary constructions
-with a symbolic deduction engine. The paper reports ablations and explicitly describes matching a
-strong baseline's test-time compute to AlphaGeometry for comparison.
+**EVIDENCE.** AlphaGeometry combines neural proposal generation with symbolic deduction and reports
+ablations/compute-aware comparisons.
 
-**INFERENCE for Goal 1.** Alternating learned proposals with trusted symbolic reasoning is established
-prior art. More importantly for Supernova, AlphaGeometry provides precedent for treating test-time
-compute matching as part of a meaningful systems comparison. A common maximum ceiling alone is not
-the same thing as a compute-matched control.
+**INFERENCE for Goal 1.** Alternating learned proposals with trusted symbolic reasoning is not new.
+The stronger lesson is that test-time compute matching belongs in the scientific comparison.
 
 ### 5. Snell et al. (2024) — test-time compute is itself a treatment variable
 
@@ -87,75 +73,59 @@ Primary source: Charlie Snell et al., *Scaling LLM Test-Time Compute Optimally c
 than Scaling Model Parameters*.
 <https://arxiv.org/abs/2408.03314>
 
-**EVIDENCE.** The paper studies search against process-based verifiers and adaptive revision under
-fixed inference-compute budgets. It finds that the effectiveness of test-time compute strategies
-depends on problem difficulty and reports substantial efficiency gains from adaptive allocation.
+**EVIDENCE.** The work studies search/revision under inference-compute budgets and finds that
+allocation strategy materially affects performance and efficiency.
 
-**INFERENCE for Goal 1.** Search depth, adaptive retries, verifier queries, and residual-budget
-allocation cannot be treated as incidental implementation details. If the verified-chain arm has a
-stronger adaptive allocation policy than its controls, the resulting effect mixes mechanism with
-inference-time optimization. Goal 1 needs actual cost matching or a preregistered cost-performance
-frontier.
+**INFERENCE for Goal 1.** Search depth, retries, and residual-budget policy cannot be treated as
+incidental when comparing a verified chain with controls.
 
-### 6. LiveBench (2024) — contamination-resistant evaluation design
+### 6. LiveBench (2024) — contamination-limited evaluation design
 
 Primary source: Colin White et al., *LiveBench: A Challenging, Contamination-Limited LLM Benchmark*.
 <https://arxiv.org/abs/2406.19314>
 
-**EVIDENCE.** LiveBench was designed around frequently updated questions from recent sources and
-objective ground-truth scoring to reduce contamination and judge bias.
+**EVIDENCE.** LiveBench uses frequently refreshed recent questions and objective scoring to reduce
+contamination and judge-bias risks.
 
-**INFERENCE for Goal 1.** A fixed public math benchmark can become weak evidence for modern models
-when training-data provenance is unavailable. Supernova should not call a benchmark
-"contamination-free" merely because its test files are absent from this repository. Fresh/hidden
-problems, release-time separation, or an explicit residual-risk statement are stronger options.
+**INFERENCE for Goal 1.** Absence of benchmark files from this repository is not evidence of absence
+from model training. Fresh/hidden or post-cutoff data are stronger confirmatory evidence.
 
-### 7. Seed-Prover (2025) — lemma-style proving with Lean feedback and proved lemmas
+### 7. Seed-Prover (2025) — Lean feedback and proved lemmas used iteratively
 
 Primary source: Luoxin Chen et al., *Seed-Prover: Deep and Broad Reasoning for Automated Theorem
 Proving*.
 <https://arxiv.org/abs/2507.23726>
 
-**EVIDENCE.** Seed-Prover is a lemma-style whole-proof reasoning system. Its abstract explicitly
-states that it iteratively refines proofs using Lean feedback, proved lemmas, and self-summarization,
-with multiple test-time strategies for deep and broad reasoning.
+**EVIDENCE.** Seed-Prover iteratively refines proof search using Lean feedback, proved lemmas, and
+multiple test-time strategies.
 
-**INFERENCE for Goal 1.** This is close prior art to "generate an intermediate lemma, formally check
-it, then use the proved result downstream." Supernova cannot defensibly claim that this broad
-mechanism is new. Its differentiator, if experimentally supported, must lie in the rigor of the
-controlled causal comparison, the exact verify-before-consume contract, or another narrower
-mechanistic distinction.
+**INFERENCE for Goal 1.** "Generate a lemma, formally check it, use it downstream" is already close
+prior art. Supernova's differentiator must be a narrower controlled causal result or another exact
+contractual distinction.
 
-### 8. Prover Agent (2025; later revisions through 2026) — formally proved auxiliary lemmas used in final synthesis
+### 8. Prover Agent (2025/2026) — formally proved auxiliary lemmas used in final synthesis
 
 Primary source: Kaito Baba et al., *Prover Agent: An Agent-Based Framework for Formal Mathematical
 Proofs*.
 <https://arxiv.org/abs/2506.19923>
 
-**EVIDENCE.** Prover Agent coordinates informal reasoning, a formal prover, and Lean feedback. It
-generates auxiliary lemmas, proves them formally, and uses successfully proved lemmas to synthesize
-the final proof.
+**EVIDENCE.** Prover Agent coordinates informal reasoning, a formal prover, and Lean feedback,
+proving auxiliary lemmas and using the proved lemmas in final synthesis.
 
-**INFERENCE for Goal 1.** This is one of the closest published/preprint neighbors to the proposed
-verified-chain concept. A Goal 1 result cannot establish novelty merely by showing that formally
-verified intermediate lemmas can improve theorem proving. A stronger contribution would be to show
-an incremental effect under matched models, verifier access, decomposition/search capability, and
-complete cost, with ablations that distinguish chaining from ordinary verifier-guided refinement.
+**INFERENCE for Goal 1.** Broad novelty around verified intermediate lemmas is untenable. A useful
+result would have to isolate an incremental effect against strong verifier/decomposition controls.
 
-### 9. DreamProver (2026) — reusable lemma discovery and transfer
+### 9. DreamProver (2026) — transferable lemma-library evolution
 
 Primary source: Youyuan Zhang et al., *DreamProver: Evolving Transferable Lemma Libraries via a
 Wake-Sleep Theorem-Proving Agent*.
 <https://arxiv.org/abs/2604.26311>
 
-**EVIDENCE.** DreamProver alternates proof search with abstraction/refinement of candidate lemmas to
-build a transferable lemma library used on unseen theorems.
+**EVIDENCE.** DreamProver builds and reuses a transferable lemma library across theorem-solving
+episodes.
 
-**INFERENCE for Goal 1.** DreamProver is more about cross-problem learning and reusable libraries
-than a within-problem chain, but it matters for leakage boundaries. If Supernova lets verified
-products persist across benchmark problems, it moves toward a transfer/library-learning treatment
-and away from the current "within one problem" hypothesis. Goal 1 should therefore reset learned
-product state between problems.
+**INFERENCE for Goal 1.** Cross-problem product reuse changes the estimand from a within-problem
+mechanism to transfer/library learning. Goal 1 should reset learned product state between problems.
 
 ### 10. Goedel-Architect (2026) — verified lemma dependency graphs and refinement
 
@@ -163,15 +133,12 @@ Primary source: Jui-Hui Chung et al., *Goedel-Architect: Streamlining Formal The
 Blueprint Generation and Refinement*.
 <https://arxiv.org/abs/2606.06468>
 
-**EVIDENCE.** Goedel-Architect generates a dependency graph of formal definitions and lemmas leading
-to the target theorem, dispatches Lean provers to close lemma nodes, and uses failures to refine the
-global blueprint.
+**EVIDENCE.** Goedel-Architect generates/refines dependency graphs of formal definitions and lemmas
+and dispatches provers to close graph nodes.
 
-**INFERENCE for Goal 1.** By 2026, formal theorem-proving prior art includes not only serial
-lemma-style reasoning but explicit verified dependency graphs with adaptive refinement. That makes
-"verified intermediate structure" a crowded mechanism class. Supernova's serial chain may still be
-scientifically useful, but its value must be demonstrated relative to strong graph/decomposition
-and verifier-guided controls rather than framed as an unprecedented architecture.
+**INFERENCE for Goal 1.** By 2026, verified intermediate structure includes adaptive graph-based
+systems, not only serial chains. A serial verified chain should be compared against strong
+verifier-guided decomposition/search rather than described as unprecedented.
 
 ### 11. Setlur et al. (ICML 2025) — verifier-based scaling is mechanistically different
 
@@ -179,110 +146,83 @@ Primary source: Amrith Setlur et al., *Scaling Test-Time Compute Without Verific
 Suboptimal*, ICML 2025.
 <https://proceedings.mlr.press/v267/setlur25a.html>
 
-**EVIDENCE.** The paper gives theoretical and empirical arguments that verifier-based search/RL and
-verifier-free approaches can scale differently even under fixed compute/data budgets, with the gap
-depending on the underlying distribution of solution traces.
+**EVIDENCE.** The paper gives theoretical and empirical evidence that verifier-based and verifier-free
+inference strategies can scale differently even under fixed compute/data budgets.
 
-**INFERENCE for Goal 1.** Verifier access is not a cosmetic implementation detail. If the treatment
-gets a different verification channel, frequency, or feedback semantics from a control, a measured
-gain can be attributable to verifier-guided search rather than to downstream consumption of a
-verified product. This strengthens the requirement for a verifier-matched non-chaining control.
+**INFERENCE for Goal 1.** Verifier access/frequency/feedback semantics are experimental variables and
+need matched controls before attributing a gain to verified-product consumption.
 
-### 12. Singhi et al. (2025) — solver-versus-verifier compute tradeoff
+### 12. Singhi et al. (2025) — solve-versus-verify compute tradeoff
 
 Primary source: Nishad Singhi et al., *When To Solve, When To Verify: Compute-Optimal Problem Solving
 and Generative Verification for LLM Reasoning*.
 <https://arxiv.org/abs/2504.01005>
 
-**EVIDENCE.** The paper compares spending a fixed inference budget on additional solution generation
-versus generative verification and reports that generative verification can require substantially
-more compute to match self-consistency at practical budgets.
+**EVIDENCE.** The paper compares spending inference budget on additional solutions versus generative
+verification and finds materially different compute requirements.
 
-**INFERENCE for Goal 1.** "Verifier milliseconds" cannot be treated as a secondary resource while
-model-generation tokens carry the scientific budget. Verification can itself dominate inference
-cost. A fair portfolio control should be allowed to spend a matched total inference budget on more
-solutions if the chain spends that budget on repeated verification.
+**INFERENCE for Goal 1.** Generator and verifier compute belong in one complete-cost comparison; a
+control should be allowed to spend matched total resources on its strongest legal strategy.
 
-### 13. MathArena (NeurIPS 2025) — real-time math evaluation and contamination evidence
+### 13. MathArena (2025) — real-time math evaluation and contamination evidence
 
 Primary source: Mislav Balunović et al., *MathArena: Evaluating LLMs on Uncontaminated Math
-Competitions*, NeurIPS 2025 Datasets and Benchmarks.
+Competitions*, NeurIPS 2025.
 <https://proceedings.neurips.cc/paper_files/paper/2025/file/1d27c01ebd3e3aebe226b44fc970d803-Paper-Datasets_and_Benchmarks_Track.pdf>
 
-**EVIDENCE.** MathArena evaluates models on newly released competition problems and reports strong
-signs of contamination in AIME 2024 while using post-release timing to reduce memorization risk on
-new competitions.
+**EVIDENCE.** MathArena evaluates newly released competition problems and reports contamination
+signals on older public competitions.
 
-**INFERENCE for Goal 1.** For current frontier models, a familiar public math benchmark is weak
-confirmatory evidence even if Supernova itself never stored the answers. Release-time separation
-between the model and benchmark is a stronger leakage control. This also suggests that any
-benchmark selected for Goal 1 should record problem publication dates and frozen model dates.
+**INFERENCE for Goal 1.** Record model/problem release dates and prefer post-model-release
+confirmatory items when feasible.
 
-### 14. Ammanamanchi, Bhat & Biderman (2026) — formal benchmark defects survive kernel checking
+### 14. Ammanamanchi, Bhat & Biderman (2026) — kernel-valid can still be benchmark-invalid
 
 Primary source: Pawan Sasanka Ammanamanchi, Siddharth Bhat, and Stella Biderman, *Faults in Our
 Formal Benchmarking: Dataset Defects and Evaluation Failures in Lean Theorem Proving*.
 <https://arxiv.org/abs/2606.29493>
 
-**EVIDENCE.** The authors audit five Lean theorem-proving benchmarks and report thousands of findings,
-including hundreds of mechanically certified defects such as vacuous theorems, counterexamples,
-and unsound axioms. Their central point is that kernel checking proves the formal statement, not
-that the statement faithfully captures the intended informal problem.
+**EVIDENCE.** The authors report thousands of findings in Lean benchmarks, including mechanically
+certified vacuity, counterexample, and unsafe-axiom defects.
 
-**INFERENCE for Goal 1.** Formal proof replay is necessary but not sufficient for construct validity.
-A benchmark-quality audit must be a separate gate. Otherwise an apparently superior verified-chain
-arm could exploit weakened, malformed, or degenerate formalizations and still obtain valid kernel
-proofs.
+**INFERENCE for Goal 1.** Formal proof replay is necessary but not sufficient for construct validity;
+benchmark-fidelity auditing must be a separate gate.
 
 ### 15. Kwok et al. (2026) — verification as a distinct scaling axis
 
 Primary source: Jacky Kwok et al., *LLM-as-a-Verifier: A General-Purpose Verification Framework*.
 <https://arxiv.org/abs/2607.05391>
 
-**EVIDENCE.** The paper explicitly frames verification as a scaling axis and uses fine-grained
-feedback for agentic tasks.
+**EVIDENCE.** The paper treats verification and fine-grained feedback as an agentic/scaling axis.
 
-**INFERENCE for Goal 1.** The information content of verifier responses must be part of the control
-contract. A treatment receiving fine-grained verifier feedback is not fairly compared with an arm
-receiving only a binary terminal score, even if both invoke a component called a "verifier."
+**INFERENCE for Goal 1.** Feedback bandwidth is part of treatment capability. "Both arms have a
+verifier" is not enough if one receives richer or more frequent information.
 
-### 16. Chen, Zaharia & Zou (2023) plus provider versioning docs — hosted-model identity can move over time
+### 16. Chen, Zaharia & Zou plus provider versioning docs — hosted-model identity can move
 
 Primary sources: Lingjiao Chen, Matei Zaharia, and James Zou, *How is ChatGPT's behavior changing
 over time?* <https://arxiv.org/abs/2307.09009>; Google, *Gemini API — Models*.
 <https://ai.google.dev/gemini-api/docs/models>
 
-**EVIDENCE.** Chen et al. compare March and June 2023 versions of GPT-3.5/GPT-4 and report substantial,
-task-dependent behavior changes over a short interval. Google's current Gemini documentation makes
-the operational versioning hazard explicit: specific stable model names are intended to be stable,
-whereas `latest` aliases are hot-swapped to newer releases.
+**EVIDENCE.** Chen et al. measured task-dependent behavior changes across hosted GPT versions.
+Google's documentation distinguishes specific stable names from moving `latest` aliases.
 
-**INFERENCE for Goal 1.** Model family/name equality is not enough to establish treatment equality
-across time. If arms are executed in separate temporal blocks against a moving hosted endpoint, a
-provider update can be confounded with arm identity. Confirmatory execution should therefore use a
-specific immutable/stable model version where available, record returned model identity and trusted
-call time, and interleave/counterbalance paired arms so service drift cannot systematically favor one
-mechanism.
+**INFERENCE for Goal 1.** Arm execution time must not be confounded with provider/model drift. Use
+stable versions where possible and interleave/counterbalance paired arms.
 
-### 17. Yuan et al. (NeurIPS 2025) and Ouyang et al. — deterministic settings do not guarantee reproducible inference
+### 17. Yuan et al. (NeurIPS 2025) and Ouyang et al. — deterministic settings do not guarantee reproducibility
 
 Primary sources: Jiayi Yuan et al., *Understanding and Mitigating Numerical Sources of
-Nondeterminism in LLM Inference*, NeurIPS 2025.
+Nondeterminism in LLM Inference*.
 <https://proceedings.neurips.cc/paper_files/paper/2025/hash/f80094a824ba5912d4a2de169c404a40-Abstract-Conference.html>;
 Shuyin Ouyang et al., *An Empirical Study of the Non-determinism of ChatGPT in Code Generation*.
 <https://arxiv.org/abs/2308.02828>
 
-**EVIDENCE.** Yuan et al. show that batch size, GPU count, GPU version, and numerical precision can
-change generated outputs and benchmark accuracy even under greedy decoding, with particularly
-large effects for reasoning models. Ouyang et al. report substantial run-to-run variation in
-ChatGPT code generation and explicitly find that temperature zero does not guarantee deterministic
-outputs.
+**EVIDENCE.** These works show that backend/system factors and run-to-run variation can change model
+outputs even under nominally deterministic settings.
 
-**INFERENCE for Goal 1.** A frozen seed and nominally deterministic decoding are not sufficient
-experimental controls. Self-hosted confirmatory runs should freeze the serving/hardware/precision
-stack; hosted runs should treat backend execution as a residual uncertainty source, randomize paired
-arm order, and use a prospectively frozen replication/sensitivity plan. Otherwise backend execution
-noise can be misread as a mechanism effect even when the advertised model version never changes.
+**INFERENCE for Goal 1.** Self-hosted runtime fingerprints should be frozen; hosted runs need
+randomized paired order plus a prospective replication/sensitivity policy.
 
 ### 18. Spiesberger et al. (2026) — semantic duplicates defeat lexical decontamination
 
@@ -290,86 +230,100 @@ Primary source: Ari Spiesberger et al., *Soft Contamination Means Benchmarks Tes
 Generalization*.
 <https://arxiv.org/abs/2602.12413>
 
-**EVIDENCE.** The paper studies semantic duplicates that escape ordinary n-gram decontamination. In
-an OLMo3 training-corpus audit it reports semantic duplicates for 78% of CodeForces problems and
-exact duplicates for 50% of ZebraLogic, and it experimentally finds that training on semantic
-duplicates can improve benchmark performance, including performance on otherwise held-out items
-from the same benchmark.
+**EVIDENCE.** The paper shows semantic duplicates can escape n-gram filtering and can measurably
+improve benchmark performance.
 
-**INFERENCE for Goal 1.** Exact-hash, exact-string, or n-gram filtering is not a sufficient basis for
-calling a public benchmark uncontaminated. Even an unseen item can share enough semantic structure
-with training material to weaken an out-of-distribution reasoning claim. Goal 1 therefore needs a
-semantic/family-level contamination policy or fresh post-cutoff evidence rather than treating
-lexical decontamination as a certificate.
+**INFERENCE for Goal 1.** Exact-match or n-gram decontamination is not a clean certificate. Family-
+level/semantic overlap or post-cutoff data should be considered.
 
-### 19. Sun et al. (2025) — hidden reasoning tokens are an auditability problem for opaque API cost
+### 19. Sun et al. (2025) — hidden reasoning tokens are an auditability problem
 
 Primary source: Guoheng Sun et al., *CoIn: Counting the Invisible Reasoning Tokens in Commercial
 Opaque LLM APIs*.
 <https://arxiv.org/abs/2505.13778>
 
-**EVIDENCE.** The paper identifies a transparency problem in commercial reasoning APIs: users may be
-charged for hidden reasoning tokens while the underlying traces are concealed, and it proposes a
-third-party auditing protocol to verify reported hidden-token quantities and detect token-count
-inflation.
+**EVIDENCE.** The paper identifies the difficulty of independently auditing hidden reasoning-token
+usage in commercial APIs and proposes a third-party auditing mechanism.
 
-**INFERENCE for Goal 1.** A complete-cost rule based on hosted provider counters can still have a
-measurement-validity limitation. If hidden reasoning is a large and arm-dependent cost component,
-reported token usage is evidence about provider-reported consumption, not independently observed
-compute. Confirmatory claims should either use auditable/self-hosted telemetry or preserve this
-opacity as an explicit uncertainty and sensitivity bound.
+**INFERENCE for Goal 1.** Provider-reported usage is not automatically independently verified
+complete cost. Preserve raw telemetry and uncertainty bounds or prefer auditable inference.
 
-### 20. TheoremBench (2026) — explicit supporting premises are a capability-relevant representation change
+### 20. TheoremBench (2026) — intermediate representation/premises affect capability
 
 Primary source: QuocViet Pham, Elvir Karimov, Andrey Galichin, and Ivan Oseledets,
 *TheoremBench: Evaluating LLMs on Theorem Proving in Formal Mathematics*.
 <https://arxiv.org/abs/2606.09450>
 
-**EVIDENCE.** TheoremBench provides aligned plain-main and premised forms of theorem families. In the
-premised form, relevant prior results are exposed explicitly as premise binders. The paper reports
-that these explicit premises substantially improve final-theorem performance for several
-Lean4-capable provers and also change token-efficiency/proof-structure behavior.
+**EVIDENCE.** TheoremBench reports materially different proving performance when aligned tasks expose
+supporting premises explicitly.
 
-**INFERENCE for Goal 1.** Intermediate representation and premise exposure are not neutral plumbing.
-If the verified-chain arm and the product-only causal control use different payload types,
-serialization, product-count rules, or finalization semantics, those differences can change the
-solver's effective information interface independently of verification. The strongest product-only
-control should therefore share the treatment's intermediate-product representation and execution
-contract, with the verification gate itself removed or replaced by the prospectively specified
-non-gating condition.
+**INFERENCE for Goal 1.** Intermediate representation is not neutral plumbing. This motivated the
+earlier G1-012 T22 concern. **Repository update:** current proposed G1-005 / PR #12 now aligns the
+product-only control with proposed G1-006 on JSON-compatible product values, deterministic
+canonicalization/content identity, dynamic product IDs, bounded chain length, and early
+finalization. Those representation/forced-chain portions of T22 are therefore no longer open. The
+remaining mismatch is verifier-conditioned reject/discard/retry behavior.
+
+### 21. Leanabell-Prover-V2 (2025) — verifier-conditioned correction is itself a capability
+
+Primary source: Xingguang Ji et al., *Leanabell-Prover-V2: Verifier-integrated Reasoning for Formal
+Theorem Proving via Reinforcement Learning*.
+<https://arxiv.org/abs/2507.08649>
+
+**EVIDENCE.** Leanabell-Prover-V2 uses multi-turn Lean verifier feedback, including success/error
+signals, to correct proof trajectories and reports pass@128 improvements over its starting provers.
+
+**INFERENCE for Goal 1.** A `FAIL -> discard -> retry` path is not a harmless implementation detail.
+Verifier-conditioned retry can change search capability. If Supernova wants a *pure downstream
+verify-before-consume* claim, a control must match verifier feedback/attempt budget without making
+its downstream consumption decision depend on PASS/FAIL. If retry is intentionally part of the
+treatment, the scientific claim should explicitly include verified-gated search.
+
+### 22. Eliasziw & Donner (1991) and Gönen (2004) — ordinary McNemar requires independent matched pairs
+
+Primary sources: Michael Eliasziw and Allan Donner, *Application of the McNemar test to
+non-independent matched pair data*.
+<https://onlinelibrary.wiley.com/doi/10.1002/sim.4780101211>; Mithat Gönen, *Sample size and power for
+McNemar's test with clustered data*.
+<https://pubmed.ncbi.nlm.nih.gov/15236431/>.
+
+**EVIDENCE.** Eliasziw and Donner explicitly identify mutual independence from matched pair to
+matched pair as an assumption of ordinary McNemar and develop an adjustment for non-independent
+pairs. Gönen likewise treats clustered paired-binary data as requiring adjusted McNemar inference.
+
+**INFERENCE for Goal 1.** `GOAL1.json` requires Holm-corrected exact paired tests, while the current
+evaluator and proposed G1-010 reduce all benchmark items to aggregate discordant counts with no
+cluster/family ID. If the confirmatory benchmark contains theorem-family siblings, generated
+variants, or other shared-source items, ordinary problem-level McNemar can overstate the effective
+sample size. Robustness variants should not silently count as independent n. Freeze the independent
+sampling unit and use family-level or cluster-aware inference when needed.
 
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
 
-- verifier-based candidate selection can improve mathematical answer selection (Cobbe et al.);
-- intermediate/process feedback can improve mathematical reasoning in some settings (Lightman et al.);
-- LLMs can interact productively with formal proof assistants and retrieval systems (LeanDojo);
-- neural proposal plus symbolic/formal reasoning is established (AlphaGeometry);
-- test-time compute allocation materially affects measured performance (Snell et al.);
-- verifier-based and verifier-free inference strategies can have different scaling behavior (Setlur et al.);
-- allocating inference compute to verification versus additional solving can materially change efficiency (Singhi et al.);
-- contamination-resistant benchmark design requires more than hiding local test files (LiveBench; MathArena);
-- modern theorem provers already generate/refine lemmas and use formally proved intermediate facts downstream (Seed-Prover, Prover Agent, Goedel-Architect);
-- reusable lemma discovery can create cross-problem state and transfer effects (DreamProver);
-- a kernel-accepted Lean proof does not by itself establish that the benchmark statement faithfully encodes the intended problem (Ammanamanchi et al.);
-- fine-grained verification feedback can itself be an agentic capability channel (Kwok et al.);
-- hosted model services can change over time, and moving model aliases can silently change the data-generating system (Chen et al.; Gemini model-version documentation);
-- backend execution details can induce output and accuracy variation even under nominally deterministic decoding (Yuan et al.; Ouyang et al.);
-- semantic duplicates can survive lexical decontamination and measurably improve benchmark performance (Spiesberger et al.);
-- hidden reasoning-token usage in opaque commercial APIs can require independent auditing if it is used as a scientific cost variable (Sun et al.);
-- explicit supporting premises can materially change formal-prover performance, so intermediate representation is itself an experimental variable (TheoremBench).
+- verifier-based candidate selection and process feedback can improve reasoning/search;
+- formal proof assistants can be used interactively and intermediate proved lemmas are established prior art;
+- adaptive test-time compute and solve-versus-verify allocation materially affect performance and cost;
+- fresh/post-release benchmarks reduce but do not eliminate contamination risk;
+- formal benchmark statements can be defective even when kernel-checkable;
+- verifier feedback richness/frequency is itself a capability channel;
+- hosted model identity and backend execution can drift or vary;
+- semantic duplicates can defeat lexical decontamination;
+- opaque hidden-reasoning telemetry can limit independent cost auditability;
+- intermediate representation/premise exposure can affect prover capability;
+- verification-conditioned feedback/retry can improve proof search;
+- ordinary McNemar inference assumes independent matched pairs and needs adjustment for clustered pairs.
 
 ## What these sources do **not** establish for Supernova
 
-The following are **INFERENCES/limits**:
+These are **INFERENCES/limits**:
 
-1. None of the cited results proves that Supernova's exact `VerifiedProduct` contract causes a gain.
-2. A formal checker PASS establishes acceptance by the frozen formal system; it does not by itself establish that the experimental controls were fair, the benchmark was semantically valid, or the benchmark was uncontaminated.
-3. A stronger final solve rate under a shared maximum budget does not prove equal-cost superiority unless actual generator-plus-verifier resource use or a justified cost frontier is matched.
-4. Existing prior art makes a broad novelty claim around "verified intermediate lemmas" untenable.
-5. Existing prior art also makes "verification improves search" too broad a novelty claim.
-6. A positive Goal 1 experiment could still be scientifically valuable if it isolates a narrower causal mechanism under stronger controls than prior systems report.
+1. None proves that Supernova's exact `VerifiedProduct` contract causes a gain.
+2. Checker PASS does not establish fair controls, benchmark fidelity, contamination cleanliness, or equal cost.
+3. A shared maximum budget does not establish equal-cost superiority.
+4. Existing prior art makes broad novelty claims around "verified intermediate lemmas" and "verification improves search" untenable.
+5. A positive Goal 1 result could still be scientifically valuable if it isolates a narrower causal mechanism under stronger controls than prior systems report.
 
 ## Recommended novelty statement to test, not assume
 
@@ -378,48 +332,31 @@ The following are **INFERENCES/limits**:
 > Under one frozen model/tool environment and prospectively matched complete-cost conditions, does
 > enforcing a verify-before-consume contract for within-problem intermediate products increase
 > paired final solve probability relative to controls that separately match decomposition,
-> verifier-query access and feedback bandwidth, adaptive search, verification frequency, and
+> verifier-query access and feedback bandwidth, adaptive search/retry, verification frequency, and
 > intermediate-product generation without that exact contract?
 
-This wording intentionally makes the contribution an empirical causal isolation claim, not a claim
-that formal verification, lemma generation, process feedback, verifier-guided search, or
-neuro-symbolic theorem proving was invented here.
+If verifier-conditioned reject/retry is part of the intended treatment rather than a nuisance
+variable, replace "verify-before-consume" with an explicitly broader "verified-gated search and
+consumption" claim before running the confirmatory experiment.
 
 ## Strong-control implications from prior art
 
-Before a scientific pass can support the mechanism claim, the frozen control suite should be able
-to answer these prior-art-driven falsifiers:
+Before a scientific pass supports the mechanism claim, the frozen design should answer:
 
-- **Verifier-reranking falsifier:** can independent best-of-N candidates with the same verifier-query
-  and feedback budget match the chain? (Cobbe et al.; Setlur et al.; Kwok et al.)
-- **Process-feedback falsifier:** can equivalent intermediate feedback without a consumable verified
-  object match the chain? (Lightman et al.)
-- **Decomposition falsifier:** can the same lemma/subgoal decomposition and retries, but without
-  verify-before-consume gating, match the chain? (Seed-Prover / Prover Agent / Goedel-Architect.)
-- **Contract-equivalence falsifier:** does the product-only control use the same intermediate payload
-  representation/serialization, product-count policy, stopping/finalization semantics, and retry
-  policy as the verified chain, differing only in the predeclared verification-gating mechanism?
-  (TheoremBench; Snell et al.)
-- **Compute falsifier:** does the effect persist when actual generator-plus-verifier test-time
-  resource use is matched rather than merely capped? (Snell et al.; AlphaGeometry; Singhi et al.)
-- **Contamination falsifier:** does the effect persist on a fresh/hidden or otherwise prospectively
-  protected split with model/problem release dates recorded? (LiveBench; MathArena; LeanDojo.)
-- **Soft-contamination falsifier:** does the conclusion survive semantic/family-level overlap checks
-  or a post-model-cutoff benchmark, rather than only exact/n-gram decontamination? (Spiesberger et al.)
-- **Benchmark-fidelity falsifier:** do conclusions survive removal or correction of malformed,
-  vacuous, weakened, or unsafe formal items? (Ammanamanchi et al.)
-- **State-transfer falsifier:** does the result persist when every problem starts without reusable
-  products or learned lemma state from previous benchmark items? (DreamProver.)
-- **Temporal-drift falsifier:** does the effect persist when paired arms are interleaved or
-  counterbalanced in narrow time blocks on the exact same stable model version, with returned model
-  identity and call time recorded? (Chen et al.; Gemini model-version documentation.)
-- **Inference-reproducibility falsifier:** does the effect persist across the prospectively frozen
-  replication policy when self-hosted hardware/precision/serving settings are held fixed, or when
-  hosted-backend uncertainty is explicitly randomized across paired arms? (Yuan et al.; Ouyang et al.)
-- **Opaque-cost falsifier:** does the conclusion persist when hidden/reasoning-token usage is
-  independently auditable, or under a predeclared sensitivity bound when only provider-reported
-  counters are available? (Sun et al.)
+- **Verifier-reranking falsifier:** can best-of-N/portfolio candidates with matched verifier access match the chain? (Cobbe; Setlur; Kwok.)
+- **Process-feedback falsifier:** can equivalent intermediate feedback without a consumable verified object match it? (Lightman.)
+- **Decomposition falsifier:** can the same subgoal/lemma decomposition under matched search budgets match it without the exact gate? (Seed-Prover; Prover Agent; Goedel-Architect.)
+- **Retry-semantics falsifier:** is verifier-conditioned reject/discard/retry matched, or explicitly declared part of the treatment? (Leanabell-Prover-V2; Snell.)
+- **Contract-equivalence falsifier:** are payload representation, parentage, chain length, stopping, and finalization matched across the primary causal pair? (TheoremBench.)
+- **Compute falsifier:** does the effect persist at matched realized generator+verifier resources or a preregistered cost frontier? (Snell; AlphaGeometry; Singhi.)
+- **Contamination falsifier:** does the effect persist on fresh/hidden or prospectively protected items? (LiveBench; MathArena; LeanDojo.)
+- **Soft-contamination falsifier:** does it survive semantic/family-level overlap checks or post-model-cutoff data? (Spiesberger.)
+- **Benchmark-fidelity falsifier:** does it survive removal/correction of malformed or unsafe formal items? (Ammanamanchi et al.)
+- **State-transfer falsifier:** does it persist with no cross-problem learned-product state? (DreamProver.)
+- **Temporal/runtime falsifier:** does it persist with stable model identity, counterbalanced timing, and frozen/self-audited runtime conditions? (Chen; Gemini docs; Yuan; Ouyang.)
+- **Opaque-cost falsifier:** does it persist under auditable hidden-reasoning usage or a predeclared sensitivity bound? (Sun et al.)
+- **Cluster-dependence falsifier:** are benchmark-family/variant clusters identified and either reduced to independent sampling units or analyzed with cluster-aware paired inference? (Eliasziw & Donner; Gönen.)
 
-If those falsifiers are not implemented, any positive result should be described as performance of
-the *bundled verified-chain system* rather than evidence that verified-product chaining itself is
-the cause.
+If those falsifiers are not implemented, a positive result should be described as performance of the
+*bundled verified-chain system* rather than evidence that verified-product chaining itself caused
+the improvement.
