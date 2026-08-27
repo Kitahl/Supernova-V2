@@ -531,3 +531,28 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 If those falsifiers are not implemented, a positive result should be described as performance of the
 *bundled verified-chain system* rather than evidence that verified-product chaining itself caused
 the improvement.
+
+### 31. Python subprocess and Lean Elan — a command string is not a hermetic verifier identity
+
+Primary sources: Python Software Foundation, `subprocess.Popen` documentation.
+<https://docs.python.org/3/library/subprocess.html>; Lean, *Managing Toolchains with Elan*.
+<https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Managing-Toolchains-with-Elan/>.
+
+**EVIDENCE.** Python documents that `Popen(env=None)` inherits the current process environment and
+that executable-path resolution is platform dependent; it recommends a fully qualified executable
+path for maximum reliability. Lean's Elan documentation states that executables on `PATH` can be
+proxies that select the active Lean toolchain from the current context/project, and recommends a
+specific version in a checked-in `lean-toolchain` file for reproducible project use.
+
+**INFERENCE for Goal 1.** Current merged G1-006 hashes only command template plus timeout into
+`verifier_id`, and invokes G1-003 without a frozen cwd/environment. Therefore one nominal verifier
+identity can resolve to different executable bytes, Lean toolchains, library checkouts, or ambient
+configuration. An evidence-bound PASS remains under-specified if the checker implementation and
+runtime inputs are not themselves content/environment bound. This is an assurance and causal-control
+issue, not evidence that Supernova's mechanism succeeds or fails.
+
+**Strong-control addendum — verifier-hermeticity falsifier.** Does every search/final verifier receipt
+bind the resolved executable/toolchain, project/library snapshot, cwd, allowlisted environment, and
+runtime/container identity, and does independent replay fail closed when any of those differ? Python
+subprocess and Lean Elan semantics make this a necessary reproducibility check rather than an
+optional metadata field.
