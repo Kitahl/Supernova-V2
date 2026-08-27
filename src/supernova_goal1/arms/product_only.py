@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Mapping
@@ -16,6 +19,52 @@ def _text(value: Any, field: str) -> str:
     return value
 
 
+def _positive(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field} must be a positive integer")
+    return value
+
+
+def _validate_product_value(value: Any, path: str = "value") -> None:
+    if value is None or isinstance(value, (bool, str, int)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"{path} must not contain NaN or infinity")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_product_value(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"{path} object keys must be strings")
+            _validate_product_value(item, f"{path}.{key}")
+        return
+    raise TypeError(
+        f"{path} must be JSON-compatible (null, boolean, string, number, list, or object)"
+    )
+
+
+def _canonical_product_snapshot(value: Any) -> tuple[str, str]:
+    _validate_product_value(value)
+    canonical_json = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    try:
+        canonical_bytes = canonical_json.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(
+            "value must contain only UTF-8-encodable Unicode scalar values"
+        ) from exc
+    return canonical_json, hashlib.sha256(canonical_bytes).hexdigest()
+
+
 class ProductOnlyStatus(StrEnum):
     ANSWERED = "ANSWERED"
     NO_ANSWER = "NO_ANSWER"
@@ -29,7 +78,7 @@ class ProductOnlyRequest:
     problem_id: str
     budget_id: str
     problem_statement: str
-    product_ids: tuple[str, ...]
+    max_products: int
 
     def __post_init__(self) -> None:
         for field in (
@@ -40,14 +89,7 @@ class ProductOnlyRequest:
             "problem_statement",
         ):
             _text(getattr(self, field), field)
-        if not isinstance(self.product_ids, tuple):
-            raise ValueError("product_ids must be a tuple")
-        if not self.product_ids:
-            raise ValueError("product-only requires at least one product")
-        for index, product_id in enumerate(self.product_ids):
-            _text(product_id, f"product_ids[{index}]")
-        if len(set(self.product_ids)) != len(self.product_ids):
-            raise ValueError("product_ids must be unique")
+        _positive(self.max_products, "max_products")
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "ProductOnlyRequest":
@@ -57,33 +99,39 @@ class ProductOnlyRequest:
             "problem_id",
             "budget_id",
             "problem_statement",
-            "product_ids",
+            "max_products",
         }
         _exact_fields(raw, expected, "product-only request")
-        product_ids = raw["product_ids"]
-        if not isinstance(product_ids, list):
-            raise ValueError("product_ids must be a JSON list")
         return cls(
             request_id=raw["request_id"],
             experiment_id=raw["experiment_id"],
             problem_id=raw["problem_id"],
             budget_id=raw["budget_id"],
             problem_statement=raw["problem_statement"],
-            product_ids=tuple(product_ids),
+            max_products=raw["max_products"],
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class ProductOnlyProduct:
     product_id: str
     parent_product_id: str | None
-    value: str
+    canonical_json: str
+    content_sha256: str
 
-    def __post_init__(self) -> None:
-        _text(self.product_id, "product_id")
-        if self.parent_product_id is not None:
-            _text(self.parent_product_id, "parent_product_id")
-        _text(self.value, "value")
+    def __init__(self, product_id: str, parent_product_id: str | None, value: Any) -> None:
+        _text(product_id, "product_id")
+        if parent_product_id is not None:
+            _text(parent_product_id, "parent_product_id")
+        canonical_json, content_sha256 = _canonical_product_snapshot(value)
+        object.__setattr__(self, "product_id", product_id)
+        object.__setattr__(self, "parent_product_id", parent_product_id)
+        object.__setattr__(self, "canonical_json", canonical_json)
+        object.__setattr__(self, "content_sha256", content_sha256)
+
+    @property
+    def value(self) -> Any:
+        return json.loads(self.canonical_json)
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "ProductOnlyProduct":
@@ -138,7 +186,7 @@ class ProductOnlyResult:
                 raise ValueError("ANSWERED product-only result cannot carry error")
             if self.answer_parent_product_id != self.products[-1].product_id:
                 raise ValueError(
-                    "ANSWERED product-only result must consume the final unverified product"
+                    "ANSWERED product-only result must consume the current final unverified product"
                 )
         elif status is ProductOnlyStatus.NO_ANSWER:
             if (
@@ -199,11 +247,5 @@ class ProductOnlyResult:
             if actual != expected:
                 raise ValueError(f"product-only result {field} does not match request")
 
-        result_ids = tuple(product.product_id for product in self.products)
-        requested_prefix = request.product_ids[: len(result_ids)]
-        if result_ids != requested_prefix:
-            raise ValueError(
-                "product-only result products must be an ordered prefix of request product_ids"
-            )
-        if self.status is ProductOnlyStatus.ANSWERED and result_ids != request.product_ids:
-            raise ValueError("ANSWERED product-only result must complete every requested product")
+        if len(self.products) > request.max_products:
+            raise ValueError("product-only result exceeds request max_products")
