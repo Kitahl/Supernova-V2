@@ -4,6 +4,7 @@ from collections import namedtuple
 from collections.abc import Sequence
 from hashlib import sha256
 import json
+import unicodedata
 
 
 def _token(value: str, field: str) -> str:
@@ -14,7 +15,7 @@ def _token(value: str, field: str) -> str:
     value = str.__str__(value)
     if not value or value != value.strip():
         raise ValueError(f"{field} must be a non-empty trimmed string")
-    if any(ord(char) < 32 for char in value):
+    if any(unicodedata.category(char) == "Cc" for char in value):
         raise ValueError(f"{field} must not contain control characters")
     try:
         value.encode("utf-8")
