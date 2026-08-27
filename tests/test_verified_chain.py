@@ -190,6 +190,93 @@ class VerifiedChainTests(unittest.TestCase):
             )
         self.assertEqual(ChainState.AWAITING_VERIFICATION, parent_b.state)
 
+    def test_verification_subject_recursively_binds_deeper_lineage(self) -> None:
+        left = VerifiedChain("dry-lineage")
+        right = VerifiedChain("dry-lineage")
+
+        left.propose("grandparent", {"seed": 1}, producer_id="solver")
+        right.propose("grandparent", {"seed": 2}, producer_id="solver")
+        for chain in (left, right):
+            subject = chain.verification_subject("grandparent")
+            chain.record_verification(
+                "grandparent",
+                subject_sha256=subject.subject_sha256,
+                outcome="PASS",
+                verifier_id="checker",
+                evidence_id="grandparent-pass",
+            )
+        left_grandparent = left.consume_verified("grandparent")
+        right_grandparent = right.consume_verified("grandparent")
+
+        left.propose(
+            "parent",
+            {"claim": "same-parent"},
+            producer_id="solver",
+            parent=left_grandparent,
+        )
+        right.propose(
+            "parent",
+            {"claim": "same-parent"},
+            producer_id="solver",
+            parent=right_grandparent,
+        )
+        left_parent_subject = left.verification_subject("parent")
+        right_parent_subject = right.verification_subject("parent")
+        self.assertEqual(
+            left_parent_subject.content_sha256, right_parent_subject.content_sha256
+        )
+        self.assertNotEqual(
+            left_parent_subject.subject_sha256, right_parent_subject.subject_sha256
+        )
+
+        for chain, subject in (
+            (left, left_parent_subject),
+            (right, right_parent_subject),
+        ):
+            chain.record_verification(
+                "parent",
+                subject_sha256=subject.subject_sha256,
+                outcome="PASS",
+                verifier_id="checker",
+                evidence_id="parent-pass",
+            )
+        left_parent = left.consume_verified("parent")
+        right_parent = right.consume_verified("parent")
+
+        left.propose(
+            "child", {"claim": "same-child"}, producer_id="solver", parent=left_parent
+        )
+        right.propose(
+            "child", {"claim": "same-child"}, producer_id="solver", parent=right_parent
+        )
+        left_child = left.verification_subject("child")
+        right_child = right.verification_subject("child")
+
+        # Immediate parent bytes and IDs are identical. The recursive parent
+        # verification-subject binding is what distinguishes the deeper lineages.
+        self.assertEqual(left_child.content_sha256, right_child.content_sha256)
+        self.assertEqual(
+            left_child.parent_content_sha256, right_child.parent_content_sha256
+        )
+        self.assertEqual(left_child.parent_product_id, right_child.parent_product_id)
+        self.assertNotEqual(
+            left_child.parent_verification_subject_sha256,
+            right_child.parent_verification_subject_sha256,
+        )
+        self.assertNotEqual(left_child.subject_sha256, right_child.subject_sha256)
+
+        with self.assertRaisesRegex(
+            VerificationSubjectMismatchError, "chain context"
+        ):
+            right.record_verification(
+                "child",
+                subject_sha256=left_child.subject_sha256,
+                outcome="PASS",
+                verifier_id="checker",
+                evidence_id="cross-lineage-replay",
+            )
+        self.assertEqual(ChainState.AWAITING_VERIFICATION, right.state)
+
     def test_unencodable_unicode_proposal_fails_atomically(self) -> None:
         with self.assertRaisesRegex(ValueError, "UTF-8-encodable"):
             self.chain.propose(
