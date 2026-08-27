@@ -20,7 +20,8 @@ Every arm is accounted in the existing five-dimensional `CompleteCost` vector:
 
 The accounting unit is an event. Model-call, verifier, and orchestration events have
 separate shapes so the same quantity cannot be silently charged to two categories.
-Event IDs are unique within an arm trace.
+Event IDs are unique within an arm trace and, for a closed five-arm report, globally
+unique across all five traces.
 
 ## Telemetry coverage invariant
 
@@ -34,7 +35,9 @@ mapping to equal that manifest exactly:
 
 - every expected event must have one observed telemetry event of the same kind;
 - no unexpected event may appear;
-- expected event IDs and observed event IDs must each be unique;
+- expected event IDs and observed event IDs must each be unique within an arm;
+- an observed event ID may appear in only one arm of a closed five-arm report, so one
+  dispatch/completion record cannot be replayed as execution evidence for several arms;
 - a manifest with zero expected events is invalid;
 - because a closed Goal-1 arm trace denotes an executed solver arm, the manifest must
   contain at least one expected `model_call` attempt. An orchestration-only bookkeeping
@@ -45,6 +48,14 @@ The final bullet is a Goal-1 execution invariant, not a generic claim that every
 cost-accounting application must call a model. If a later protocol deliberately permits a
 zero-model-call arm, that must be represented prospectively with a different execution
 contract rather than silently weakening this closure rule after observing results.
+
+Report-wide event-ID uniqueness closes a deterministic replay alias in the accounting API:
+without it, five individually valid traces could all cite the same `event_id` and one
+underlying dispatch/completion identity could appear to satisfy every arm. This invariant
+is necessary but not sufficient for trusted provenance. A dishonest or incorrectly
+instrumented harness can still mint distinct IDs for omitted/fabricated work, so global ID
+uniqueness does **not** replace the trusted pre-execution dispatch ledger required before
+scientific freeze.
 
 Closure is snapshot-based and non-polymorphic. `ArmCostTrace` snapshots both the supplied
 collections and each concrete `CostEvent` / `ExpectedCostEvent` value into fresh base-class
@@ -95,16 +106,17 @@ The execution harness must construct the expected-event manifest from the planne
 issued operations rather than infer it from telemetry after the fact. For dynamic
 retries, the retry event must be registered in the manifest at dispatch, before its
 telemetry is collected. The current cost module can deterministically verify manifest
-coverage, reject orchestration-only pseudo-execution, and reject typed unknown
-measurements; it cannot by itself prove that an external harness preregistered the
-manifest at the correct time or that a harness did not fabricate an observed zero or
-omit an issued retry from the manifest. That provenance requirement must be frozen and
-enforced in the experiment runtime before scientific use.
+coverage, reject cross-arm replay of one event identity, reject orchestration-only
+pseudo-execution, and reject typed unknown measurements; it cannot by itself prove that
+an external harness preregistered the manifest at the correct time or that a harness did
+not fabricate distinct event IDs, fabricate an observed zero, or omit an issued retry
+from the manifest. That provenance requirement must be frozen and enforced in the
+experiment runtime before scientific use.
 
 A `CompleteCostReport` closes only when **exactly all five arms** are present and every
-arm satisfies the close marker, exact manifest coverage, the executed-arm model-attempt
-invariant, and complete resource measurements: `ordinary`, `portfolio`, `product_only`,
-`multi_fidelity`, and `verified_chain`.
+arm satisfies the close marker, exact manifest coverage, report-wide event-ID uniqueness,
+the executed-arm model-attempt invariant, and complete resource measurements:
+`ordinary`, `portfolio`, `product_only`, `multi_fidelity`, and `verified_chain`.
 
 ## Fair-budget rule: componentwise, not weighted
 
@@ -142,10 +154,10 @@ environment. At minimum, the experimental protocol must freeze and record:
   per-operation elapsed time, so overlapping portfolio work is summed rather than
   receiving a free makespan discount;
 - telemetry completeness rules, including how the execution harness constructs and
-  freezes or dispatch-registers expected events, how dropped telemetry is detected, and
-  how unavailable quantities are represented as typed unknowns rather than zero. If the
-  provider/runtime cannot report a required quantity, that arm's accounting remains
-  incomplete;
+  freezes or dispatch-registers expected events, how event IDs are made unique across
+  the paired five-arm execution, how dropped telemetry is detected, and how unavailable
+  quantities are represented as typed unknowns rather than zero. If the provider/runtime
+  cannot report a required quantity, that arm's accounting remains incomplete;
 - execution semantics for skipped/no-op arms. The present Goal-1 contract treats every
   closed arm as an executed solver arm with at least one issued model call. A skipped arm
   is not a valid complete-cost observation and must remain incomplete/missing.
@@ -182,14 +194,14 @@ for arm in Arm:
 
     if arm is Arm.ORDINARY:
         events = (
-            CostEvent.model_call("call-1", input_tokens=1200, output_tokens=300),
-            CostEvent.verifier("verify-1", milliseconds=42),
-            CostEvent.orchestration("driver-1", milliseconds=18),
+            CostEvent.model_call("ordinary-call-1", input_tokens=1200, output_tokens=300),
+            CostEvent.verifier("ordinary-verify-1", milliseconds=42),
+            CostEvent.orchestration("ordinary-driver-1", milliseconds=18),
         )
         expected = (
-            ExpectedCostEvent.model_call("call-1"),
-            ExpectedCostEvent.verifier("verify-1"),
-            ExpectedCostEvent.orchestration("driver-1"),
+            ExpectedCostEvent.model_call("ordinary-call-1"),
+            ExpectedCostEvent.verifier("ordinary-verify-1"),
+            ExpectedCostEvent.orchestration("ordinary-driver-1"),
         )
 
     traces.append(
