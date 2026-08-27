@@ -35,6 +35,40 @@ def _natural(value: int, field: str) -> int:
     return value
 
 
+def _normalize_event_kind(kind: CostEventKind | str) -> CostEventKind:
+    if isinstance(kind, CostEventKind):
+        return kind
+    try:
+        return CostEventKind(kind)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"unknown cost event kind: {kind!r}") from exc
+
+
+@dataclass(frozen=True)
+class ExpectedCostEvent:
+    """One event that the execution harness expects telemetry for before report closure."""
+
+    event_id: str
+    kind: CostEventKind
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.event_id, str) or not self.event_id.strip():
+            raise ValueError("expected event_id must be a non-empty string")
+        object.__setattr__(self, "kind", _normalize_event_kind(self.kind))
+
+    @classmethod
+    def model_call(cls, event_id: str) -> "ExpectedCostEvent":
+        return cls(event_id, CostEventKind.MODEL_CALL)
+
+    @classmethod
+    def verifier(cls, event_id: str) -> "ExpectedCostEvent":
+        return cls(event_id, CostEventKind.VERIFIER)
+
+    @classmethod
+    def orchestration(cls, event_id: str) -> "ExpectedCostEvent":
+        return cls(event_id, CostEventKind.ORCHESTRATION)
+
+
 @dataclass(frozen=True)
 class CostEvent:
     event_id: str
@@ -46,12 +80,7 @@ class CostEvent:
     def __post_init__(self) -> None:
         if not isinstance(self.event_id, str) or not self.event_id.strip():
             raise ValueError("event_id must be a non-empty string")
-        if not isinstance(self.kind, CostEventKind):
-            try:
-                normalized = CostEventKind(self.kind)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"unknown cost event kind: {self.kind!r}") from exc
-            object.__setattr__(self, "kind", normalized)
+        object.__setattr__(self, "kind", _normalize_event_kind(self.kind))
 
         _natural(self.input_tokens, "input_tokens")
         _natural(self.output_tokens, "output_tokens")
@@ -113,6 +142,7 @@ class CostEvent:
 class ArmCostTrace:
     arm: Arm
     events: tuple[CostEvent, ...]
+    expected_events: tuple[ExpectedCostEvent, ...]
     accounting_complete: bool
 
     def __post_init__(self) -> None:
@@ -124,16 +154,63 @@ class ArmCostTrace:
             object.__setattr__(self, "arm", normalized)
         if not isinstance(self.accounting_complete, bool):
             raise ValueError("accounting_complete must be boolean")
-        ids = [event.event_id for event in self.events]
-        if len(ids) != len(set(ids)):
+
+        observed_ids = [event.event_id for event in self.events]
+        if len(observed_ids) != len(set(observed_ids)):
             raise ValueError(f"duplicate cost event_id in {self.arm.value}")
+
+        expected_ids = [event.event_id for event in self.expected_events]
+        if not expected_ids:
+            raise ValueError(
+                f"{self.arm.value} coverage manifest must contain at least one expected event"
+            )
+        if len(expected_ids) != len(set(expected_ids)):
+            raise ValueError(f"duplicate expected event_id in {self.arm.value}")
 
     @classmethod
     def from_events(
-        cls, arm: Arm | str, events: Iterable[CostEvent], *, accounting_complete: bool
+        cls,
+        arm: Arm | str,
+        events: Iterable[CostEvent],
+        *,
+        expected_events: Iterable[ExpectedCostEvent],
+        accounting_complete: bool,
     ) -> "ArmCostTrace":
         return cls(
-            arm=Arm(arm), events=tuple(events), accounting_complete=accounting_complete
+            arm=Arm(arm),
+            events=tuple(events),
+            expected_events=tuple(expected_events),
+            accounting_complete=accounting_complete,
+        )
+
+    @property
+    def observed_event_manifest(self) -> dict[str, CostEventKind]:
+        return {event.event_id: event.kind for event in self.events}
+
+    @property
+    def expected_event_manifest(self) -> dict[str, CostEventKind]:
+        return {event.event_id: event.kind for event in self.expected_events}
+
+    @property
+    def coverage_complete(self) -> bool:
+        return self.observed_event_manifest == self.expected_event_manifest
+
+    @property
+    def missing_expected_events(self) -> tuple[str, ...]:
+        observed = self.observed_event_manifest
+        return tuple(
+            event.event_id
+            for event in self.expected_events
+            if observed.get(event.event_id) is not event.kind
+        )
+
+    @property
+    def unexpected_events(self) -> tuple[str, ...]:
+        expected = self.expected_event_manifest
+        return tuple(
+            event.event_id
+            for event in self.events
+            if expected.get(event.event_id) is not event.kind
         )
 
     @property
@@ -161,11 +238,20 @@ class CompleteCostReport:
     traces: tuple[ArmCostTrace, ...]
 
     def __post_init__(self) -> None:
-        incomplete = [trace.arm.value for trace in self.traces if not trace.accounting_complete]
+        incomplete = [
+            (
+                trace.arm.value,
+                trace.accounting_complete,
+                trace.missing_expected_events,
+                trace.unexpected_events,
+            )
+            for trace in self.traces
+            if not trace.accounting_complete or not trace.coverage_complete
+        ]
         if incomplete:
             raise ValueError(
-                "complete-cost report cannot close with incomplete arm accounting: "
-                f"{incomplete}"
+                "complete-cost report cannot close with incomplete arm accounting; "
+                f"coverage={incomplete}"
             )
         arms = [trace.arm for trace in self.traces]
         if len(arms) != len(set(arms)):
