@@ -11,6 +11,10 @@ def _token(value: str, field: str) -> str:
         raise ValueError(f"{field} must be a non-empty trimmed string")
     if any(ord(char) < 32 for char in value):
         raise ValueError(f"{field} must not contain control characters")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"{field} must contain only Unicode scalar values") from exc
     return value
 
 
