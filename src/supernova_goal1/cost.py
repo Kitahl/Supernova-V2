@@ -195,17 +195,40 @@ class ArmCostTrace:
     accounting_complete: bool
 
     def __post_init__(self) -> None:
-        # frozen dataclasses do not deep-freeze caller-owned collections. Snapshot the
-        # public constructor inputs so a closed report cannot later lose telemetry by
-        # mutation through an alias to a list supplied by the caller.
-        object.__setattr__(self, "events", tuple(self.events))
-        object.__setattr__(self, "expected_events", tuple(self.expected_events))
-        if not all(isinstance(event, CostEvent) for event in self.events):
-            raise ValueError("events must contain only CostEvent values")
-        if not all(
-            isinstance(event, ExpectedCostEvent) for event in self.expected_events
-        ):
-            raise ValueError("expected_events must contain only ExpectedCostEvent values")
+        # `frozen=True` is not a trust boundary. Snapshot both the caller-owned
+        # collections and their concrete value records so aliases cannot mutate a closed
+        # trace, and reject subclasses whose methods/properties could override accounting
+        # semantics after validation.
+        raw_events = tuple(self.events)
+        raw_expected_events = tuple(self.expected_events)
+        if not all(type(event) is CostEvent for event in raw_events):
+            raise ValueError("events must contain only exact CostEvent values")
+        if not all(type(event) is ExpectedCostEvent for event in raw_expected_events):
+            raise ValueError(
+                "expected_events must contain only exact ExpectedCostEvent values"
+            )
+        object.__setattr__(
+            self,
+            "events",
+            tuple(
+                CostEvent(
+                    event_id=event.event_id,
+                    kind=event.kind,
+                    input_tokens=event.input_tokens,
+                    output_tokens=event.output_tokens,
+                    milliseconds=event.milliseconds,
+                )
+                for event in raw_events
+            ),
+        )
+        object.__setattr__(
+            self,
+            "expected_events",
+            tuple(
+                ExpectedCostEvent(event_id=event.event_id, kind=event.kind)
+                for event in raw_expected_events
+            ),
+        )
 
         if not isinstance(self.arm, Arm):
             try:
@@ -311,11 +334,25 @@ class CompleteCostReport:
     traces: tuple[ArmCostTrace, ...]
 
     def __post_init__(self) -> None:
-        # Snapshot direct-constructor input for the same reason ArmCostTrace snapshots
-        # its event collections: report closure must bind an immutable trace set.
-        object.__setattr__(self, "traces", tuple(self.traces))
-        if not all(isinstance(trace, ArmCostTrace) for trace in self.traces):
-            raise ValueError("traces must contain only ArmCostTrace values")
+        # Snapshot the concrete traces too. Accepting a subclass would let a caller
+        # override `coverage_complete`, `measurements_complete`, or `total` after the
+        # report has relied on those properties as deterministic accounting evidence.
+        raw_traces = tuple(self.traces)
+        if not all(type(trace) is ArmCostTrace for trace in raw_traces):
+            raise ValueError("traces must contain only exact ArmCostTrace values")
+        object.__setattr__(
+            self,
+            "traces",
+            tuple(
+                ArmCostTrace(
+                    arm=trace.arm,
+                    events=trace.events,
+                    expected_events=trace.expected_events,
+                    accounting_complete=trace.accounting_complete,
+                )
+                for trace in raw_traces
+            ),
+        )
 
         incomplete = [
             (
