@@ -140,6 +140,22 @@ class CompleteCostAccountingTests(unittest.TestCase):
         )
         self.assertTrue(report.within_budget(ceiling)[Arm.ORDINARY])
 
+    def test_budget_ceiling_requires_one_valid_concrete_cost_vector(self) -> None:
+        report = self._zero_report()
+
+        class ForgedCeiling(CompleteCost):
+            def as_tuple(self) -> tuple[int, int, int, int, int]:
+                return (10**9, 10**9, 10**9, 10**9, 10**9)
+
+        with self.assertRaisesRegex(ValueError, "exact CompleteCost"):
+            report.within_budget(ForgedCeiling(0, 0, 0, 0, 0))
+
+        with self.assertRaisesRegex(ValueError, "ceiling.model_calls"):
+            report.within_budget(CompleteCost(-1, 0, 0, 0, 0))
+
+        with self.assertRaisesRegex(ValueError, "ceiling.input_tokens"):
+            report.within_budget(CompleteCost(1, True, 0, 0, 0))
+
     def test_cost_comparison_preserves_incomparability_without_weights(self) -> None:
         cheap_tokens_expensive_verifier = CompleteCost(1, 10, 10, 500, 5)
         expensive_tokens_cheap_verifier = CompleteCost(1, 100, 10, 50, 5)
@@ -150,6 +166,18 @@ class CompleteCostAccountingTests(unittest.TestCase):
                 expensive_tokens_cheap_verifier,
             ),
         )
+
+    def test_cost_comparison_rejects_unvalidated_runtime_vectors(self) -> None:
+        valid = CompleteCost(1, 1, 1, 1, 1)
+        with self.assertRaisesRegex(ValueError, "left.output_tokens"):
+            compare_complete_cost(CompleteCost(1, 1, -1, 1, 1), valid)
+
+        class ForgedCost(CompleteCost):
+            def as_tuple(self) -> tuple[int, int, int, int, int]:
+                return (0, 0, 0, 0, 0)
+
+        with self.assertRaisesRegex(ValueError, "right must be an exact CompleteCost"):
+            compare_complete_cost(valid, ForgedCost(100, 100, 100, 100, 100))
 
     def test_incomplete_arm_accounting_cannot_be_closed(self) -> None:
         traces = [self._zero_trace(arm) for arm in Arm]
