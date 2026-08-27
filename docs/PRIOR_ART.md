@@ -284,6 +284,41 @@ stack; hosted runs should treat backend execution as a residual uncertainty sour
 arm order, and use a prospectively frozen replication/sensitivity plan. Otherwise backend execution
 noise can be misread as a mechanism effect even when the advertised model version never changes.
 
+### 18. Spiesberger et al. (2026) — semantic duplicates defeat lexical decontamination
+
+Primary source: Ari Spiesberger et al., *Soft Contamination Means Benchmarks Test Shallow
+Generalization*.
+<https://arxiv.org/abs/2602.12413>
+
+**EVIDENCE.** The paper studies semantic duplicates that escape ordinary n-gram decontamination. In
+an OLMo3 training-corpus audit it reports semantic duplicates for 78% of CodeForces problems and
+exact duplicates for 50% of ZebraLogic, and it experimentally finds that training on semantic
+duplicates can improve benchmark performance, including performance on otherwise held-out items
+from the same benchmark.
+
+**INFERENCE for Goal 1.** Exact-hash, exact-string, or n-gram filtering is not a sufficient basis for
+calling a public benchmark uncontaminated. Even an unseen item can share enough semantic structure
+with training material to weaken an out-of-distribution reasoning claim. Goal 1 therefore needs a
+semantic/family-level contamination policy or fresh post-cutoff evidence rather than treating
+lexical decontamination as a certificate.
+
+### 19. Sun et al. (2025) — hidden reasoning tokens are an auditability problem for opaque API cost
+
+Primary source: Guoheng Sun et al., *CoIn: Counting the Invisible Reasoning Tokens in Commercial
+Opaque LLM APIs*.
+<https://arxiv.org/abs/2505.13778>
+
+**EVIDENCE.** The paper identifies a transparency problem in commercial reasoning APIs: users may be
+charged for hidden reasoning tokens while the underlying traces are concealed, and it proposes a
+third-party auditing protocol to verify reported hidden-token quantities and detect token-count
+inflation.
+
+**INFERENCE for Goal 1.** A complete-cost rule based on hosted provider counters can still have a
+measurement-validity limitation. If hidden reasoning is a large and arm-dependent cost component,
+reported token usage is evidence about provider-reported consumption, not independently observed
+compute. Confirmatory claims should either use auditable/self-hosted telemetry or preserve this
+opacity as an explicit uncertainty and sensitivity bound.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -301,7 +336,9 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - a kernel-accepted Lean proof does not by itself establish that the benchmark statement faithfully encodes the intended problem (Ammanamanchi et al.);
 - fine-grained verification feedback can itself be an agentic capability channel (Kwok et al.);
 - hosted model services can change over time, and moving model aliases can silently change the data-generating system (Chen et al.; Gemini model-version documentation);
-- backend execution details can induce output and accuracy variation even under nominally deterministic decoding (Yuan et al.; Ouyang et al.).
+- backend execution details can induce output and accuracy variation even under nominally deterministic decoding (Yuan et al.; Ouyang et al.);
+- semantic duplicates can survive lexical decontamination and measurably improve benchmark performance (Spiesberger et al.);
+- hidden reasoning-token usage in opaque commercial APIs can require independent auditing if it is used as a scientific cost variable (Sun et al.).
 
 ## What these sources do **not** establish for Supernova
 
@@ -343,6 +380,8 @@ to answer these prior-art-driven falsifiers:
   resource use is matched rather than merely capped? (Snell et al.; AlphaGeometry; Singhi et al.)
 - **Contamination falsifier:** does the effect persist on a fresh/hidden or otherwise prospectively
   protected split with model/problem release dates recorded? (LiveBench; MathArena; LeanDojo.)
+- **Soft-contamination falsifier:** does the conclusion survive semantic/family-level overlap checks
+  or a post-model-cutoff benchmark, rather than only exact/n-gram decontamination? (Spiesberger et al.)
 - **Benchmark-fidelity falsifier:** do conclusions survive removal or correction of malformed,
   vacuous, weakened, or unsafe formal items? (Ammanamanchi et al.)
 - **State-transfer falsifier:** does the result persist when every problem starts without reusable
@@ -353,6 +392,9 @@ to answer these prior-art-driven falsifiers:
 - **Inference-reproducibility falsifier:** does the effect persist across the prospectively frozen
   replication policy when self-hosted hardware/precision/serving settings are held fixed, or when
   hosted-backend uncertainty is explicitly randomized across paired arms? (Yuan et al.; Ouyang et al.)
+- **Opaque-cost falsifier:** does the conclusion persist when hidden/reasoning-token usage is
+  independently auditable, or under a predeclared sensitivity bound when only provider-reported
+  counters are available? (Sun et al.)
 
 If those falsifiers are not implemented, any positive result should be described as performance of
 the *bundled verified-chain system* rather than evidence that verified-product chaining itself is

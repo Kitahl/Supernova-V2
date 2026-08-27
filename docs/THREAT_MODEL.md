@@ -352,6 +352,47 @@ arm order, use a prospectively frozen replication policy, retain request/respons
 available, and run a sensitivity analysis showing that the scientific conclusion is not driven by
 single-run backend noise.
 
+### T20 — Soft contamination can survive exact-match decontamination (`CRITICAL` for pretrained public-benchmark claims)
+
+**EVIDENCE — external.** Spiesberger et al. (2026) show that common n-gram-style decontamination can
+miss semantic duplicates. In their OLMo3 corpus audit they report semantic duplicates for 78% of
+CodeForces benchmark problems and exact duplicates for 50% of ZebraLogic, and they experimentally
+show that semantic-duplicate exposure can improve benchmark performance:
+<https://arxiv.org/abs/2602.12413>.
+
+**INFERENCE.** A benchmark item can be absent byte-for-byte from training data while its solution
+structure, paraphrase, or close semantic equivalent is present. Therefore an exact-hash or n-gram
+scan, and even an unseen held-out instance from a contaminated benchmark family, does not by itself
+establish out-of-distribution reasoning. This is stronger than ordinary instance memorization: the
+training signal can transfer across semantically equivalent formulations.
+
+**Required falsifier/mitigation.** Treat exact-match decontamination as a lower bound, not a clean
+certificate. Where training-corpus access exists, audit semantic as well as lexical similarity and
+report thresholds/results. Prefer post-model-cutoff fresh items or benchmark families unavailable
+at training time; when that is impossible, include prospectively generated structural variants or a
+family-level separation and label residual soft-contamination risk explicitly rather than calling
+the benchmark uncontaminated.
+
+### T21 — Hosted hidden-reasoning telemetry can make complete-cost parity unobservable (`HIGH` for opaque APIs)
+
+**EVIDENCE — external.** Sun et al. (2025) identify an auditability gap in commercial reasoning APIs:
+providers may charge for hidden reasoning tokens whose underlying traces are not exposed to users,
+and the paper proposes a third-party auditing mechanism specifically because reported hidden-token
+usage is otherwise difficult to verify independently: <https://arxiv.org/abs/2505.13778>.
+
+**INFERENCE.** A frozen accounting formula is not sufficient if one of its largest components is an
+opaque provider-reported quantity. If the verified-chain arm systematically elicits more hidden
+reasoning than controls, provider counters may be the only observable basis for asserting parity;
+that supports a reported-usage comparison, not necessarily an independently verified compute
+comparison.
+
+**Required falsifier/mitigation.** Record raw provider usage metadata, request IDs, reasoning-effort
+settings, and all returned hidden/reasoning-token counters for every call; never infer missing hidden
+usage from visible output length or substitute zero. For a confirmatory causal claim, prefer a
+self-hosted or otherwise auditable inference stack when feasible. If hosted opacity remains, label
+complete cost as provider-reported, preserve the uncertainty as a limitation, and require the
+scientific conclusion to survive sensitivity bounds on unobserved/uncertain reasoning cost.
+
 ## Minimum design conditions before a scientific Goal 1 run
 
 The confirmatory run should not start until all of the following are frozen and inspectable:
@@ -367,7 +408,9 @@ The confirmatory run should not start until all of the following are frozen and 
 9. a development/confirmatory separation that prevents adaptive benchmark reuse;
 10. a prospective robustness check against memorized-instance success when the benchmark design permits controlled variants;
 11. model-version attestation plus paired time blocking that prevents moving provider aliases or backend drift from correlating with arm identity;
-12. inference-runtime reproducibility controls: either a frozen self-hosted hardware/software/precision fingerprint or an explicit hosted-backend uncertainty plan with randomized paired execution and replication sensitivity.
+12. inference-runtime reproducibility controls: either a frozen self-hosted hardware/software/precision fingerprint or an explicit hosted-backend uncertainty plan with randomized paired execution and replication sensitivity;
+13. a contamination analysis that distinguishes exact/lexical matches from semantic or family-level overlap and states residual risk explicitly;
+14. auditable cost telemetry for hidden/reasoning computation, or a prospectively bounded uncertainty analysis when hosted providers do not expose independently verifiable usage.
 
 Passing implementation tests is necessary but not sufficient for these scientific conditions. The
 adversarial question for every future change is: **could this change improve the verified-chain arm
