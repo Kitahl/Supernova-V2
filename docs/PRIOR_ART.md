@@ -431,6 +431,28 @@ a prompt-formatting difference can masquerade as a mechanism effect. The confirm
 should bind every causal pair to one canonical common model-visible problem/prompt payload digest,
 with only a separately frozen, explicit treatment-specific prompt delta allowed to differ.
 
+### 30. Johari et al. and FDA group-sequential guidance — fixed-horizon inference is not optional-stopping-valid
+
+Primary sources: Ramesh Johari, Pete Koomen, Leonid Pekelis, and David Walsh, *Always Valid
+Inference: Continuous Monitoring of A/B Tests*, Operations Research 70(3), 2022.
+<https://pubsonline.informs.org/doi/10.1287/opre.2021.2135>; U.S. Food and Drug Administration,
+*Adaptive Designs for Medical Device Clinical Studies*, July 2016.
+<https://www.fda.gov/files/medical%20devices/published/Adaptive-Designs-for-Medical-Device-Clinical-Studies---Guidance-for-Industry-and-Food-and-Drug-Administration-Staff.pdf>.
+
+**EVIDENCE.** Johari et al. show that ordinary frequentist p-values and confidence intervals become
+unreliable when users choose stopping/sample size by continuously monitoring results, and develop
+always-valid inference for sequential decisions. FDA's group-sequential guidance is a separate
+design precedent: planned interim looks and possible early stopping require prospective planning
+while controlling the overall Type I error rate.
+
+**INFERENCE for Goal 1.** Current Goal 1 freezes exact McNemar plus Holm across four controls for one
+analysis, but does not freeze how many complete confirmatory analyses or whole-run reruns may be
+examined. Holm within a look is not sequential error control. If a failed stochastic/nondeterministic
+confirmatory run can be discarded and the same full-alpha analysis rerun until PASS, the advertised
+familywise alpha no longer describes the overall scientific decision. Goal 1 therefore needs either
+one immutable primary analysis or a prospectively valid group-sequential/alpha-spending/anytime-valid
+rule covering every outcome-bearing look and rerun.
+
 ## What the prior art collectively establishes
 
 The following are **EVIDENCE-backed observations**, not Supernova results:
@@ -453,7 +475,8 @@ The following are **EVIDENCE-backed observations**, not Supernova results:
 - high-assurance verification practice binds a PASS to an exact artifact/challenge subject and verifier/policy evidence rather than trusting an unbound boolean;
 - reproducible dataset tracking binds evaluation data to a digest/fingerprint and source lineage rather than relying on a dataset name alone;
 - p-value threshold crossing does not by itself quantify effect magnitude or scientific importance, and sample-size justification should match the inferential target;
-- meaning-preserving prompt formatting can materially change benchmark performance, so exact model-visible input identity is a causal experimental variable.
+- meaning-preserving prompt formatting can materially change benchmark performance, so exact model-visible input identity is a causal experimental variable;
+- fixed-horizon p-values require prospective sequential-error control when outcome-bearing looks or stopping decisions are repeated.
 
 ## What these sources do **not** establish for Supernova
 
@@ -503,6 +526,7 @@ Before a scientific pass supports the mechanism claim, the frozen design should 
 - **Benchmark-content binding falsifier:** can every scientific record be joined to the exact benchmark-lock root digest, split-contract identity, and preprocessing/formalization identity, with mismatches rejected rather than accepted under the same logical problem labels? (MLflow; Hugging Face Datasets.)
 - **Problem/prompt-payload identity falsifier:** are all paired cells bound to the same canonical common model-visible problem/prompt digest, with arm-specific prompt differences limited to a frozen explicit causal delta? (Sclar et al.)
 - **Effect-size/sensitivity falsifier:** is the paired solve-rate effect, a justified smallest meaningful margin or explicit no-margin interpretation, and the confirmatory sample-size/uncertainty target frozen before outcomes are observed? (ASA p-value statement; Lakens.)
+- **Sequential-look falsifier:** is there exactly one outcome-bearing confirmatory analysis, or a prospectively frozen sequential/anytime-valid procedure that controls error across every look/rerun? (Johari; FDA group-sequential guidance.)
 
 If those falsifiers are not implemented, a positive result should be described as performance of the
 *bundled verified-chain system* rather than evidence that verified-product chaining itself caused
