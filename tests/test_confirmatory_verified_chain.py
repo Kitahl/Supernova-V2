@@ -404,7 +404,7 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
         changed["product_admission"]["admission_requires"].remove(
             "BOUND_PRODUCT_VERIFIER_RECEIPT"
         )
-        with self.assertRaisesRegex(ValueError, "evidence weakened"):
+        with self.assertRaisesRegex(ValueError, "product admission contract"):
             validate_contract(changed, self.controls, self.runtime)
 
     def test_receipt_cannot_lose_identity_or_execution_binding(self) -> None:
@@ -478,7 +478,7 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
         changed["harness_construction"]["target_statement_or_import_mutation"] = (
             "ALLOWED"
         )
-        with self.assertRaisesRegex(ValueError, "statement-fidelity"):
+        with self.assertRaisesRegex(ValueError, "harness construction"):
             validate_contract(changed, self.controls, self.runtime)
 
     def test_final_receipt_schema_cannot_be_substituted(self) -> None:
