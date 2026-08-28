@@ -11,6 +11,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from supernova_goal1.contracts import MODEL_USAGE_BASES
+from supernova_goal1.cost import ModelUsageBasis
 from supernova_goal1.evaluate import evaluate_experiment
 from supernova_goal1.statistics import HolmResult
 
@@ -27,10 +29,41 @@ class EvaluateExperimentTests(unittest.TestCase):
         result = evaluate_experiment(self.spec, self.records)
         self.assertEqual("BLOCKED", result["decision"])
         self.assertEqual([], result["missing"])
+        self.assertEqual("UNFROZEN", result["model_usage_basis"])
+
+    def test_contract_usage_bases_match_cost_event_usage_bases(self) -> None:
+        self.assertEqual({basis.value for basis in ModelUsageBasis}, MODEL_USAGE_BASES)
+
+    def test_frozen_cost_model_requires_concrete_usage_basis(self) -> None:
+        spec = copy.deepcopy(self.spec)
+        spec["cost_model_frozen"] = True
+        with self.assertRaisesRegex(ValueError, "requires a concrete"):
+            evaluate_experiment(spec, self.records)
+
+    def test_outcome_requires_concrete_usage_basis(self) -> None:
+        records = copy.deepcopy(self.records)
+        records[0].pop("model_usage_basis")
+        with self.assertRaisesRegex(ValueError, "outcome model_usage_basis"):
+            evaluate_experiment(self.spec, records)
+
+    def test_unfrozen_spec_rejects_mixed_outcome_bases(self) -> None:
+        records = copy.deepcopy(self.records)
+        records[0]["model_usage_basis"] = "visible_utf8_bytes"
+        with self.assertRaisesRegex(ValueError, "mixed model_usage_basis"):
+            evaluate_experiment(self.spec, records)
+
+    def test_selected_usage_basis_rejects_mismatched_outcome(self) -> None:
+        spec = copy.deepcopy(self.spec)
+        spec["model_usage_basis"] = "provider_tokens"
+        records = copy.deepcopy(self.records)
+        records[0]["model_usage_basis"] = "visible_utf8_bytes"
+        with self.assertRaisesRegex(ValueError, "mixed model_usage_basis"):
+            evaluate_experiment(spec, records)
 
     def test_missing_record_is_incomplete_after_cost_freeze(self) -> None:
         spec = copy.deepcopy(self.spec)
         spec["cost_model_frozen"] = True
+        spec["model_usage_basis"] = "provider_tokens"
         result = evaluate_experiment(spec, self.records[:-1])
         self.assertEqual("INCOMPLETE", result["decision"])
         self.assertEqual(
@@ -56,6 +89,7 @@ class EvaluateExperimentTests(unittest.TestCase):
     def test_complete_evaluation_uses_shared_statistics_library(self) -> None:
         spec = copy.deepcopy(self.spec)
         spec["cost_model_frozen"] = True
+        spec["model_usage_basis"] = "provider_tokens"
         corrections = tuple(
             HolmResult(p_value=0.01, threshold=0.0125, rejects_null=True)
             for _ in range(4)
