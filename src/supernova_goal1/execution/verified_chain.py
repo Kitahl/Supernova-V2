@@ -100,27 +100,56 @@ def _same_frozen_cell(left: FrozenProblemRequest, right: FrozenProblemRequest) -
 
 @dataclass(frozen=True)
 class RetryLink:
-    """Exact preregistered predecessor identity; an attempt number alone is ambiguous."""
+    """Exact signed terminal predecessor; registration alone cannot authorize retry."""
 
-    attempt: int
-    dispatch_id: str
-    frozen_request_sha256: str
+    predecessor_completion: CompletionRecord
 
     def __post_init__(self) -> None:
-        if type(self.attempt) is not int or self.attempt < 0:
-            raise ValueError("retry attempt must be a non-negative integer")
-        object.__setattr__(self, "dispatch_id", _sha256_hex(self.dispatch_id, "dispatch_id"))
-        object.__setattr__(
-            self,
-            "frozen_request_sha256",
-            _sha256_hex(self.frozen_request_sha256, "frozen_request_sha256"),
+        if type(self.predecessor_completion) is not CompletionRecord:
+            raise TypeError(
+                "predecessor_completion must be an exact CompletionRecord"
+            )
+        completion = CompletionRecord.from_mapping(
+            self.predecessor_completion.to_mapping()
         )
+        payload = completion.payload
+        if payload.request.arm is not Arm.VERIFIED_CHAIN:
+            raise ValueError("retry predecessor must be a verified-chain completion")
+        result = payload.attempt_result
+        receipt = payload.verifier_receipt
+        if result.status is AttemptStatus.ANSWERED:
+            if receipt is None:
+                raise ValueError("answered retry predecessor requires verifier evidence")
+            if receipt.status is VerifierStatus.PASS:
+                raise ValueError(
+                    "a Lean-PASS completion feeds forward and is not retry-eligible"
+                )
+        object.__setattr__(self, "predecessor_completion", completion)
+
+    @property
+    def attempt(self) -> int:
+        return self.predecessor_completion.payload.request.attempt
+
+    @property
+    def dispatch_id(self) -> str:
+        return self.predecessor_completion.dispatch_id
+
+    @property
+    def frozen_request_sha256(self) -> str:
+        return self.predecessor_completion.payload.request.frozen_request_sha256
 
     def to_mapping(self) -> dict[str, object]:
+        payload = self.predecessor_completion.payload
+        receipt = payload.verifier_receipt
         return {
             "attempt": self.attempt,
+            "completion_sha256": self.predecessor_completion.record_sha256,
             "dispatch_id": self.dispatch_id,
             "frozen_request_sha256": self.frozen_request_sha256,
+            "status": payload.attempt_result.status.value,
+            "verifier_receipt_sha256": (
+                None if receipt is None else receipt.receipt_sha256
+            ),
         }
 
 
@@ -300,10 +329,10 @@ def render_verified_chain_request(
         raise ValueError("admitted product_ids must be unique")
     if len(dispatch_ids) != len(set(dispatch_ids)):
         raise ValueError("admitted producer dispatches must be unique")
-    retry = None if retry_of is None else RetryLink(
-        retry_of.attempt,
-        retry_of.dispatch_id,
-        retry_of.frozen_request_sha256,
+    retry = (
+        None
+        if retry_of is None
+        else RetryLink(retry_of.predecessor_completion)
     )
     return _canonical_bytes(
         {
@@ -315,78 +344,54 @@ def render_verified_chain_request(
     )
 
 
-def _stored_request(
-    authority: DispatchAuthority,
-    dispatch_id: str,
-) -> FrozenProblemRequest:
-    connection = authority._connect()
-    try:
-        requests = authority._requests_from_db(connection)
-        request = requests.get(dispatch_id)
-        if request is None:
-            raise ValueError("dispatch request is absent from authority")
-        return FrozenProblemRequest.from_mapping(request.to_mapping())
-    finally:
-        connection.close()
-
-
-def _authenticate_admitted_product(
-    authority: DispatchAuthority,
-    manifest: DispatchManifest,
-    product: AdmittedProduct,
-) -> FrozenProblemRequest:
-    producer = product.producer_completion
-    matches = [
-        entry
-        for entry in manifest.entries
-        if (
-            entry.dispatch_id == producer.dispatch_id
-            and entry.entry_sha256 == producer.entry_sha256
-        )
-    ]
-    if len(matches) != 1:
-        raise ValueError("admitted product producer is absent from supplied manifest")
-    entry = matches[0]
-    connection = authority._connect()
-    try:
-        requests = authority._requests_from_db(connection)
-        stored_request = requests.get(entry.dispatch_id)
-        if stored_request is None:
-            raise ValueError("admitted product producer is absent from authority")
-        authority._validate_record_for_entry(
-            connection,
-            entry,
-            producer,
-            stored_request,
-        )
-        return FrozenProblemRequest.from_mapping(stored_request.to_mapping())
-    finally:
-        connection.close()
-
-
 def _authenticate_retry(
     authority: DispatchAuthority,
     manifest: DispatchManifest,
     current: FrozenProblemRequest,
     retry_of: RetryLink,
 ) -> None:
+    predecessor_completion = retry_of.predecessor_completion
+    predecessor_request = predecessor_completion.payload.request
     if retry_of.attempt >= current.attempt:
         raise ValueError("retry predecessor must be an earlier frozen attempt")
     matches = [
         entry
         for entry in manifest.entries
         if (
-            entry.dispatch_id == retry_of.dispatch_id
+            entry.dispatch_id == predecessor_completion.dispatch_id
+            and entry.entry_sha256 == predecessor_completion.entry_sha256
             and entry.request_sha256 == retry_of.frozen_request_sha256
             and entry.attempt_index == retry_of.attempt
         )
     ]
     if len(matches) != 1:
         raise ValueError("retry predecessor is not uniquely present in supplied manifest")
-    predecessor = _stored_request(authority, retry_of.dispatch_id)
-    if predecessor.frozen_request_sha256 != retry_of.frozen_request_sha256:
+    entry = matches[0]
+    connection = authority._connect()
+    try:
+        requests = authority._requests_from_db(connection)
+        stored_request = requests.get(entry.dispatch_id)
+        if stored_request is None:
+            raise ValueError("retry predecessor completion is absent from authority")
+        authority._validate_record_for_entry(
+            connection,
+            entry,
+            predecessor_completion,
+            stored_request,
+        )
+        stored_request = FrozenProblemRequest.from_mapping(
+            stored_request.to_mapping()
+        )
+    finally:
+        connection.close()
+    if stored_request.frozen_request_sha256 != retry_of.frozen_request_sha256:
         raise ValueError("retry predecessor request digest does not match authority")
-    if not _same_frozen_cell(predecessor, current):
+    if (
+        predecessor_request.frozen_request_sha256
+        != stored_request.frozen_request_sha256
+    ):
+        raise ValueError("retry completion request does not match authority")
+    if not _same_frozen_cell(stored_request, current):
         raise ValueError("retry predecessor is outside the current frozen cell")
 
 
