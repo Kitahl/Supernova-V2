@@ -592,14 +592,24 @@ class EvidenceBridgeTests(unittest.TestCase):
                 and entry["dispatch_id"] != base.protocol_dispatch_id
             )
             variants = (
-                (None, None),
+                (None, None, "protocol dispatch binding"),
                 (
                     wrong_slot,
                     self.manifest_bundle.public_manifest["manifest_sha256"],
+                    "protocol dispatch binding",
+                ),
+                (
+                    base.protocol_dispatch_id,
+                    sha("wrong-confirmatory-manifest"),
+                    "confirmatory manifest binding",
                 ),
             )
             manifest = authority.current_manifest()
-            for protocol_dispatch_id, confirmatory_manifest_sha256 in variants:
+            for (
+                protocol_dispatch_id,
+                confirmatory_manifest_sha256,
+                expected_error,
+            ) in variants:
                 request = FrozenProblemRequest(
                     run_id=run_id,
                     experiment_id=base.experiment_id,
@@ -624,9 +634,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                     request=request,
                     completion_verifier_sha256=signer.public_commitment,
                 )
-                with self.assertRaisesRegex(
-                    ValueError, "frozen request protocol dispatch binding"
-                ):
+                with self.assertRaisesRegex(ValueError, expected_error):
                     ledger._register_dispatch(manifest.entries[-1], request)
         finally:
             tmp.cleanup()
