@@ -46,6 +46,12 @@ class LeanRuntimeTests(unittest.TestCase):
         self.assertIn("native_decide", source)
         self.assertIn("theorem supernova_goal1_runtime_smoke", source)
 
+    def test_bootstrap_separates_cache_download_from_unpack(self) -> None:
+        readme = (RUNTIME / "README.md").read_text(encoding="utf-8")
+        self.assertIn("lake exe cache get-", readme)
+        self.assertIn("lake exe cache unpack", readme)
+        self.assertNotIn("lake exe cache get\n", readme)
+
     def test_checker_requires_exact_lean_version_then_compiles_smoke(self) -> None:
         responses = [
             subprocess.CompletedProcess(
