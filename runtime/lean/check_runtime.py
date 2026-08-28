@@ -24,10 +24,15 @@ def _run(command: Sequence[str], *, timeout: int) -> subprocess.CompletedProcess
     )
 
 
+def _diagnostic(result: subprocess.CompletedProcess[str]) -> str:
+    parts = [part.strip() for part in (result.stderr, result.stdout) if part.strip()]
+    return "\n".join(parts) if parts else "<no process output>"
+
+
 def check_runtime() -> dict[str, object]:
     version = _run(("lake", "env", "lean", "--version"), timeout=VERSION_TIMEOUT_SECONDS)
     if version.returncode != 0:
-        raise RuntimeError(f"Lean version command failed: {version.stderr.strip()}")
+        raise RuntimeError(f"Lean version command failed: {_diagnostic(version)}")
     first_line = version.stdout.splitlines()[0] if version.stdout.splitlines() else ""
     expected_marker = f"Lean (version {EXPECTED_LEAN_VERSION},"
     if expected_marker not in first_line:
@@ -40,7 +45,7 @@ def check_runtime() -> dict[str, object]:
         timeout=SMOKE_TIMEOUT_SECONDS,
     )
     if smoke.returncode != 0:
-        raise RuntimeError(f"Lean smoke compile failed: {smoke.stderr.strip()}")
+        raise RuntimeError(f"Lean smoke compile failed: {_diagnostic(smoke)}")
     return {
         "status": "PASS",
         "lean_version": EXPECTED_LEAN_VERSION,
