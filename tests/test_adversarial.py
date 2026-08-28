@@ -25,6 +25,7 @@ class AdversarialEvaluationTests(unittest.TestCase):
     def frozen_spec(self) -> dict:
         spec = copy.deepcopy(self.spec)
         spec["cost_model_frozen"] = True
+        spec["model_usage_basis"] = "provider_tokens"
         return spec
 
     def test_identical_duplicate_problem_arm_is_rejected(self) -> None:
