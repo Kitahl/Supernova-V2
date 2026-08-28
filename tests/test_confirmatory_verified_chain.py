@@ -12,7 +12,7 @@ CONTRACT_PATH = ROOT / "goal1" / "CONFIRMATORY_VERIFIED_CHAIN.json"
 CONTROLS_PATH = ROOT / "goal1" / "CONFIRMATORY_PRODUCT_CONTROLS.json"
 RUNTIME_PATH = ROOT / "goal1" / "CONFIRMATORY_RUNTIME.json"
 
-EXPECTED_CONTRACT_BLOB_SHA1 = "091aed3fa33f0db899f0dd53bad1706aafff0c6c"
+EXPECTED_CONTRACT_BLOB_SHA1 = "089592344a85509c5a587f2d77d37d3b7c825061"
 EXPECTED_CONTROLS_BLOB_SHA1 = "ab2b298e29022f931ec141bdba50485b0967ad3f"
 EXPECTED_RUNTIME_BLOB_SHA1 = "1fa7caeefdf3c01cea5603f4865c2f9eec11a0fb"
 EXPECTED_SURFACE_SHA256 = (
@@ -22,6 +22,21 @@ EXPECTED_SOLE_DIFFERENCE = (
     "USE_OF_THE_IDENTICAL_PRODUCT_VERIFIER_RESULT_FOR_ADMISSION_"
     "PRODUCT_ONLY_IGNORES_IT_VERIFIED_CHAIN_REQUIRES_ADMISSIBLE_PASS"
 )
+EXPECTED_CONTEXT_RECEIPT_FIELDS = [
+    "receipt_schema",
+    "issuer_id",
+    "model_identity_sha256",
+    "context_id",
+    "problem_id",
+    "arm",
+    "attempt_index",
+    "initial_context_sha256",
+    "request_artifact_sha256",
+    "response_artifact_sha256",
+    "opened_at",
+    "closed_at",
+    "signature",
+]
 EXPECTED_GRAPH = [
     {
         "attempt_index": index,
@@ -186,6 +201,12 @@ def validate_contract(contract: object, controls: dict, runtime: dict) -> None:
         "HERMETIC_LOCAL_INSTANCE",
     ]:
         raise ValueError("context receipt modes changed")
+    if execution["required_context_receipt_fields"] != EXPECTED_CONTEXT_RECEIPT_FIELDS:
+        raise ValueError("context receipt fields changed")
+    if execution["required_context_receipt_fields"] != controls["shared"][
+        "context_isolation_declaration"
+    ]["required_receipt_fields"]:
+        raise ValueError("context receipt parity changed")
     if execution["recurring_chat_without_provider_fresh_context_attestation"] != (
         "NON_CREDIT_ONLY"
     ):
@@ -218,49 +239,46 @@ def validate_contract(contract: object, controls: dict, runtime: dict) -> None:
         raise ValueError("product identity binding changed")
 
     harness = contract["harness_construction"]
-    if harness["product_harness"] != surface["projection"]["product_harness"]:
-        raise ValueError("product harness changed")
-    if harness["final_harness"] != surface["projection"]["final_harness"]:
-        raise ValueError("final harness changed")
-    if harness["transformation"] != surface["projection"]["construction_transformation"]:
-        raise ValueError("construction transformation changed")
-    if harness["target_statement_or_import_mutation"] != "BLOCKED":
-        raise ValueError("statement-fidelity boundary changed")
+    if harness != {
+        "product_harness": surface["projection"]["product_harness"],
+        "final_harness": surface["projection"]["final_harness"],
+        "transformation": surface["projection"]["construction_transformation"],
+        "product_harness_forbidden_material": [
+            "TARGET_DECLARATION",
+            "SOLVED_TARGET_STUB",
+            "UNADMITTED_PRODUCT",
+        ],
+        "target_statement_or_import_mutation": "BLOCKED",
+    }:
+        raise ValueError("harness construction changed")
 
     admission = contract["product_admission"]
-    if admission["verifier_invocation"] != surface["projection"][
-        "product_verifier_invocation"
-    ]:
-        raise ValueError("product verifier invocation changed")
-    if admission["required_result"] != "PASS":
-        raise ValueError("product admission result changed")
-    if admission["required_runtime_id"] != runtime["runtime_id"]:
-        raise ValueError("product runtime changed")
-    if admission["required_axiom_allowlist_exact"] != runtime["verifier"][
-        "axiom_policy"
-    ]["allowed_exact"]:
-        raise ValueError("axiom allowlist changed")
-    if admission["forbidden_axiom_exact"] != runtime["verifier"]["axiom_policy"][
-        "forbidden_exact"
-    ]:
-        raise ValueError("forbidden axiom changed")
-    required_admission = set(admission["admission_requires"])
-    for item in {
-        "AUTHENTICATED_CONTEXT_RECEIPT",
-        "AUTHENTICATED_PREDECESSOR_COMPLETION_BINDING",
-        "AUTHENTICATED_HOST_EXECUTION_RECORD",
-        "BOUND_PRODUCT_VERIFIER_RECEIPT",
-        "PINNED_RUNTIME_PASS",
-        "PRINTED_AXIOMS_SUBSET_OF_RUNTIME_ALLOWLIST",
+    if admission != {
+        "verifier_invocation": surface["projection"]["product_verifier_invocation"],
+        "required_result": "PASS",
+        "required_runtime_id": runtime["runtime_id"],
+        "required_axiom_allowlist_exact": runtime["verifier"]["axiom_policy"][
+            "allowed_exact"
+        ],
+        "forbidden_axiom_exact": runtime["verifier"]["axiom_policy"][
+            "forbidden_exact"
+        ],
+        "admission_requires": [
+            "SYNTACTICALLY_ADMISSIBLE_EXACT_PRODUCT_RESPONSE_BYTES",
+            "AUTHENTICATED_CONTEXT_RECEIPT",
+            "AUTHENTICATED_PREDECESSOR_COMPLETION_BINDING",
+            "AUTHENTICATED_HOST_EXECUTION_RECORD",
+            "BOUND_PRODUCT_VERIFIER_RECEIPT",
+            "PINNED_RUNTIME_PASS",
+            "PRINTED_AXIOMS_SUBSET_OF_RUNTIME_ALLOWLIST",
+        ],
+        "fail_error_timeout_truncation_missing_or_unparseable_axioms": (
+            "PRODUCT_NOT_ADMITTED_AND_CELL_REMAINS_COMPLETE_ONLY_WITH_TYPED_RECEIPTS"
+        ),
+        "product_pass_is_terminal_solution": False,
+        "admission_by_model_claim_human_judgment_or_unbound_boolean": "BLOCKED",
     }:
-        if item not in required_admission:
-            raise ValueError("product admission evidence weakened")
-    if admission["product_pass_is_terminal_solution"] is not False:
-        raise ValueError("product terminal role changed")
-    if admission["admission_by_model_claim_human_judgment_or_unbound_boolean"] != (
-        "BLOCKED"
-    ):
-        raise ValueError("unbound admission changed")
+        raise ValueError("product admission contract changed")
 
     receipt = contract["product_receipt"]
     if receipt["schema"] != "supernova.verified-product-receipt.v1":
@@ -275,42 +293,42 @@ def validate_contract(contract: object, controls: dict, runtime: dict) -> None:
         raise ValueError("receipt replay boundary changed")
 
     memory = contract["model_visible_memory"]
-    if memory["allowed"] != (
-        "EXACT_PRODUCT_CANDIDATE_RESPONSE_BYTES_WITH_ADMISSIBLE_PASS_RECEIPTS_"
-        "FROM_LOWER_ATTEMPTS_IN_THIS_EXACT_RUN_PROBLEM_AND_ARM"
-    ):
-        raise ValueError("model-visible memory changed")
-    if memory["ordering"] != "STRICT_ASCENDING_PRODUCER_ATTEMPT_INDEX":
-        raise ValueError("memory ordering changed")
-    if memory["inclusion"] != "ALL_AND_ONLY_ADMITTED_PRODUCTS":
-        raise ValueError("memory inclusion changed")
-    if memory["exact_response_bytes_only"] is not True:
-        raise ValueError("memory byte identity changed")
-    for forbidden in {
-        "PRODUCT_RECEIPT",
-        "VERIFIER_STATUS",
-        "FAIL_OR_ERROR_DIAGNOSTIC",
-        "PREDECESSOR_COMPLETION_METADATA",
-        "CROSS_PROBLEM_PRODUCT",
-        "CROSS_ARM_PRODUCT",
-        "UNADMITTED_PRODUCT",
+    if memory != {
+        "allowed": (
+            "EXACT_PRODUCT_CANDIDATE_RESPONSE_BYTES_WITH_ADMISSIBLE_PASS_RECEIPTS_"
+            "FROM_LOWER_ATTEMPTS_IN_THIS_EXACT_RUN_PROBLEM_AND_ARM"
+        ),
+        "ordering": "STRICT_ASCENDING_PRODUCER_ATTEMPT_INDEX",
+        "inclusion": "ALL_AND_ONLY_ADMITTED_PRODUCTS",
+        "exact_response_bytes_only": True,
+        "forbidden": [
+            "PRODUCT_RECEIPT",
+            "VERIFIER_STATUS",
+            "VERIFIER_STDOUT",
+            "VERIFIER_STDERR",
+            "VERIFIER_TIMING",
+            "FAIL_OR_ERROR_DIAGNOSTIC",
+            "PREDECESSOR_COMPLETION_METADATA",
+            "FINAL_ANSWER_RESPONSE",
+            "NO_ANSWER",
+            "CROSS_PROBLEM_PRODUCT",
+            "CROSS_ARM_PRODUCT",
+            "UNADMITTED_PRODUCT",
+            "HUMAN_SUMMARY",
+        ],
+        "any_hidden_conversation_or_saved_memory": "BLOCKED",
     }:
-        if forbidden not in set(memory["forbidden"]):
-            raise ValueError("forbidden model-visible evidence removed")
-    if memory["any_hidden_conversation_or_saved_memory"] != "BLOCKED":
-        raise ValueError("hidden-memory boundary changed")
+        raise ValueError("model-visible memory changed")
 
     final = contract["final_answer"]
-    if final["verifier_invocation"] != surface["projection"][
-        "final_verifier_invocation"
-    ]:
-        raise ValueError("final verifier invocation changed")
-    if final["required_result"] != "PASS":
-        raise ValueError("final result rule changed")
-    if final["required_bindings"] != EXPECTED_FINAL_RECEIPT_BINDINGS:
-        raise ValueError("final receipt bindings changed")
-    if final["target_statement_or_import_mutation"] != "BLOCKED":
-        raise ValueError("final statement-fidelity boundary changed")
+    if final != {
+        "verifier_invocation": surface["projection"]["final_verifier_invocation"],
+        "required_result": "PASS",
+        "final_receipt_schema": "supernova.verified-final-receipt.v1",
+        "required_bindings": EXPECTED_FINAL_RECEIPT_BINDINGS,
+        "target_statement_or_import_mutation": "BLOCKED",
+    }:
+        raise ValueError("final answer contract changed")
 
     terminal = contract["terminal_result"]
     if terminal != {
@@ -328,22 +346,21 @@ def validate_contract(contract: object, controls: dict, runtime: dict) -> None:
         raise ValueError("terminal result changed")
 
     cost = contract["cost_boundary"]
-    if cost["model_calls"] != 16 or cost["orchestration_events"] != 16:
-        raise ValueError("common attempt cost changed")
-    if cost["product_candidate_and_final_answer"] != (
-        "CHARGE_ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT"
-    ):
-        raise ValueError("verifier cost changed")
-    if cost["no_answer_or_error"] != (
-        "CHARGE_ONE_TYPED_NOT_INVOKED_VERIFIER_SLOT"
-    ):
-        raise ValueError("typed verifier slot changed")
-    if cost["unknown_or_unreconciled_event"] != "BLOCKED":
-        raise ValueError("unknown cost handling changed")
-    if cost["complete_cost_rule"] != (
-        "MUST_EQUAL_THE_FROZEN_G1_126_COMMON_COMPLETE_COST_BASIS_AND_CEILING"
-    ):
-        raise ValueError("complete-cost binding changed")
+    if cost != {
+        "model_calls": 16,
+        "orchestration_events": 16,
+        "product_candidate_and_final_answer": (
+            "CHARGE_ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT"
+        ),
+        "no_answer_or_error": "CHARGE_ONE_TYPED_NOT_INVOKED_VERIFIER_SLOT",
+        "exact_input_and_output_bytes": "CHARGED",
+        "unknown_or_unreconciled_event": "BLOCKED",
+        "complete_cost_rule": (
+            "MUST_EQUAL_THE_FROZEN_G1_126_COMMON_COMPLETE_COST_BASIS_AND_CEILING"
+        ),
+    }:
+        raise ValueError("cost boundary changed")
+
 
 
 class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
@@ -370,6 +387,14 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
             self.contract["shared_surface_binding"]["exact_projection_sha256"],
         )
 
+    def test_context_receipt_schema_cannot_be_weakened(self) -> None:
+        changed = copy.deepcopy(self.contract)
+        changed["execution"]["required_context_receipt_fields"].remove(
+            "response_artifact_sha256"
+        )
+        with self.assertRaisesRegex(ValueError, "context receipt fields"):
+            validate_contract(changed, self.controls, self.runtime)
+
     def test_nonpassing_product_cannot_be_admitted(self) -> None:
         changed = copy.deepcopy(self.contract)
         changed["product_admission"]["required_result"] = "ANY_TERMINAL_RESULT"
@@ -395,11 +420,32 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "receipt bindings"):
                 validate_contract(changed, self.controls, self.runtime)
 
-    def test_verifier_evidence_cannot_enter_model_visible_memory(self) -> None:
+    def test_admission_harness_and_error_policy_are_closed(self) -> None:
         changed = copy.deepcopy(self.contract)
-        changed["model_visible_memory"]["forbidden"].remove("VERIFIER_STATUS")
-        with self.assertRaisesRegex(ValueError, "forbidden model-visible evidence"):
+        changed["harness_construction"]["product_harness_forbidden_material"].remove(
+            "UNADMITTED_PRODUCT"
+        )
+        with self.assertRaisesRegex(ValueError, "harness construction"):
             validate_contract(changed, self.controls, self.runtime)
+        changed = copy.deepcopy(self.contract)
+        changed["product_admission"]["admission_requires"].remove(
+            "SYNTACTICALLY_ADMISSIBLE_EXACT_PRODUCT_RESPONSE_BYTES"
+        )
+        with self.assertRaisesRegex(ValueError, "product admission contract"):
+            validate_contract(changed, self.controls, self.runtime)
+        changed = copy.deepcopy(self.contract)
+        changed["product_admission"][
+            "fail_error_timeout_truncation_missing_or_unparseable_axioms"
+        ] = "ADMIT_PRODUCT"
+        with self.assertRaisesRegex(ValueError, "product admission contract"):
+            validate_contract(changed, self.controls, self.runtime)
+
+    def test_verifier_evidence_cannot_enter_model_visible_memory(self) -> None:
+        for field in ["VERIFIER_STATUS", "VERIFIER_STDOUT", "VERIFIER_STDERR", "VERIFIER_TIMING"]:
+            changed = copy.deepcopy(self.contract)
+            changed["model_visible_memory"]["forbidden"].remove(field)
+            with self.assertRaisesRegex(ValueError, "model-visible memory"):
+                validate_contract(changed, self.controls, self.runtime)
         changed = copy.deepcopy(self.contract)
         changed["model_visible_memory"]["allowed"] = "ANY_PRIOR_PRODUCT"
         with self.assertRaisesRegex(ValueError, "model-visible memory"):
@@ -435,6 +481,12 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "statement-fidelity"):
             validate_contract(changed, self.controls, self.runtime)
 
+    def test_final_receipt_schema_cannot_be_substituted(self) -> None:
+        changed = copy.deepcopy(self.contract)
+        changed["final_answer"]["final_receipt_schema"] = "untrusted.v0"
+        with self.assertRaisesRegex(ValueError, "final answer contract"):
+            validate_contract(changed, self.controls, self.runtime)
+
     def test_verifier_or_complete_cost_cannot_be_removed(self) -> None:
         changed = copy.deepcopy(self.contract)
         changed["cost_boundary"]["product_candidate_and_final_answer"] = (
@@ -444,7 +496,11 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
             validate_contract(changed, self.controls, self.runtime)
         changed = copy.deepcopy(self.contract)
         changed["cost_boundary"]["unknown_or_unreconciled_event"] = "ZERO"
-        with self.assertRaisesRegex(ValueError, "unknown cost"):
+        with self.assertRaisesRegex(ValueError, "cost boundary"):
+            validate_contract(changed, self.controls, self.runtime)
+        changed = copy.deepcopy(self.contract)
+        changed["cost_boundary"]["exact_input_and_output_bytes"] = "FREE"
+        with self.assertRaisesRegex(ValueError, "cost boundary"):
             validate_contract(changed, self.controls, self.runtime)
 
 
