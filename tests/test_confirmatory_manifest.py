@@ -27,18 +27,27 @@ from supernova_goal1.confirmatory_manifest import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_PATH = ROOT / "goal1" / "CONFIRMATORY_PROTOCOL.json"
+OPERATOR_SEED = bytes.fromhex(
+    "9f4ca7d33bc2a179076768b2ea3fc6f5991ec8c0f3a91bd90ef33e5346f47721"
+)
 
 
 class ConfirmatoryManifestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.protocol = json.loads(PROTOCOL_PATH.read_text(encoding="utf-8"))
-        cls.bundle = build_non_credit_draft(cls.protocol)
+        cls.bundle = build_non_credit_draft(
+            cls.protocol,
+            operator_seed=OPERATOR_SEED,
+        )
         cls.public = cls.bundle.public_manifest
         cls.operator = cls.bundle.operator_plan
 
     def test_draft_is_deterministic_and_binds_exact_sealed_rules(self) -> None:
-        rebuilt = build_non_credit_draft(self.protocol)
+        rebuilt = build_non_credit_draft(
+            self.protocol,
+            operator_seed=OPERATOR_SEED,
+        )
         self.assertEqual(self.public["manifest_sha256"], rebuilt.public_manifest["manifest_sha256"])
         self.assertEqual(
             self.operator["operator_plan_sha256"],
@@ -111,7 +120,7 @@ class ConfirmatoryManifestTests(unittest.TestCase):
             self.assertNotIn("dispatch_id", record)
             self.assertNotIn("predecessor_dispatch_id", record)
         self.assertEqual(
-            "STRUCTURAL_PAYLOAD_SEPARATION_NOT_CRYPTOGRAPHIC",
+            "OPAQUE_IDS_AND_ORDER_BOUND_TO_OPERATOR_ONLY_256_BIT_SEED",
             self.public["blinding"]["classification"],
         )
         self.assertIs(False, self.public["blinding"]["public_records_contain_arm"])
@@ -120,6 +129,75 @@ class ConfirmatoryManifestTests(unittest.TestCase):
         }
         operator_ids = {entry["evaluation_id"] for entry in self.operator["entries"]}
         self.assertEqual(public_ids, operator_ids)
+
+    def test_public_order_no_longer_reveals_arm_from_frozen_schedule(self) -> None:
+        report_problem_ids = self.protocol["sealed_rules"]["benchmark_selection"][
+            "report_split"
+        ]["problem_ids"]
+        problem_index = {
+            problem_id: index for index, problem_id in enumerate(report_problem_ids)
+        }
+        truth = {
+            entry["evaluation_id"]: entry["arm"] for entry in self.operator["entries"]
+        }
+        old_schedule_guess_matches = 0
+        for record in self.public["public_records"]:
+            guessed_position = record["evaluation_index"] % 5
+            guessed_arm = CANONICAL_ARMS[
+                (problem_index[record["problem_id"]] % 5 + guessed_position) % 5
+            ]
+            old_schedule_guess_matches += (
+                guessed_arm == truth[record["evaluation_id"]]
+            )
+        self.assertLess(
+            old_schedule_guess_matches,
+            EXPECTED_DISPATCH_RECORDS // 2,
+        )
+        self.assertNotEqual(
+            [entry["evaluation_id"] for entry in self.operator["entries"]],
+            [record["evaluation_id"] for record in self.public["public_records"]],
+        )
+        self.assertNotIn("operator_seed_hex", self.public)
+        self.assertRegex(
+            self.public["blinding"]["operator_seed_commitment_sha256"],
+            r"^[0-9a-f]{64}$",
+        )
+
+    def test_seed_changes_only_blinding_not_scientific_dispatch_plan(self) -> None:
+        other = build_non_credit_draft(
+            self.protocol,
+            operator_seed=bytes.fromhex("01" * 32),
+        )
+        self.assertNotEqual(
+            self.public["manifest_sha256"],
+            other.public_manifest["manifest_sha256"],
+        )
+        self.assertNotEqual(
+            {row["evaluation_id"] for row in self.public["public_records"]},
+            {row["evaluation_id"] for row in other.public_manifest["public_records"]},
+        )
+        fields = (
+            "dispatch_id",
+            "dispatch_index",
+            "problem_id",
+            "family_id",
+            "arm",
+            "arm_position",
+            "budget_attempt_index",
+            "predecessor_attempt_index",
+            "predecessor_dispatch_id",
+            "retry_allowance",
+        )
+        self.assertEqual(
+            [
+                tuple(entry[field] for field in fields)
+                for entry in self.operator["entries"]
+            ],
+            [
+                tuple(entry[field] for field in fields)
+                for entry in other.operator_plan["entries"]
+            ],
+        )
 
     def test_chain_predecessors_are_registered_without_baseline_leakage(self) -> None:
         entries = {
@@ -199,6 +277,7 @@ class ConfirmatoryManifestTests(unittest.TestCase):
         with self.assertRaisesRegex(PermissionError, "execution-authority validator"):
             build_confirmatory_manifest(
                 self.protocol,
+                operator_seed=OPERATOR_SEED,
                 execution_authority=fake_authority,
             )
 
@@ -217,7 +296,7 @@ class ConfirmatoryManifestTests(unittest.TestCase):
         changed = copy.deepcopy(self.protocol)
         changed["sealed_rules"]["paired_design"]["attempts_per_problem_arm"] = 15
         with self.assertRaisesRegex(ValueError, "sealed_rules_sha256"):
-            build_non_credit_draft(changed)
+            build_non_credit_draft(changed, operator_seed=OPERATOR_SEED)
 
         changed = copy.deepcopy(self.protocol)
         changed["sealed_rules_sha256"] = "0" * 64
