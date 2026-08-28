@@ -200,8 +200,11 @@
         "Without an admissible execution-authority bundle the manifest is NON_CREDIT_DRAFT and dispatch is BLOCKED."
       ],
       "completion": {
-        "pull_request": 70,
-        "merge_commit": "13e46e9ea7aa5831efdf843f96479144bb2a2f71"
+        "pull_request": 72,
+        "merge_commit": "8bd51bf8638d0bf976b3ac85aa529f921ea2b81f",
+        "initial_pull_request": 70,
+        "initial_merge_commit": "13e46e9ea7aa5831efdf843f96479144bb2a2f71",
+        "correction_reason": "MULTI_FIDELITY_PROMOTION_GRAPH"
       }
     },
     {
