@@ -43,6 +43,7 @@ class LeanRuntimeTests(unittest.TestCase):
         lowered = source.lower()
         for forbidden in ("sorry", "admit", "axiom"):
             self.assertNotIn(forbidden, lowered)
+        self.assertTrue(source.startswith("import Mathlib.Tactic.NormNum\n"))
         self.assertIn("norm_num", source)
         self.assertIn("theorem supernova_goal1_runtime_smoke", source)
 
@@ -106,6 +107,25 @@ class LeanRuntimeTests(unittest.TestCase):
         )
         with mock.patch.object(CHECKER, "_run", return_value=failed):
             with self.assertRaisesRegex(RuntimeError, "toolchain unavailable"):
+                CHECKER.check_runtime()
+
+    def test_checker_preserves_stdout_on_smoke_failure(self) -> None:
+        responses = [
+            subprocess.CompletedProcess(
+                args=["lake", "env", "lean", "--version"],
+                returncode=0,
+                stdout="Lean (version 4.33.1, x86_64-w64-windows-gnu, commit 819816b2e0a3)\n",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["lake", "env", "lean", "SupernovaGoal1Smoke.lean"],
+                returncode=1,
+                stdout="Smoke.lean:1:0: error: missing object file\n",
+                stderr="",
+            ),
+        ]
+        with mock.patch.object(CHECKER, "_run", side_effect=responses):
+            with self.assertRaisesRegex(RuntimeError, "missing object file"):
                 CHECKER.check_runtime()
 
     @unittest.skipUnless(
