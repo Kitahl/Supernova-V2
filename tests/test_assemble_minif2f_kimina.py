@@ -174,11 +174,40 @@ class AssembleMiniF2FKiminaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             manifest_path, deepseek, kimina, manifest = self._write_fixture(root)
-            manifest["outputs"]["validation"]["sha256"] = "0" * 64
+            manifest["outputs"]["test"]["sha256"] = "0" * 64
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             with mock.patch.object(MODULE, "_read_kimina_parquet", return_value=self._kimina_records()):
-                with self.assertRaisesRegex(ValueError, "validation output SHA-256 mismatch"):
+                with self.assertRaisesRegex(ValueError, "test output SHA-256 mismatch"):
+                    MODULE.assemble(
+                        manifest_path=manifest_path,
+                        deepseek_jsonl=deepseek,
+                        kimina_parquet=kimina,
+                        output_directory=root / "output",
+                    )
+            self.assertFalse((root / "output" / "validation.jsonl").exists())
+            self.assertFalse((root / "output" / "test.jsonl").exists())
+
+    def test_output_filenames_must_be_distinct_safe_relative_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path, deepseek, kimina, manifest = self._write_fixture(root)
+            manifest["assembly"]["output_files"]["test"] = "validation.jsonl"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with mock.patch.object(MODULE, "_read_kimina_parquet", return_value=self._kimina_records()):
+                with self.assertRaisesRegex(ValueError, "distinct filenames"):
+                    MODULE.assemble(
+                        manifest_path=manifest_path,
+                        deepseek_jsonl=deepseek,
+                        kimina_parquet=kimina,
+                        output_directory=root / "output",
+                    )
+
+            manifest["assembly"]["output_files"]["test"] = "../test.jsonl"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with mock.patch.object(MODULE, "_read_kimina_parquet", return_value=self._kimina_records()):
+                with self.assertRaisesRegex(ValueError, "one relative filename"):
                     MODULE.assemble(
                         manifest_path=manifest_path,
                         deepseek_jsonl=deepseek,
