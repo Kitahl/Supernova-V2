@@ -98,6 +98,10 @@ def _same_frozen_cell(left: FrozenProblemRequest, right: FrozenProblemRequest) -
         and left.budget_sha256 == right.budget_sha256
         and left.model_usage_basis == right.model_usage_basis
         and left.runtime_sha256 == right.runtime_sha256
+        and (
+            left.confirmatory_manifest_sha256
+            == right.confirmatory_manifest_sha256
+        )
     )
 
 
@@ -606,8 +610,10 @@ def _authenticate_retry(
     execution_authority.verify_retry(retry_of)
     predecessor_completion = retry_of.predecessor_completion
     predecessor_request = predecessor_completion.payload.request
-    if retry_of.attempt >= current.attempt:
-        raise ValueError("retry predecessor must be an earlier frozen attempt")
+    if retry_of.attempt + 1 != current.attempt:
+        raise ValueError(
+            "retry predecessor must be the immediately preceding frozen attempt"
+        )
     matches = [
         entry
         for entry in manifest.entries

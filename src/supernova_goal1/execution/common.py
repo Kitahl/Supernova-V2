@@ -20,6 +20,9 @@ from ..problem import BenchmarkProblemIdentity
 from ..verifier import VerifierResult, VerifierStatus
 
 
+_UNBOUND_PROTOCOL = "UNBOUND_NON_CONFIRMATORY"
+
+
 def _token(value: object, field: str) -> str:
     if type(value) is not str or not value or value != value.strip():
         raise ValueError(f"{field} must be an exact non-empty trimmed string")
@@ -82,6 +85,22 @@ def _usage_basis(value: object) -> str:
             "or UNFROZEN"
         )
     return value
+
+
+def _protocol_dispatch_id(value: object | None) -> str:
+    if value is None:
+        return _UNBOUND_PROTOCOL
+    value = _token(value, "protocol_dispatch_id")
+    if not value.startswith("dispatch-"):
+        raise ValueError("protocol_dispatch_id must use the dispatch- namespace")
+    _sha256_hex(value.removeprefix("dispatch-"), "protocol_dispatch_id")
+    return value
+
+
+def _manifest_binding(value: object | None) -> str:
+    if value is None:
+        return _UNBOUND_PROTOCOL
+    return _sha256_hex(value, "confirmatory_manifest_sha256")
 
 
 def _canonical_sha256(payload: object) -> str:
@@ -151,6 +170,8 @@ _FrozenProblemRequestTuple = namedtuple(
         "model_usage_basis",
         "runtime_sha256",
         "request_artifact",
+        "protocol_dispatch_id",
+        "confirmatory_manifest_sha256",
     ),
     module=__name__,
 )
@@ -180,6 +201,8 @@ class FrozenProblemRequest(_FrozenProblemRequestTuple):
         model_usage_basis: str,
         runtime_sha256: str,
         request_artifact: ScheduledChatArtifactEnvelope,
+        protocol_dispatch_id: str | None = None,
+        confirmatory_manifest_sha256: str | None = None,
     ) -> "FrozenProblemRequest":
         run_id = _token(run_id, "run_id")
         experiment_id = _token(experiment_id, "experiment_id")
@@ -197,6 +220,19 @@ class FrozenProblemRequest(_FrozenProblemRequestTuple):
         request_artifact = _artifact_snapshot(
             request_artifact, "request_artifact"
         )
+        protocol_dispatch_id = _protocol_dispatch_id(protocol_dispatch_id)
+        confirmatory_manifest_sha256 = _manifest_binding(
+            confirmatory_manifest_sha256
+        )
+        if (
+            protocol_dispatch_id == _UNBOUND_PROTOCOL
+        ) != (
+            confirmatory_manifest_sha256 == _UNBOUND_PROTOCOL
+        ):
+            raise ValueError(
+                "protocol dispatch and confirmatory manifest bindings "
+                "must both be present or both be absent"
+            )
         if request_artifact.kind is not ScheduledChatArtifactKind.REQUEST:
             raise ValueError("request_artifact must be a scheduled-chat request")
         expected_artifact_identity = (
@@ -229,6 +265,8 @@ class FrozenProblemRequest(_FrozenProblemRequestTuple):
             model_usage_basis,
             runtime_sha256,
             request_artifact,
+            protocol_dispatch_id,
+            confirmatory_manifest_sha256,
         )
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -245,6 +283,10 @@ class FrozenProblemRequest(_FrozenProblemRequestTuple):
             "model_usage_basis": self.model_usage_basis,
             "problem": self.problem.to_mapping(),
             "problem_sha256": self.problem_sha256,
+            "protocol_dispatch_id": self.protocol_dispatch_id,
+            "confirmatory_manifest_sha256": (
+                self.confirmatory_manifest_sha256
+            ),
             "request_artifact": self.request_artifact.to_mapping(),
             "run_id": self.run_id,
             "runtime_sha256": self.runtime_sha256,
@@ -278,6 +320,8 @@ class FrozenProblemRequest(_FrozenProblemRequestTuple):
             "model_usage_basis",
             "problem",
             "problem_sha256",
+            "protocol_dispatch_id",
+            "confirmatory_manifest_sha256",
             "request_artifact",
             "run_id",
             "runtime_sha256",
@@ -300,6 +344,16 @@ class FrozenProblemRequest(_FrozenProblemRequestTuple):
             runtime_sha256=raw["runtime_sha256"],
             request_artifact=_artifact_from_mapping(
                 raw["request_artifact"], "request_artifact"
+            ),
+            protocol_dispatch_id=(
+                None
+                if raw["protocol_dispatch_id"] == _UNBOUND_PROTOCOL
+                else raw["protocol_dispatch_id"]
+            ),
+            confirmatory_manifest_sha256=(
+                None
+                if raw["confirmatory_manifest_sha256"] == _UNBOUND_PROTOCOL
+                else raw["confirmatory_manifest_sha256"]
             ),
         )
         if raw["frozen_request_sha256"] != request.frozen_request_sha256:
