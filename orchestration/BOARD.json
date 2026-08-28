@@ -7,7 +7,7 @@
     {
       "id": "G1-120",
       "owner": "MF01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/CONFIRMATORY_BENCHMARK.json",
         "tests/test_confirmatory_benchmark.py"
@@ -18,7 +18,11 @@
         "Every selected problem is a member of the locked root.",
         "Development and report sets are disjoint and immutable.",
         "The checker rejects changed bytes, split leakage, duplicates, and post-freeze edits."
-      ]
+      ],
+      "completion": {
+        "pull_request": 55,
+        "merge_commit": "092de0ee8287414e746a8dbf74c46585bb9eccdc"
+      }
     },
     {
       "id": "G1-121",
@@ -46,7 +50,7 @@
     {
       "id": "G1-122",
       "owner": "MF03",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/CONFIRMATORY_RUNTIME.json",
         "tests/test_confirmatory_runtime.py"
@@ -57,7 +61,11 @@
         "Runtime and verifier identities are content-addressed.",
         "Lean 4.33.1 is checked rather than inferred.",
         "Any version, command, or environment drift blocks execution."
-      ]
+      ],
+      "completion": {
+        "pull_request": 56,
+        "merge_commit": "e9e4b419da4bac03639f97dbc7dc6f60d9f26795"
+      }
     },
     {
       "id": "G1-123",
@@ -199,7 +207,7 @@
     {
       "id": "G2-001",
       "owner": "EXT01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal2/GOAL2.json",
         "docs/GOAL2_CONTRACT.md",
@@ -211,7 +219,11 @@
         "The hypothesis and PASS, FAIL, BLOCKED, and INCOMPLETE rules are machine-readable.",
         "The contract binds untouched-solver comparison, fresh evaluation, and complete R&D cost.",
         "No Goal-2 execution ticket may open when requires_goal1_pass is true and Goal 1 has no valid PASS."
-      ]
+      ],
+      "completion": {
+        "pull_request": 54,
+        "merge_commit": "18a9382cdc03b51f5fcf91f556ec4dc3c6f91c97"
+      }
     },
     {
       "id": "G1-131",
