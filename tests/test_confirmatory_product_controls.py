@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "goal1" / "CONFIRMATORY_PRODUCT_CONTROLS.json"
-EXPECTED_GIT_BLOB_SHA1 = "eeceab0d674529123db1d91f8ce8ff60422264d0"
+EXPECTED_GIT_BLOB_SHA1 = "ab2b298e29022f931ec141bdba50485b0967ad3f"
 EXPECTED_RECEIPT_FIELDS = [
     "receipt_schema",
     "issuer_id",
@@ -276,7 +276,7 @@ def validate_contract(contract: object) -> None:
         raise ValueError("product ordering changed")
     if visible["inclusion"] != "ALL_AND_ONLY_ELIGIBLE_PRODUCTS":
         raise ValueError("product inclusion changed")
-    if visible["verification_state"] != "NOT_LEAN_VERIFIED_BEFORE_ADMISSION":
+    if visible["verification_state"] != "LEAN_VERIFIER_RESULT_QUARANTINED_AND_UNUSED_FOR_ADMISSION":
         raise ValueError("product verification state changed")
     if visible["exact_response_bytes_only"] is not True:
         raise ValueError("product byte identity changed")
@@ -300,7 +300,7 @@ def validate_contract(contract: object) -> None:
         "allowed_kinds": ["PRODUCT_CANDIDATE", "FINAL_ANSWER", "NO_ANSWER"],
         "one_output_kind_per_attempt": True,
         "product_candidate_requires_syntax_and_name_policy": True,
-        "product_candidate_is_never_lean_verified_before_admission": True,
+        "product_candidate_admission_ignores_quarantined_lean_result": True,
         "final_answer_requires_exact_answer_discriminator": True,
         "no_answer_requires_exact_bytes": True,
     }:
@@ -337,6 +337,12 @@ def validate_contract(contract: object) -> None:
         "NO_ANSWER": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
         "ERROR": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
         "any_verifier_or_predecessor_completion_metadata_visible_to_later_model_attempt": "BLOCKED",
+        "quarantined_product_receipt_retention": (
+            "RETAIN_FOR_COST_RUNTIME_AND_PARITY_EVIDENCE_ONLY_NEVER_FOR_ADMISSION_SELECTION_PROMPT_RENDERING_OR_TERMINAL_RESULT"
+        ),
+        "admission_boundary": (
+            "ANY_USE_OF_QUARANTINED_PRODUCT_VERIFIER_RECEIPT_OR_RESULT_FOR_PRODUCT_ADMISSION_OR_LATER_MODEL_VISIBLE_BYTES_IS_BLOCKED"
+        ),
     }:
         raise ValueError("product verifier policy changed")
     parity = product["verified_chain_surface_parity"]
@@ -412,7 +418,7 @@ def validate_contract(contract: object) -> None:
     ).hexdigest():
         raise ValueError("shared surface projection digest changed")
     if surface["projection_sha256"] != (
-        "78cd516ce0f5e908c60f1e58c8b00bbd8c27ac0d50d8fc588c6e52d521df8d92"
+        "f68045d4d9554b0639b4abae86658c6bacee3f29ef1cc4b5c4f5deac7b654ed7"
     ):
         raise ValueError("shared surface identity changed")
     if surface["g1_125_requirement"] != (
@@ -522,7 +528,7 @@ class ConfirmatoryProductControlContractTests(unittest.TestCase):
             product["verified_chain_surface_parity"]["sole_permitted_difference"],
         )
         self.assertEqual(
-            "NOT_LEAN_VERIFIED_BEFORE_ADMISSION",
+            "LEAN_VERIFIER_RESULT_QUARANTINED_AND_UNUSED_FOR_ADMISSION",
             product["allowed_model_visible_predecessor_material"][
                 "verification_state"
             ],
@@ -557,7 +563,7 @@ class ConfirmatoryProductControlContractTests(unittest.TestCase):
     def test_shared_surface_projection_and_harnesses_are_immutable(self) -> None:
         surface = self.contract["shared"]["product_chain_shared_surface"]
         self.assertEqual(
-            "78cd516ce0f5e908c60f1e58c8b00bbd8c27ac0d50d8fc588c6e52d521df8d92",
+            "f68045d4d9554b0639b4abae86658c6bacee3f29ef1cc4b5c4f5deac7b654ed7",
             surface["projection_sha256"],
         )
         changed = copy.deepcopy(self.contract)
