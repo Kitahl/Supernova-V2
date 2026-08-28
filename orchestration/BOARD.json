@@ -90,7 +90,7 @@
     {
       "id": "G1-124",
       "owner": "MF05",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json",
         "tests/test_confirmatory_product_controls.py"
@@ -101,7 +101,11 @@
         "Every retry binds an authenticated predecessor completion.",
         "Product visibility is explicit and arm-local.",
         "Unregistered products, retries, or cost events are rejected."
-      ]
+      ],
+      "completion": {
+        "pull_request": 61,
+        "merge_commit": "0f27b855b2604c294281f6fff7d7b11c1c34026f"
+      }
     },
     {
       "id": "G1-125",
