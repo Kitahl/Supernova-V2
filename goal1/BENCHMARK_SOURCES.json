@@ -12,7 +12,7 @@
       "repository_url": "https://github.com/deepseek-ai/DeepSeek-Prover-V1.5",
       "commit": "2c4ba9119eef74d0d611f494261b2c5bae98c69a",
       "path": "datasets/minif2f.jsonl",
-      "sha256": "466e8d23e5f1ded669848066b0c20431de551ca7ac98817a22657985d0632d4b",
+      "sha256": "d6654c88476ff14db19d57dea25bd955a240525fb52171e460f89d98f83d7dd5",
       "format": "jsonl",
       "expected_total_records": 488,
       "expected_validation_records": 244,
