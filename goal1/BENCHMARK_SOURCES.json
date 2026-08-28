@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "SOURCE_LOCKED_OUTPUT_UNBUILT",
+  "status": "OUTPUT_LOCKED",
   "benchmark": {
     "name": "miniF2F-Lean4-DeepSeek-v1.5-valid+Kimina-corrected-test",
     "split_policy": "develop_on_validation_report_on_test",
@@ -52,13 +52,13 @@
   "outputs": {
     "validation": {
       "records": 244,
-      "sha256": null,
-      "bytes": null
+      "sha256": "4da5c1f69143e2633cf7c300d8946eb28d6b88d0f94441147ff4d54ec8c09926",
+      "bytes": 226168
     },
     "test": {
       "records": 244,
-      "sha256": null,
-      "bytes": null
+      "sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a",
+      "bytes": 231909
     }
   }
 }
