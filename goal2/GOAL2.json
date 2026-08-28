@@ -69,7 +69,22 @@
     "cost_ledger_schema": "supernova.goal2.cost-ledger.v1",
     "cost_ledger_authentication": "HMAC-SHA256",
     "event_ids_must_be_globally_disjoint_across_arms": true,
-    "expected_event_ids_by_arm": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "observed_event_kind_must_match_frozen_expected_event_kind": true,
+    "zero_usage_is_allowed_only_when_the_frozen_event_kind_explicitly_allows_it": true,
+    "expected_event_records_by_arm": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "allowed_event_kinds": {
+      "scheduled_chat": {
+        "model_calls": 1,
+        "requires_nonempty_request_and_terminal_response_artifact": true,
+        "input_and_output_utf8_bytes_must_be_positive_and_match_signed_measurement": true
+      },
+      "deterministic_selection": {
+        "model_calls": 0,
+        "model_utf8_bytes": 0,
+        "requires_command_and_result_artifact": true,
+        "orchestration_milliseconds_must_be_positive": true
+      }
+    },
     "per_arm_expected_and_observed_event_ids_must_match_exactly": true,
     "failed_and_meta_attempt_event_ids_must_be_preregistered": true,
     "telemetry_must_be_complete": true,
