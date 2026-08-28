@@ -57,7 +57,10 @@ def _exact_fields(raw: Mapping[str, Any], expected: set[str], prefix: str) -> No
 
 
 def _identifier(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a non-empty string")
+    value = str.__str__(value)
+    if not value.strip():
         raise ValueError(f"{field} must be a non-empty string")
     if value != value.strip():
         raise ValueError(f"{field} must not contain leading or trailing whitespace")
@@ -216,10 +219,11 @@ class AdmissionEvidence:
             "verifier_hmac_sha256",
         }
         _exact_fields(raw, expected, "evidence")
+        outcome_value = _identifier(raw["outcome"], "evidence.outcome")
         try:
-            outcome = EvidenceOutcome(raw["outcome"])
+            outcome = EvidenceOutcome(outcome_value)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"unknown evidence outcome: {raw.get('outcome')!r}") from exc
+            raise ValueError(f"unknown evidence outcome: {outcome_value!r}") from exc
         return cls(
             evidence_id=_identifier(raw["evidence_id"], "evidence.evidence_id"),
             check_id=_identifier(raw["check_id"], "evidence.check_id"),
