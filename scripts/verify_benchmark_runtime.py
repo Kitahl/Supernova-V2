@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping, Sequence
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import stat
@@ -107,29 +108,43 @@ def _canonical_bytes(value: object) -> bytes:
     ).encode("utf-8")
 
 
-def _hash_stable_file(path: Path, label: str) -> tuple[str, int]:
+def _read_stable_file(path: Path, label: str) -> tuple[str, int, bytes]:
     if path.is_symlink():
         raise ValueError(f"{label} must not be a symlink: {path}")
     before = path.stat()
     if not stat.S_ISREG(before.st_mode):
         raise ValueError(f"{label} must be a regular file: {path}")
     digest = hashlib.sha256()
+    chunks: list[bytes] = []
     size = 0
     with path.open("rb") as handle:
-        opened = handle.fileno()
-        opened_stat = __import__("os").fstat(opened)
+        opened_stat = os.fstat(handle.fileno())
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
+            chunks.append(chunk)
             size += len(chunk)
-        after_read = __import__("os").fstat(opened)
+        after_read = os.fstat(handle.fileno())
     after_path = path.stat()
     signatures = {
         (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns)
         for item in (before, opened_stat, after_read, after_path)
     }
     if len(signatures) != 1 or size != after_read.st_size:
-        raise ValueError(f"{label} changed while hashing: {path}")
-    return digest.hexdigest(), size
+        raise ValueError(f"{label} changed while reading: {path}")
+    return digest.hexdigest(), size, b"".join(chunks)
+
+
+def _hash_stable_file(path: Path, label: str) -> tuple[str, int]:
+    digest, size, _ = _read_stable_file(path, label)
+    return digest, size
+
+
+def _resolve_input_path(path: Path, label: str) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink: {path}")
+    if path.exists() and _LOCK_MODULE._is_junction(path):
+        raise ValueError(f"{label} must not be a junction: {path}")
+    return path.resolve()
 
 
 def _runtime_identity(runtime_root: Path) -> dict[str, object]:
@@ -140,18 +155,20 @@ def _runtime_identity(runtime_root: Path) -> dict[str, object]:
         raise ValueError(f"runtime root is not a directory: {runtime_root}")
 
     files: list[dict[str, object]] = []
+    file_bytes: dict[str, bytes] = {}
     for relative in RUNTIME_IDENTITY_FILES:
         path = runtime_root / relative
-        digest, size = _hash_stable_file(path, f"runtime input {relative}")
+        digest, size, payload = _read_stable_file(path, f"runtime input {relative}")
         files.append({"path": relative, "sha256": digest, "bytes": size})
+        file_bytes[relative] = payload
 
-    toolchain = (runtime_root / "lean-toolchain").read_text(encoding="utf-8").strip()
+    toolchain = file_bytes["lean-toolchain"].decode("utf-8").strip()
     if toolchain != EXPECTED_TOOLCHAIN:
         raise ValueError(
             f"wrong Lean toolchain pin: expected {EXPECTED_TOOLCHAIN!r}, observed {toolchain!r}"
         )
 
-    lakefile = tomllib.loads((runtime_root / "lakefile.toml").read_text(encoding="utf-8"))
+    lakefile = tomllib.loads(file_bytes["lakefile.toml"].decode("utf-8"))
     requirements = lakefile.get("require")
     if requirements != [
         {
@@ -163,7 +180,7 @@ def _runtime_identity(runtime_root: Path) -> dict[str, object]:
         raise ValueError("lakefile.toml must pin mathlib exactly to v4.33.1")
 
     manifest = _load_json_object(
-        (runtime_root / "lake-manifest.json").read_text(encoding="utf-8"),
+        file_bytes["lake-manifest.json"].decode("utf-8"),
         "lake-manifest.json",
     )
     packages = manifest.get("packages")
@@ -315,16 +332,18 @@ def check_benchmark_runtime(
     sample_size: int = 3,
     runner: Runner = run_verifier,
 ) -> dict[str, object]:
-    benchmark_root = benchmark_root.resolve()
-    lock_path = lock_path.resolve()
-    runtime_root = runtime_root.resolve()
+    benchmark_root = _resolve_input_path(benchmark_root, "benchmark root")
+    lock_path = _resolve_input_path(lock_path, "benchmark lock")
+    runtime_root = _resolve_input_path(runtime_root, "runtime root")
 
     _LOCK_MODULE._require_control_path_outside_source(
         benchmark_root, lock_path, label="benchmark lock"
     )
-    lock = _LOCK_MODULE._load_lock(lock_path)
+    lock_sha256, lock_bytes, lock_payload = _read_stable_file(
+        lock_path, "benchmark lock"
+    )
+    lock = _load_json_object(lock_payload.decode("utf-8"), "benchmark lock")
     verified_lock = _LOCK_MODULE.verify_lock(benchmark_root, lock)
-    lock_sha256, lock_bytes = _hash_stable_file(lock_path, "benchmark lock")
 
     content = verified_lock["content"]
     if not isinstance(content, dict):
@@ -406,6 +425,22 @@ def check_benchmark_runtime(
                             "evidence": _result_evidence(result),
                         }
                     )
+
+    closing_runtime_identity = _runtime_identity(runtime_root)
+    if closing_runtime_identity != runtime_identity:
+        raise ValueError("runtime identity changed during benchmark check")
+    closing_lock_sha256, closing_lock_bytes, closing_lock_payload = _read_stable_file(
+        lock_path, "benchmark lock"
+    )
+    if (
+        closing_lock_sha256 != lock_sha256
+        or closing_lock_bytes != lock_bytes
+        or closing_lock_payload != lock_payload
+    ):
+        raise ValueError("benchmark lock changed during benchmark check")
+    closing_verified_lock = _LOCK_MODULE.verify_lock(benchmark_root, lock)
+    if closing_verified_lock != verified_lock:
+        raise ValueError("benchmark content changed during benchmark check")
 
     report = {
         "schema_version": REPORT_SCHEMA_VERSION,
