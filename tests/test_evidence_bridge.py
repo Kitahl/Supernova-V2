@@ -151,6 +151,13 @@ class EvidenceBridgeTests(unittest.TestCase):
                     arm=arm,
                     attempt=attempt,
                 )
+                slot = next(
+                    entry
+                    for entry in cls.manifest_bundle.operator_plan["entries"]
+                    if entry["problem_id"] == problem.native_id
+                    and entry["arm"] == arm.value
+                    and entry["budget_attempt_index"] == attempt
+                )
                 request = FrozenProblemRequest(
                     run_id=run_id,
                     experiment_id=cls.protocol["protocol_id"],
@@ -164,6 +171,10 @@ class EvidenceBridgeTests(unittest.TestCase):
                     model_usage_basis="visible_utf8_bytes",
                     runtime_sha256=bindings["runtime_sha256"],
                     request_artifact=request_artifact,
+                    protocol_dispatch_id=slot["dispatch_id"],
+                    confirmatory_manifest_sha256=(
+                        cls.manifest_bundle.public_manifest["manifest_sha256"]
+                    ),
                 )
                 signer = CompletionSigner.generate()
                 manifest = authority.register(
@@ -513,41 +524,13 @@ class EvidenceBridgeTests(unittest.TestCase):
     def test_context_and_predecessor_receipts_are_mandatory(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         try:
-            ledger = ExecutionLedgerAuthority(
-                str(Path(tmp.name, "execution.sqlite").resolve()),
-                run_id="run-full",
-                issuer_id="test-host",
-                execution_authority_sha256=sha("non-credit-test-authority"),
-                secret=b"e" * 32,
-                protocol=self.protocol,
-                public_manifest=self.manifest_bundle.public_manifest,
-                operator_plan=self.manifest_bundle.operator_plan,
+            _, ledger, _, _, completions = self._build_run(
+                Path(tmp.name),
+                run_id="run-receipts",
+                attempts=(0,),
+                record_all=False,
             )
-            completion = self.completions[0]
-            with self.assertRaisesRegex(
-                ValueError, "no pre-dispatch protocol binding"
-            ):
-                ledger._record_completion(
-                    completion,
-                    context_isolation_receipt=(
-                        ledger._issue_context_isolation_receipt(completion)
-                    ),
-                    predecessor_reconciliation_receipt=(
-                        ledger._issue_predecessor_reconciliation_receipt(
-                            completion
-                        )
-                    ),
-                    orchestration_milliseconds=1,
-                )
-
-            dispatch = next(
-                entry
-                for entry in self.authority.current_manifest().entries
-                if entry.dispatch_id == completion.dispatch_id
-            )
-            ledger._register_dispatch(
-                dispatch, completion.payload.request
-            )
+            completion = completions[0]
             with self.assertRaisesRegex(TypeError, "ContextIsolationReceipt"):
                 ledger._record_completion(
                     completion,
@@ -573,6 +556,78 @@ class EvidenceBridgeTests(unittest.TestCase):
                     ),
                     orchestration_milliseconds=1,
                 )
+        finally:
+            tmp.cleanup()
+
+    def test_frozen_request_protocol_binding_cannot_be_added_post_hoc(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            run_id = "run-binding"
+            ledger = ExecutionLedgerAuthority(
+                str(Path(tmp.name, "execution.sqlite").resolve()),
+                run_id=run_id,
+                issuer_id="test-host",
+                execution_authority_sha256=sha("non-credit-test-authority"),
+                secret=b"e" * 32,
+                protocol=self.protocol,
+                public_manifest=self.manifest_bundle.public_manifest,
+                operator_plan=self.manifest_bundle.operator_plan,
+            )
+            authority = DispatchAuthority(
+                str(Path(tmp.name, "dispatch.sqlite").resolve()), run_id
+            )
+            base = self.completions[0].payload.request
+            request_artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
+                b"binding-negative",
+                kind=ScheduledChatArtifactKind.REQUEST,
+                run_id=run_id,
+                problem_id=base.problem_id,
+                arm=base.arm,
+                attempt=base.attempt,
+            )
+            wrong_slot = next(
+                entry["dispatch_id"]
+                for entry in self.manifest_bundle.operator_plan["entries"]
+                if entry["problem_id"] == base.problem.native_id
+                and entry["dispatch_id"] != base.protocol_dispatch_id
+            )
+            variants = (
+                (None, None),
+                (
+                    wrong_slot,
+                    self.manifest_bundle.public_manifest["manifest_sha256"],
+                ),
+            )
+            manifest = authority.current_manifest()
+            for protocol_dispatch_id, confirmatory_manifest_sha256 in variants:
+                request = FrozenProblemRequest(
+                    run_id=run_id,
+                    experiment_id=base.experiment_id,
+                    problem=base.problem,
+                    benchmark_root_sha256=base.benchmark_root_sha256,
+                    problem_sha256=base.problem_sha256,
+                    arm=base.arm,
+                    attempt=base.attempt,
+                    budget_id=base.budget_id,
+                    budget_sha256=base.budget_sha256,
+                    model_usage_basis=base.model_usage_basis,
+                    runtime_sha256=base.runtime_sha256,
+                    request_artifact=request_artifact,
+                    protocol_dispatch_id=protocol_dispatch_id,
+                    confirmatory_manifest_sha256=(
+                        confirmatory_manifest_sha256
+                    ),
+                )
+                signer = CompletionSigner.generate()
+                manifest = authority.register(
+                    manifest,
+                    request=request,
+                    completion_verifier_sha256=signer.public_commitment,
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "frozen request protocol dispatch binding"
+                ):
+                    ledger._register_dispatch(manifest.entries[-1], request)
         finally:
             tmp.cleanup()
 
