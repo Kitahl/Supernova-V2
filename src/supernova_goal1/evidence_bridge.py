@@ -155,11 +155,161 @@ def _trace_mapping(trace: ArmCostTrace) -> dict[str, object]:
     }
 
 
+def _protocol_dispatch_id(value: object, field: str) -> str:
+    value = _token(value, field)
+    if not value.startswith("dispatch-"):
+        raise ValueError(f"{field} must use the dispatch- namespace")
+    _sha256(value.removeprefix("dispatch-"), field)
+    return value
+
+
+@dataclass(frozen=True)
+class ContextIsolationReceipt:
+    issuer_id: str
+    run_id: str
+    problem_id: str
+    arm: str
+    attempt: int
+    request_sha256: str
+    protocol_dispatch_id: str
+    confirmatory_manifest_sha256: str
+    mode: str
+    status: str
+    signature: str
+
+    def __post_init__(self) -> None:
+        _token(self.issuer_id, "issuer_id")
+        _token(self.run_id, "run_id")
+        _token(self.problem_id, "problem_id")
+        _arm(self.arm)
+        _natural(self.attempt, "attempt")
+        _sha256(self.request_sha256, "request_sha256")
+        _protocol_dispatch_id(self.protocol_dispatch_id, "protocol_dispatch_id")
+        _sha256(
+            self.confirmatory_manifest_sha256,
+            "confirmatory_manifest_sha256",
+        )
+        if self.mode != "NON_CREDIT_SIMULATED_EMPTY_CONTEXT":
+            raise ValueError("unsupported context-isolation mode")
+        if self.status != "OBSERVED_EMPTY":
+            raise ValueError("context-isolation receipt did not observe an empty context")
+        _sha256(self.signature, "signature")
+
+    def body(self) -> dict[str, object]:
+        return {
+            "arm": self.arm,
+            "attempt": self.attempt,
+            "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "issuer_id": self.issuer_id,
+            "mode": self.mode,
+            "problem_id": self.problem_id,
+            "protocol_dispatch_id": self.protocol_dispatch_id,
+            "request_sha256": self.request_sha256,
+            "run_id": self.run_id,
+            "schema": "supernova.context-isolation-receipt.v1",
+            "status": self.status,
+        }
+
+    @property
+    def receipt_sha256(self) -> str:
+        return _digest(
+            "supernova.context-isolation-receipt.v1",
+            {"body": self.body(), "signature": self.signature},
+        )
+
+
+@dataclass(frozen=True)
+class PredecessorReconciliationReceipt:
+    issuer_id: str
+    run_id: str
+    problem_id: str
+    arm: str
+    attempt: int
+    request_sha256: str
+    protocol_dispatch_id: str
+    confirmatory_manifest_sha256: str
+    predecessor_policy: str
+    eligible_predecessor_dispatch_ids: tuple[str, ...]
+    selected_predecessor_dispatch_id: str
+    status: str
+    signature: str
+
+    def __post_init__(self) -> None:
+        _token(self.issuer_id, "issuer_id")
+        _token(self.run_id, "run_id")
+        _token(self.problem_id, "problem_id")
+        _arm(self.arm)
+        _natural(self.attempt, "attempt")
+        _sha256(self.request_sha256, "request_sha256")
+        _protocol_dispatch_id(self.protocol_dispatch_id, "protocol_dispatch_id")
+        _sha256(
+            self.confirmatory_manifest_sha256,
+            "confirmatory_manifest_sha256",
+        )
+        _token(self.predecessor_policy, "predecessor_policy")
+        if type(self.eligible_predecessor_dispatch_ids) is not tuple:
+            raise TypeError("eligible predecessor ids must be an exact tuple")
+        for value in self.eligible_predecessor_dispatch_ids:
+            _protocol_dispatch_id(value, "eligible_predecessor_dispatch_ids[]")
+        if len(self.eligible_predecessor_dispatch_ids) != len(
+            set(self.eligible_predecessor_dispatch_ids)
+        ):
+            raise ValueError("eligible predecessor ids contain duplicates")
+        if self.selected_predecessor_dispatch_id != _TYPED_ABSENCE:
+            _protocol_dispatch_id(
+                self.selected_predecessor_dispatch_id,
+                "selected_predecessor_dispatch_id",
+            )
+            if (
+                self.selected_predecessor_dispatch_id
+                not in self.eligible_predecessor_dispatch_ids
+            ):
+                raise ValueError("selected predecessor is not in the frozen eligible set")
+        expected_status = (
+            "NOT_APPLICABLE"
+            if not self.eligible_predecessor_dispatch_ids
+            else "RECONCILED"
+        )
+        if self.status != expected_status:
+            raise ValueError("predecessor reconciliation status is inconsistent")
+        _sha256(self.signature, "signature")
+
+    def body(self) -> dict[str, object]:
+        return {
+            "arm": self.arm,
+            "attempt": self.attempt,
+            "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "eligible_predecessor_dispatch_ids": list(
+                self.eligible_predecessor_dispatch_ids
+            ),
+            "issuer_id": self.issuer_id,
+            "predecessor_policy": self.predecessor_policy,
+            "problem_id": self.problem_id,
+            "protocol_dispatch_id": self.protocol_dispatch_id,
+            "request_sha256": self.request_sha256,
+            "run_id": self.run_id,
+            "schema": "supernova.predecessor-reconciliation-receipt.v1",
+            "selected_predecessor_dispatch_id": (
+                self.selected_predecessor_dispatch_id
+            ),
+            "status": self.status,
+        }
+
+    @property
+    def receipt_sha256(self) -> str:
+        return _digest(
+            "supernova.predecessor-reconciliation-receipt.v1",
+            {"body": self.body(), "signature": self.signature},
+        )
+
+
 def _completion_body(
     completion: CompletionRecord,
     *,
     issuer_id: str,
     execution_authority_sha256: str,
+    protocol_dispatch_id: str,
+    confirmatory_manifest_sha256: str,
     context_isolation_receipt_sha256: str,
     predecessor_reconciliation_sha256: str,
     orchestration_milliseconds: int,
@@ -174,11 +324,18 @@ def _completion_body(
             context_isolation_receipt_sha256,
             "context_isolation_receipt_sha256",
         ),
+        "confirmatory_manifest_sha256": _sha256(
+            confirmatory_manifest_sha256,
+            "confirmatory_manifest_sha256",
+        ),
         "dispatch_id": completion.dispatch_id,
         "execution_authority_sha256": _sha256(
             execution_authority_sha256, "execution_authority_sha256"
         ),
         "issuer_id": _token(issuer_id, "issuer_id"),
+        "protocol_dispatch_id": _protocol_dispatch_id(
+            protocol_dispatch_id, "protocol_dispatch_id"
+        ),
         "orchestration_milliseconds": _natural(
             orchestration_milliseconds, "orchestration_milliseconds"
         ),
@@ -203,6 +360,8 @@ def _completion_body(
 class ExecutionLedgerReceipt:
     issuer_id: str
     execution_authority_sha256: str
+    protocol_dispatch_id: str
+    confirmatory_manifest_sha256: str
     run_id: str
     dispatch_id: str
     completion_record_sha256: str
@@ -221,6 +380,11 @@ class ExecutionLedgerReceipt:
     def __post_init__(self) -> None:
         _token(self.issuer_id, "issuer_id")
         _sha256(self.execution_authority_sha256, "execution_authority_sha256")
+        _protocol_dispatch_id(self.protocol_dispatch_id, "protocol_dispatch_id")
+        _sha256(
+            self.confirmatory_manifest_sha256,
+            "confirmatory_manifest_sha256",
+        )
         _token(self.run_id, "run_id")
         for field in (
             "dispatch_id",
@@ -253,6 +417,8 @@ class ExecutionLedgerReceipt:
         *,
         issuer_id: str,
         execution_authority_sha256: str,
+        protocol_dispatch_id: str,
+        confirmatory_manifest_sha256: str,
         context_isolation_receipt_sha256: str,
         predecessor_reconciliation_sha256: str,
         orchestration_milliseconds: int,
@@ -265,18 +431,24 @@ class ExecutionLedgerReceipt:
             completion,
             issuer_id=issuer_id,
             execution_authority_sha256=execution_authority_sha256,
+            protocol_dispatch_id=protocol_dispatch_id,
+            confirmatory_manifest_sha256=confirmatory_manifest_sha256,
             context_isolation_receipt_sha256=context_isolation_receipt_sha256,
             predecessor_reconciliation_sha256=predecessor_reconciliation_sha256,
             orchestration_milliseconds=orchestration_milliseconds,
         )
         signature = hmac.new(
             secret,
-            _canonical_bytes("supernova.execution-ledger.signature.v2", body),
+            _canonical_bytes("supernova.execution-ledger.signature.v3", body),
             hashlib.sha256,
         ).hexdigest()
         return cls(
             issuer_id=str(body["issuer_id"]),
             execution_authority_sha256=str(body["execution_authority_sha256"]),
+            protocol_dispatch_id=str(body["protocol_dispatch_id"]),
+            confirmatory_manifest_sha256=str(
+                body["confirmatory_manifest_sha256"]
+            ),
             run_id=str(body["run_id"]),
             dispatch_id=str(body["dispatch_id"]),
             completion_record_sha256=str(body["completion_record_sha256"]),
@@ -301,12 +473,14 @@ class ExecutionLedgerReceipt:
         return {
             "completion_record_sha256": self.completion_record_sha256,
             "completion_status": self.completion_status,
+            "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
             "context_isolation_receipt_sha256": (
                 self.context_isolation_receipt_sha256
             ),
             "dispatch_id": self.dispatch_id,
             "execution_authority_sha256": self.execution_authority_sha256,
             "issuer_id": self.issuer_id,
+            "protocol_dispatch_id": self.protocol_dispatch_id,
             "orchestration_milliseconds": self.orchestration_milliseconds,
             "predecessor_reconciliation_sha256": (
                 self.predecessor_reconciliation_sha256
@@ -316,7 +490,7 @@ class ExecutionLedgerReceipt:
             "response_artifact_id": self.response_artifact_id,
             "response_utf8_bytes": self.response_utf8_bytes,
             "run_id": self.run_id,
-            "schema": "supernova.execution-ledger-receipt.v2",
+            "schema": "supernova.execution-ledger-receipt.v3",
             "verifier_milliseconds": self.verifier_milliseconds,
             "verifier_receipt_sha256": self.verifier_receipt_sha256,
         }
@@ -324,7 +498,7 @@ class ExecutionLedgerReceipt:
     @property
     def receipt_sha256(self) -> str:
         return _digest(
-            "supernova.execution-ledger.receipt.v2",
+            "supernova.execution-ledger.receipt.v3",
             {"body": self.body(), "signature": self.signature},
         )
 
@@ -340,6 +514,9 @@ class ExecutionLedgerAuthority:
         issuer_id: str,
         execution_authority_sha256: str,
         secret: bytes,
+        protocol: Mapping[str, object],
+        public_manifest: Mapping[str, object],
+        operator_plan: Mapping[str, object],
     ) -> None:
         path_text = os.fspath(database_path)
         if not path_text or path_text == ":memory:" or path_text.startswith("file:"):
@@ -355,6 +532,37 @@ class ExecutionLedgerAuthority:
         self.execution_authority_sha256 = _sha256(
             execution_authority_sha256, "execution_authority_sha256"
         )
+        for value, field in (
+            (protocol, "protocol"),
+            (public_manifest, "public_manifest"),
+            (operator_plan, "operator_plan"),
+        ):
+            if type(value) is not dict:
+                raise TypeError(f"{field} must be an exact dict")
+        validate_draft_bundle(public_manifest, operator_plan, protocol)
+        self.protocol_rules_sha256 = _sha256(
+            protocol["sealed_rules_sha256"], "sealed_rules_sha256"
+        )
+        self.confirmatory_manifest_sha256 = _sha256(
+            public_manifest["manifest_sha256"], "manifest_sha256"
+        )
+        self.protocol_id = _token(protocol["protocol_id"], "protocol_id")
+        rules = protocol["sealed_rules"]
+        self.benchmark_root_sha256 = _sha256(
+            rules["benchmark_selection"]["benchmark_root_sha256"],
+            "benchmark_root_sha256",
+        )
+        bindings = public_manifest["bindings"]
+        self.runtime_sha256 = _sha256(bindings["runtime_sha256"], "runtime_sha256")
+        self.cost_policy_sha256 = _sha256(
+            bindings["cost_policy_sha256"], "cost_policy_sha256"
+        )
+        self.__plan_slots = {
+            (entry["problem_id"], entry["arm"], entry["budget_attempt_index"]): dict(entry)
+            for entry in operator_plan["entries"]
+        }
+        if len(self.__plan_slots) != len(operator_plan["entries"]):
+            raise ValueError("operator plan contains duplicate scientific slots")
         self.__secret = bytes(secret)
         Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
         con = self._connect()
@@ -375,25 +583,195 @@ class ExecutionLedgerAuthority:
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.database_path, timeout=30)
 
+    def _slot_for_completion(
+        self, completion: CompletionRecord
+    ) -> dict[str, object]:
+        completion = _snapshot_completion(completion)
+        request = completion.payload.request
+        slot = self.__plan_slots.get(
+            (request.problem.native_id, request.arm.value, request.attempt)
+        )
+        if slot is None:
+            raise ValueError("completion is absent from the frozen operator plan")
+        if request.run_id != self.run_id:
+            raise ValueError("completion run_id does not match execution ledger")
+        if request.experiment_id != self.protocol_id:
+            raise ValueError("completion experiment_id differs from sealed protocol")
+        if request.benchmark_root_sha256 != self.benchmark_root_sha256:
+            raise ValueError("completion benchmark root differs from sealed protocol")
+        if request.runtime_sha256 != self.runtime_sha256:
+            raise ValueError("completion runtime differs from confirmatory manifest")
+        if request.budget_sha256 != self.cost_policy_sha256:
+            raise ValueError("completion budget differs from confirmatory cost policy")
+        return slot
+
+    def _context_body(
+        self, completion: CompletionRecord
+    ) -> dict[str, object]:
+        completion = _snapshot_completion(completion)
+        request = completion.payload.request
+        slot = self._slot_for_completion(completion)
+        return {
+            "arm": request.arm.value,
+            "attempt": request.attempt,
+            "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "issuer_id": self.issuer_id,
+            "mode": "NON_CREDIT_SIMULATED_EMPTY_CONTEXT",
+            "problem_id": request.problem.native_id,
+            "protocol_dispatch_id": slot["dispatch_id"],
+            "request_sha256": request.frozen_request_sha256,
+            "run_id": self.run_id,
+            "schema": "supernova.context-isolation-receipt.v1",
+            "status": "OBSERVED_EMPTY",
+        }
+
+    def _issue_context_isolation_receipt(
+        self, completion: CompletionRecord
+    ) -> ContextIsolationReceipt:
+        body = self._context_body(completion)
+        signature = hmac.new(
+            self.__secret,
+            _canonical_bytes("supernova.context-isolation.signature.v1", body),
+            hashlib.sha256,
+        ).hexdigest()
+        return ContextIsolationReceipt(
+            issuer_id=str(body["issuer_id"]),
+            run_id=str(body["run_id"]),
+            problem_id=str(body["problem_id"]),
+            arm=str(body["arm"]),
+            attempt=int(body["attempt"]),
+            request_sha256=str(body["request_sha256"]),
+            protocol_dispatch_id=str(body["protocol_dispatch_id"]),
+            confirmatory_manifest_sha256=str(
+                body["confirmatory_manifest_sha256"]
+            ),
+            mode=str(body["mode"]),
+            status=str(body["status"]),
+            signature=signature,
+        )
+
+    def _predecessor_body(
+        self, completion: CompletionRecord
+    ) -> dict[str, object]:
+        completion = _snapshot_completion(completion)
+        request = completion.payload.request
+        slot = self._slot_for_completion(completion)
+        eligible = tuple(slot["eligible_predecessor_dispatch_ids"])
+        selected = slot["selected_predecessor_dispatch_id"]
+        return {
+            "arm": request.arm.value,
+            "attempt": request.attempt,
+            "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "eligible_predecessor_dispatch_ids": list(eligible),
+            "issuer_id": self.issuer_id,
+            "predecessor_policy": slot["predecessor_policy"],
+            "problem_id": request.problem.native_id,
+            "protocol_dispatch_id": slot["dispatch_id"],
+            "request_sha256": request.frozen_request_sha256,
+            "run_id": self.run_id,
+            "schema": "supernova.predecessor-reconciliation-receipt.v1",
+            "selected_predecessor_dispatch_id": (
+                _TYPED_ABSENCE if selected is None else selected
+            ),
+            "status": "NOT_APPLICABLE" if not eligible else "RECONCILED",
+        }
+
+    def _issue_predecessor_reconciliation_receipt(
+        self, completion: CompletionRecord
+    ) -> PredecessorReconciliationReceipt:
+        body = self._predecessor_body(completion)
+        signature = hmac.new(
+            self.__secret,
+            _canonical_bytes(
+                "supernova.predecessor-reconciliation.signature.v1", body
+            ),
+            hashlib.sha256,
+        ).hexdigest()
+        return PredecessorReconciliationReceipt(
+            issuer_id=str(body["issuer_id"]),
+            run_id=str(body["run_id"]),
+            problem_id=str(body["problem_id"]),
+            arm=str(body["arm"]),
+            attempt=int(body["attempt"]),
+            request_sha256=str(body["request_sha256"]),
+            protocol_dispatch_id=str(body["protocol_dispatch_id"]),
+            confirmatory_manifest_sha256=str(
+                body["confirmatory_manifest_sha256"]
+            ),
+            predecessor_policy=str(body["predecessor_policy"]),
+            eligible_predecessor_dispatch_ids=tuple(
+                body["eligible_predecessor_dispatch_ids"]
+            ),
+            selected_predecessor_dispatch_id=str(
+                body["selected_predecessor_dispatch_id"]
+            ),
+            status=str(body["status"]),
+            signature=signature,
+        )
+
+    def _verify_context_receipt(
+        self,
+        completion: CompletionRecord,
+        receipt: ContextIsolationReceipt,
+    ) -> ContextIsolationReceipt:
+        if type(receipt) is not ContextIsolationReceipt:
+            raise TypeError(
+                "context_isolation_receipt must be an exact ContextIsolationReceipt"
+            )
+        expected = self._issue_context_isolation_receipt(completion)
+        if receipt.body() != expected.body() or not hmac.compare_digest(
+            receipt.signature, expected.signature
+        ):
+            raise ValueError(
+                "context-isolation receipt is not authenticated for this dispatch"
+            )
+        return receipt
+
+    def _verify_predecessor_receipt(
+        self,
+        completion: CompletionRecord,
+        receipt: PredecessorReconciliationReceipt,
+    ) -> PredecessorReconciliationReceipt:
+        if type(receipt) is not PredecessorReconciliationReceipt:
+            raise TypeError(
+                "predecessor_reconciliation_receipt must be an exact "
+                "PredecessorReconciliationReceipt"
+            )
+        expected = self._issue_predecessor_reconciliation_receipt(completion)
+        if receipt.body() != expected.body() or not hmac.compare_digest(
+            receipt.signature, expected.signature
+        ):
+            raise ValueError(
+                "predecessor receipt does not match the frozen predecessor graph"
+            )
+        return receipt
+
     def _record_completion(
         self,
         completion: CompletionRecord,
         *,
-        context_isolation_receipt_sha256: str,
-        predecessor_reconciliation_sha256: str,
+        context_isolation_receipt: ContextIsolationReceipt,
+        predecessor_reconciliation_receipt: PredecessorReconciliationReceipt,
         orchestration_milliseconds: int,
     ) -> ExecutionLedgerReceipt:
         """Issue once, after the trusted execution adapter returns."""
 
         completion = _snapshot_completion(completion)
-        if completion.run_id != self.run_id:
-            raise ValueError("completion run_id does not match execution ledger")
+        slot = self._slot_for_completion(completion)
+        context_receipt = self._verify_context_receipt(
+            completion, context_isolation_receipt
+        )
+        predecessor_receipt = self._verify_predecessor_receipt(
+            completion, predecessor_reconciliation_receipt
+        )
         receipt = ExecutionLedgerReceipt._issue(
             completion,
             issuer_id=self.issuer_id,
             execution_authority_sha256=self.execution_authority_sha256,
-            context_isolation_receipt_sha256=context_isolation_receipt_sha256,
-            predecessor_reconciliation_sha256=predecessor_reconciliation_sha256,
+            protocol_dispatch_id=slot["dispatch_id"],
+            confirmatory_manifest_sha256=self.confirmatory_manifest_sha256,
+            context_isolation_receipt_sha256=context_receipt.receipt_sha256,
+            predecessor_reconciliation_sha256=predecessor_receipt.receipt_sha256,
             orchestration_milliseconds=orchestration_milliseconds,
             secret=self.__secret,
             _factory=_LEDGER_FACTORY,
@@ -446,12 +824,14 @@ class ExecutionLedgerAuthority:
             expected = {
                 "completion_record_sha256",
                 "completion_status",
+                "confirmatory_manifest_sha256",
                 "context_isolation_receipt_sha256",
                 "dispatch_id",
                 "execution_authority_sha256",
                 "issuer_id",
                 "orchestration_milliseconds",
                 "predecessor_reconciliation_sha256",
+                "protocol_dispatch_id",
                 "receipt_sha256",
                 "request_sha256",
                 "request_utf8_bytes",
@@ -465,11 +845,15 @@ class ExecutionLedgerAuthority:
             }
             if not isinstance(raw, dict) or set(raw) != expected:
                 raise ValueError("persisted execution receipt fields are not canonical")
-            if raw["schema"] != "supernova.execution-ledger-receipt.v2":
+            if raw["schema"] != "supernova.execution-ledger-receipt.v3":
                 raise ValueError("persisted execution receipt schema changed")
             receipt = ExecutionLedgerReceipt(
                 issuer_id=raw["issuer_id"],
                 execution_authority_sha256=raw["execution_authority_sha256"],
+                protocol_dispatch_id=raw["protocol_dispatch_id"],
+                confirmatory_manifest_sha256=raw[
+                    "confirmatory_manifest_sha256"
+                ],
                 run_id=raw["run_id"],
                 dispatch_id=raw["dispatch_id"],
                 completion_record_sha256=raw["completion_record_sha256"],
@@ -492,7 +876,7 @@ class ExecutionLedgerAuthority:
             expected_signature = hmac.new(
                 self.__secret,
                 _canonical_bytes(
-                    "supernova.execution-ledger.signature.v2", receipt.body()
+                    "supernova.execution-ledger.signature.v3", receipt.body()
                 ),
                 hashlib.sha256,
             ).hexdigest()
@@ -510,6 +894,11 @@ class ExecutionLedgerAuthority:
                 raise ValueError("persisted execution receipt issuer changed")
             if receipt.execution_authority_sha256 != self.execution_authority_sha256:
                 raise ValueError("persisted execution authority binding changed")
+            if (
+                receipt.confirmatory_manifest_sha256
+                != self.confirmatory_manifest_sha256
+            ):
+                raise ValueError("persisted confirmatory manifest binding changed")
             if dispatch_id in receipts:
                 raise ValueError("replayed execution receipt")
             receipts[dispatch_id] = receipt
@@ -538,6 +927,8 @@ class ExecutionLedgerAuthority:
                 completion,
                 issuer_id=self.issuer_id,
                 execution_authority_sha256=self.execution_authority_sha256,
+                protocol_dispatch_id=receipt.protocol_dispatch_id,
+                confirmatory_manifest_sha256=self.confirmatory_manifest_sha256,
                 context_isolation_receipt_sha256=(
                     receipt.context_isolation_receipt_sha256
                 ),
@@ -805,9 +1196,17 @@ def _required_cost_events(
     for completion in completions:
         request_sha = completion.payload.request.frozen_request_sha256
         result[f"{request_sha}:model"] = (CostEventKind.MODEL_CALL, usage_basis)
+        result[f"{request_sha}:context_isolation"] = (
+            CostEventKind.CONTEXT_ISOLATION,
+            None,
+        )
         result[f"{request_sha}:verifier"] = (CostEventKind.VERIFIER, None)
         result[f"{request_sha}:orchestration"] = (
             CostEventKind.ORCHESTRATION,
+            None,
+        )
+        result[f"{request_sha}:predecessor_reconciliation"] = (
+            CostEventKind.PREDECESSOR_RECONCILIATION,
             None,
         )
     return result
@@ -904,6 +1303,13 @@ def bridge_closed_evidence(
     if bound_execution_authority is not None:
         if bound_execution_authority != execution_ledger.execution_authority_sha256:
             raise ValueError("execution authority does not match confirmatory manifest")
+    if execution_ledger.protocol_rules_sha256 != protocol_rules_sha256:
+        raise ValueError("execution ledger protocol binding changed")
+    if (
+        execution_ledger.confirmatory_manifest_sha256
+        != confirmatory_manifest_sha256
+    ):
+        raise ValueError("execution ledger confirmatory manifest binding changed")
     # A draft has no production execution-authority binding. Its bridge output is
     # permanently labeled NON_CREDIT_DRAFT, including in every record digest.
 
@@ -937,16 +1343,28 @@ def bridge_closed_evidence(
         "budget_sha256": set(),
     }
     identities_by_native_id: dict[str, str] = {}
+    observed_plan_slots: set[tuple[str, str, int]] = set()
 
     for joined in authoritative_join.joined:
         completion = _snapshot_completion(joined.completion)
         request = completion.payload.request
         native_id = request.problem.native_id
-        slot = plan_slots.get((native_id, request.arm.value, request.attempt))
+        plan_key = (native_id, request.arm.value, request.attempt)
+        slot = plan_slots.get(plan_key)
         if slot is None:
             raise ValueError(
                 "closed dispatch is absent from the validated confirmatory operator plan"
             )
+        receipt = receipt_by_dispatch[completion.dispatch_id]
+        if (
+            receipt.protocol_dispatch_id != slot["dispatch_id"]
+            or receipt.confirmatory_manifest_sha256
+            != confirmatory_manifest_sha256
+        ):
+            raise ValueError(
+                "actual dispatch is not cryptographically bound to its protocol slot"
+            )
+        observed_plan_slots.add(plan_key)
         if request.benchmark_root_sha256 != benchmark_root:
             raise ValueError("request benchmark root differs from sealed protocol")
         if request.runtime_sha256 != runtime_sha256:
@@ -962,12 +1380,18 @@ def bridge_closed_evidence(
         joined_by_cell.setdefault(key, []).append(
             (
                 completion,
-                receipt_by_dispatch[completion.dispatch_id],
+                receipt,
                 slot["dispatch_id"],
             )
         )
         for field in invariants:
             invariants[field].add(getattr(request, field))
+
+    if observed_plan_slots != set(plan_slots):
+        raise ValueError(
+            "closed dispatches do not exactly cover the validated operator plan; "
+            f"observed={len(observed_plan_slots)}, planned={len(plan_slots)}"
+        )
 
     for field, values in invariants.items():
         if len(values) != 1:
@@ -1077,9 +1501,11 @@ def bridge_closed_evidence(
 
 __all__ = [
     "ATTEMPTS_PER_CELL",
+    "ContextIsolationReceipt",
     "EvidenceBridgeBundle",
     "EvaluatorEvidenceRecord",
     "ExecutionLedgerAuthority",
     "ExecutionLedgerReceipt",
+    "PredecessorReconciliationReceipt",
     "bridge_closed_evidence",
 ]
