@@ -350,12 +350,34 @@ class BenchmarkImporterTests(unittest.TestCase):
             self.assertEqual(check_result.returncode, 0, check_result.stderr)
             self.assertEqual(json.loads(check_result.stdout)["status"], "PASS")
 
-    def test_repository_lock_starts_explicitly_unselected(self) -> None:
+    def test_repository_lock_matches_the_output_locked_source_manifest(self) -> None:
         lock = json.loads((ROOT / "goal1" / "BENCHMARK.lock.json").read_text(encoding="utf-8"))
-        self.assertEqual(lock["status"], "UNSELECTED")
-        self.assertEqual(lock["benchmark"], {"name": "UNSELECTED", "version": "UNPINNED", "split": "UNLOCKED"})
-        self.assertEqual(lock["content"]["files"], [])
-        self.assertIsNone(lock["content"]["root_sha256"])
+        sources = json.loads((ROOT / "goal1" / "BENCHMARK_SOURCES.json").read_text(encoding="utf-8"))
+
+        self.assertEqual("LOCKED", lock["status"])
+        self.assertEqual("OUTPUT_LOCKED", sources["status"])
+        self.assertEqual(
+            {
+                "name": "miniF2F-Lean4-Kimina-composite",
+                "version": "deepseek-v1.5-2c4ba911+kimina-5def318",
+                "split": "validation+test:dev-validation/report-test",
+            },
+            lock["benchmark"],
+        )
+        self.assertEqual(2, lock["content"]["file_count"])
+        self.assertEqual(458077, lock["content"]["total_bytes"])
+        self.assertEqual(
+            "914c05427e1e7e0979f4ca058f90fb3138ee0d3319233b415194c10e67d3683b",
+            lock["content"]["root_sha256"],
+        )
+
+        files = {entry["path"]: entry for entry in lock["content"]["files"]}
+        self.assertEqual({"validation.jsonl", "test.jsonl"}, set(files))
+        for split, filename in (("validation", "validation.jsonl"), ("test", "test.jsonl")):
+            expected = sources["outputs"][split]
+            self.assertEqual(expected["records"], 244)
+            self.assertEqual(expected["sha256"], files[filename]["sha256"])
+            self.assertEqual(expected["bytes"], files[filename]["bytes"])
 
 
 if __name__ == "__main__":
