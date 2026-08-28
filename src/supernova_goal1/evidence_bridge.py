@@ -698,6 +698,17 @@ class ExecutionLedgerAuthority:
             raise ValueError("completion runtime differs from confirmatory manifest")
         if request.budget_sha256 != self.cost_policy_sha256:
             raise ValueError("completion budget differs from confirmatory cost policy")
+        if request.protocol_dispatch_id != slot["dispatch_id"]:
+            raise ValueError(
+                "frozen request protocol dispatch binding differs from operator plan"
+            )
+        if (
+            request.confirmatory_manifest_sha256
+            != self.confirmatory_manifest_sha256
+        ):
+            raise ValueError(
+                "frozen request confirmatory manifest binding differs from ledger"
+            )
         return slot
 
     def _slot_for_completion(
@@ -1784,9 +1795,17 @@ def bridge_closed_evidence(
             )
         receipt = receipt_by_dispatch[completion.dispatch_id]
         if (
-            receipt.protocol_dispatch_id != slot["dispatch_id"]
-            or receipt.confirmatory_manifest_sha256
+            request.protocol_dispatch_id != slot["dispatch_id"]
+            or request.confirmatory_manifest_sha256
             != confirmatory_manifest_sha256
+        ):
+            raise ValueError(
+                "frozen request is not bound to its protocol slot and manifest"
+            )
+        if (
+            receipt.protocol_dispatch_id != request.protocol_dispatch_id
+            or receipt.confirmatory_manifest_sha256
+            != request.confirmatory_manifest_sha256
         ):
             raise ValueError(
                 "actual dispatch is not cryptographically bound to its protocol slot"
