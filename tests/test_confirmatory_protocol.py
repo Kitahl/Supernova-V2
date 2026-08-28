@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_PATH = ROOT / "goal1" / "CONFIRMATORY_PROTOCOL.json"
+GOAL1_PATH = ROOT / "goal1" / "GOAL1.json"
 BENCHMARK_PATH = ROOT / "goal1" / "CONFIRMATORY_BENCHMARK.json"
 RUNTIME_PATH = ROOT / "goal1" / "CONFIRMATORY_RUNTIME.json"
 BASELINES_PATH = ROOT / "goal1" / "CONFIRMATORY_BASELINES.json"
@@ -17,9 +18,10 @@ PRODUCT_CONTROLS_PATH = ROOT / "goal1" / "CONFIRMATORY_PRODUCT_CONTROLS.json"
 VERIFIED_CHAIN_PATH = ROOT / "goal1" / "CONFIRMATORY_VERIFIED_CHAIN.json"
 COST_POLICY_PATH = ROOT / "goal1" / "CONFIRMATORY_COST_POLICY.json"
 
-EXPECTED_PROTOCOL_BLOB_SHA1 = "326c15d6d96d6e2d30f9d53826752304f89963ec"
+EXPECTED_PROTOCOL_BLOB_SHA1 = "65d65e36a32aa1a73de44b1d2443c9587a14dacb"
+EXPECTED_GOAL1_BLOB_SHA1 = "e38f722ddcd3464095423d2ed91001e961626934"
 EXPECTED_RULES_SHA256 = (
-    "299bb7691f55ea05a86fa21cd03b7ae0a33885f8e1baf447918ba99e49c0043b"
+    "f1e650bc1f33d083c92f4df2a314bef79f8f646fa23431e39a2ebb83b28212e9"
 )
 EXPECTED_AUTHORITY_BLOBS = {
     "benchmark": "ade21f86d9566ce863ac09acd4c9103a48080ef4",
@@ -76,69 +78,97 @@ def canonical_sha256(value: object) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+def source_family_key(problem_id: str) -> str:
+    parts = problem_id.rsplit("_", 1)
+    if (
+        len(parts) == 2
+        and parts[1].isdigit()
+        and "_p" in parts[0]
+        and parts[0].rsplit("_p", 1)[1].isdigit()
+    ):
+        return parts[0]
+    return problem_id
+
+
 def family_id(problem_id: str) -> str:
+    source_key = source_family_key(problem_id)
     material = (
-        b"supernova.source-problem-family.v1\0" + problem_id.encode("ascii")
+        b"supernova.source-problem-family.v2\0" + source_key.encode("ascii")
     )
-    return "sf1-" + hashlib.sha256(material).hexdigest()
+    return "sf2-" + hashlib.sha256(material).hexdigest()
 
 
-def exact_two_sided_binomial_rejection_region(
-    discordant_count: int, alpha: float
-) -> tuple[int, int]:
+def binomial_coefficients(n: int) -> list[list[float]]:
+    coefficients = [[0.0] * (n + 1) for _ in range(n + 1)]
+    for row in range(n + 1):
+        coefficients[row][0] = 1.0
+        coefficients[row][row] = 1.0
+        for column in range(1, row):
+            coefficients[row][column] = (
+                coefficients[row - 1][column - 1]
+                + coefficients[row - 1][column]
+            )
+    return coefficients
+
+
+BINOMIAL = binomial_coefficients(244)
+
+
+def upper_rejection_threshold(discordant_count: int, alpha: float) -> int:
     if discordant_count == 0:
-        return -1, 1
-    denominator = 2**discordant_count
-    upper = 0
+        return 1
+    denominator = 2.0**discordant_count
+    upper = 0.0
     high = discordant_count + 1
     for wins in range(discordant_count, discordant_count // 2, -1):
-        upper += math.comb(discordant_count, wins)
-        if 2 * upper / denominator > alpha:
-            high = wins + 1
-            break
+        upper += BINOMIAL[discordant_count][wins]
+        if 2.0 * upper / denominator > alpha:
+            return wins + 1
         high = wins
-    low = discordant_count - high
-    return low, high
+    return high
 
 
 def binomial_probability(n: int, k: int, p: float) -> float:
+    if k < 0 or k > n:
+        return 0.0
     if p == 0.0:
         return 1.0 if k == 0 else 0.0
     if p == 1.0:
         return 1.0 if k == n else 0.0
-    return math.comb(n, k) * (p**k) * ((1.0 - p) ** (n - k))
+    return BINOMIAL[n][k] * (p**k) * ((1.0 - p) ** (n - k))
 
 
-def unconditional_mcnemar_power(
+def directional_unconditional_mcnemar_power(
     n: int, delta: float, discordance_probability: float, alpha: float
 ) -> float:
     q = discordance_probability
     conditional_win_probability = (q + delta) / (2.0 * q)
-    total = 0.0
-    for discordant_count in range(n + 1):
-        discordant_mass = binomial_probability(n, discordant_count, q)
-        if discordant_mass == 0.0:
+    thresholds = [upper_rejection_threshold(m, alpha) for m in range(n + 1)]
+    upper_tails = [0.0] * (n + 1)
+    for m in range(n):
+        threshold = thresholds[m]
+        next_threshold = thresholds[m + 1]
+        if next_threshold > m + 1:
+            upper_tails[m + 1] = 0.0
             continue
-        low, high = exact_two_sided_binomial_rejection_region(
-            discordant_count, alpha
+        tail = upper_tails[m] + conditional_win_probability * binomial_probability(
+            m, threshold - 1, conditional_win_probability
         )
-        conditional_reject = 0.0
-        if low >= 0:
-            conditional_reject += sum(
-                binomial_probability(
-                    discordant_count, wins, conditional_win_probability
-                )
-                for wins in range(low + 1)
+        if next_threshold > threshold:
+            tail -= sum(
+                binomial_probability(m + 1, wins, conditional_win_probability)
+                for wins in range(threshold, next_threshold)
             )
-        if high <= discordant_count:
-            conditional_reject += sum(
-                binomial_probability(
-                    discordant_count, wins, conditional_win_probability
-                )
-                for wins in range(high, discordant_count + 1)
+        elif next_threshold < threshold:
+            tail += sum(
+                binomial_probability(m + 1, wins, conditional_win_probability)
+                for wins in range(next_threshold, threshold)
             )
-        total += discordant_mass * conditional_reject
-    return total
+        upper_tails[m + 1] = tail
+    return sum(
+        binomial_probability(n, m, q) * upper_tails[m]
+        for m in range(n + 1)
+    )
 
 
 def validate_protocol(protocol: object, benchmark: dict) -> None:
@@ -231,32 +261,59 @@ def validate_protocol(protocol: object, benchmark: dict) -> None:
 
     family = rules["family_design"]
     expected_development_map = [
-        {"problem_id": problem_id, "family_id": family_id(problem_id)}
+        {
+            "problem_id": problem_id,
+            "source_family_key": source_family_key(problem_id),
+            "family_id": family_id(problem_id),
+        }
         for problem_id in expected_development
     ]
     expected_report_map = [
-        {"problem_id": problem_id, "family_id": family_id(problem_id)}
+        {
+            "problem_id": problem_id,
+            "source_family_key": source_family_key(problem_id),
+            "family_id": family_id(problem_id),
+        }
         for problem_id in expected_report
     ]
     if family["development_problem_family_map"] != expected_development_map:
         raise ValueError("development family map changed")
     if family["report_problem_family_map"] != expected_report_map:
         raise ValueError("report family map changed")
-    all_family_ids = [
-        item["family_id"]
-        for item in expected_development_map + expected_report_map
-    ]
-    if len(set(all_family_ids)) != 488:
+    development_family_ids = {
+        item["family_id"] for item in expected_development_map
+    }
+    report_family_ids = {item["family_id"] for item in expected_report_map}
+    if len(development_family_ids) != 243 or len(report_family_ids) != 244:
+        raise ValueError("family counts changed")
+    if development_family_ids & report_family_ids:
         raise ValueError("family overlap or collision")
-    if family["at_most_one_selected_problem_per_family"] is not True:
-        raise ValueError("family multiplicity changed")
+    if family["development_family_count"] != 243:
+        raise ValueError("development family count changed")
+    if family["report_family_count"] != 244:
+        raise ValueError("report family count changed")
+    if family["known_grouped_variants"] != [{
+        "source_family_key": "imo_1964_p1",
+        "problem_ids": ["imo_1964_p1_1", "imo_1964_p1_2"],
+    }]:
+        raise ValueError("known variant grouping changed")
+    if family["at_most_one_selected_report_problem_per_family"] is not True:
+        raise ValueError("report family multiplicity changed")
+    if family["development_family_duplicates_allowed_for_noncredit_development"] is not True:
+        raise ValueError("development family policy changed")
     if family["family_overlap_between_development_and_report"] != "BLOCKED":
         raise ValueError("family overlap handling changed")
+    if family["family_rule_id"] != "source-lineage-key-sha256-v2":
+        raise ValueError("family rule identity changed")
     if family["latent_dependence_claim"] != (
-        "NONE_PROBLEM_ID_FAMILIES_ARE_AN_OPERATIONAL_CLUSTERING_RULE_NOT_"
-        "PROOF_OF_STATISTICAL_INDEPENDENCE"
+        "NONE_THIS_SOURCE_LINEAGE_RULE_GROUPS_EXPLICIT_VARIANTS_BUT_DOES_NOT_"
+        "PROVE_ABSENCE_OF_UNENCODED_TEMPLATE_DEPENDENCE"
     ):
         raise ValueError("family limitation changed")
+    if family["newly_discovered_lineage_after_seal"] != (
+        "BLOCK_CONFIRMATORY_DISPATCH_AND_VERSION_THE_PROTOCOL_BEFORE_REPORT_USE"
+    ):
+        raise ValueError("new lineage handling changed")
 
     power = rules["power_design"]
     if power != {
@@ -279,6 +336,14 @@ def validate_protocol(protocol: object, benchmark: dict) -> None:
         "minimum_unconditional_power_on_frozen_grid": 0.9598828,
         "approximate_minimizer_q": 0.994306,
         "required_power_floor": 0.95,
+        "rejection_event": (
+            "UPPER_TAIL_ONLY_VERIFIED_CHAIN_WINS_GREATER_THAN_LOSSES_AND_TWO_"
+            "SIDED_EXACT_P_AT_MOST_LOCAL_ALPHA"
+        ),
+        "grid_verification": (
+            "ENUMERATE_ALL_10001_FROZEN_Q_POINTS_AND_ASSERT_THE_RECORDED_"
+            "MINIMUM_INDEX_Q_AND_POWER"
+        ),
         "continuum_minimum_claim": "NONE",
         "limitation": (
             "POWER_FLOOR_IS_VERIFIED_ON_THE_FROZEN_DISCORDANCE_GRID_AND_DOES_"
@@ -327,6 +392,7 @@ def validate_protocol(protocol: object, benchmark: dict) -> None:
         raise ValueError("execution authority path changed")
     for field in {
         "protocol_rules_sha256",
+        "goal1_authority_sha256",
         "exact_model_version",
         "generation_settings_sha256",
         "executor_artifact_sha256",
@@ -355,6 +421,21 @@ def validate_protocol(protocol: object, benchmark: dict) -> None:
         raise ValueError("execution opening gate changed")
     if execution["rule_mutation_when_binding_authority"] != "BLOCKED":
         raise ValueError("late-binding mutation changed")
+    if execution["goal1_authority"] != {
+        "path": "goal1/GOAL1.json",
+        "digest_binding": "CANONICAL_JSON_SHA256",
+        "required_schema_version": 2,
+        "required_authority_id": "goal1-active-authority-v2",
+        "required_experiment_id": "goal1-confirmatory-v1",
+        "required_phase": "CONFIRMATORY_PREEXECUTION",
+        "required_protocol_rules_status": "SEALED",
+        "required_confirmatory_execution_status": "BLOCKED_NO_EXECUTION_AUTHORITY",
+        "required_benchmark_frozen": True,
+        "required_complete_cost_policy_frozen": True,
+        "required_held_out_dispatch": "BLOCKED",
+        "stale_bootstrap_dry_run_authority": "BLOCKED",
+    }:
+        raise ValueError("Goal-1 authority gate changed")
 
     manifest = rules["confirmatory_manifest_interface"]
     if manifest["required_schema"] != "supernova.confirmatory-manifest.v1":
@@ -405,6 +486,40 @@ def validate_protocol(protocol: object, benchmark: dict) -> None:
         "held_out_report_dispatch": "BLOCKED",
     }:
         raise ValueError("execution opening gate changed")
+    goal1 = load(GOAL1_PATH)
+    if git_blob_sha1(canonical_lf(GOAL1_PATH)) != EXPECTED_GOAL1_BLOB_SHA1:
+        raise ValueError("Goal-1 authority bytes drifted")
+    if set(goal1) != {
+        "schema_version", "authority_id", "goal", "hypothesis",
+        "active_experiment", "authority_hierarchy", "scientific_credit",
+        "terminal_decisions", "goal2_gate", "legacy_dry_run",
+    }:
+        raise ValueError("Goal-1 authority fields changed")
+    active = goal1["active_experiment"]
+    if goal1["schema_version"] != 2 or goal1["authority_id"] != "goal1-active-authority-v2":
+        raise ValueError("Goal-1 authority identity changed")
+    if active != {
+        "experiment_id": "goal1-confirmatory-v1",
+        "phase": "CONFIRMATORY_PREEXECUTION",
+        "protocol_path": "goal1/CONFIRMATORY_PROTOCOL.json",
+        "protocol_rules_sha256": EXPECTED_RULES_SHA256,
+        "protocol_rules_status": "SEALED",
+        "benchmark_frozen": True,
+        "complete_cost_policy_frozen": True,
+        "execution_authority_path": "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+        "confirmatory_execution_status": "BLOCKED_NO_EXECUTION_AUTHORITY",
+        "manifest_schema": "supernova.confirmatory-manifest.v1",
+        "held_out_dispatch": "BLOCKED",
+    }:
+        raise ValueError("Goal-1 active experiment changed")
+    if goal1["authority_hierarchy"]["legacy_dry_run"] != "NON_CREDIT_EXAMPLE_ONLY":
+        raise ValueError("legacy dry-run authority changed")
+    if goal1["goal2_gate"] != {
+        "requires_valid_goal1_pass": True,
+        "current_state": "BLOCKED_PENDING_VALID_GOAL1_PASS",
+    }:
+        raise ValueError("Goal-2 gate changed")
+
     if protocol["mutation_policy"] != {
         "sealed_rules_or_digest_change": (
             "NEW_PROTOCOL_VERSION_REQUIRED_AND_ANY_EXISTING_MANIFEST_INVALID"
@@ -443,20 +558,42 @@ class ConfirmatoryProtocolTests(unittest.TestCase):
         self.assertEqual(244, len(family_map))
         self.assertEqual(244, len({item["family_id"] for item in family_map}))
 
-    def test_power_at_frozen_grid_minimizer_exceeds_floor(self) -> None:
-        power = unconditional_mcnemar_power(
-            n=244,
-            delta=0.27,
-            discordance_probability=0.994306,
-            alpha=0.0125,
-        )
-        self.assertGreaterEqual(power, 0.9598)
-        self.assertLess(power, 0.9600)
+    def test_all_10001_power_grid_points_and_directional_minimum(self) -> None:
+        powers = []
+        for index in range(10001):
+            q = 0.27 + 0.73 * index / 10000
+            powers.append(
+                directional_unconditional_mcnemar_power(
+                    n=244,
+                    delta=0.27,
+                    discordance_probability=q,
+                    alpha=0.0125,
+                )
+            )
+        minimum_index = min(range(len(powers)), key=powers.__getitem__)
+        minimum_q = 0.27 + 0.73 * minimum_index / 10000
+        minimum_power = powers[minimum_index]
+        self.assertEqual(9922, minimum_index)
+        self.assertAlmostEqual(0.994306, minimum_q, places=12)
+        self.assertAlmostEqual(0.9598828728, minimum_power, places=10)
         self.assertGreaterEqual(
-            power,
+            minimum_power,
             self.protocol["sealed_rules"]["power_design"][
                 "required_power_floor"
             ],
+        )
+
+    def test_explicit_contest_variants_share_one_development_family(self) -> None:
+        family_map = self.protocol["sealed_rules"]["family_design"][
+            "development_problem_family_map"
+        ]
+        by_problem = {item["problem_id"]: item for item in family_map}
+        self.assertEqual(
+            "imo_1964_p1", by_problem["imo_1964_p1_1"]["source_family_key"]
+        )
+        self.assertEqual(
+            by_problem["imo_1964_p1_1"]["family_id"],
+            by_problem["imo_1964_p1_2"]["family_id"],
         )
 
     def test_selection_cannot_drop_or_replace_a_report_problem(self) -> None:
