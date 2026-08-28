@@ -126,6 +126,12 @@ class ScheduledChatArtifactEnvelopeTests(unittest.TestCase):
                 sha256_hex="x" * 64,
             )
 
+        raw = self.make().to_mapping()
+        raw["sha256"] = str(raw["sha256"]).upper()
+        raw["artifact_id"] = "sha256:" + str(raw["sha256"])
+        with self.assertRaisesRegex(ValueError, "lowercase hexadecimal"):
+            ScheduledChatArtifactEnvelope.from_mapping(raw)
+
     def test_envelope_is_tuple_immutable_and_non_subclassable(self) -> None:
         envelope = self.make()
         with self.assertRaises((AttributeError, TypeError)):
