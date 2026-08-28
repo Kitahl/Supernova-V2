@@ -87,10 +87,6 @@ def _synthetic_fixture(
         "report": ["report-a", "report-b"],
     }
     manifest["membership_proof_inputs"]["population_problem_ids_by_split"] = populations
-    manifest["selection"]["selected_count_per_split"] = 2
-    manifest["selection"]["development_problem_ids"] = populations["development"]
-    manifest["selection"]["report_problem_ids"] = populations["report"]
-
     records = {
         "development": [_record(value, "validation") for value in populations["development"]],
         "report": [_record(value, "test") for value in populations["report"]],
@@ -134,15 +130,15 @@ class ConfirmatoryBenchmarkTests(unittest.TestCase):
             ]["report"]),
             244,
         )
-        self.assertEqual(
-            len(self.manifest["selection"]["development_problem_ids"]), 60
-        )
-        self.assertEqual(len(self.manifest["selection"]["report_problem_ids"]), 60)
+        self.assertEqual(self.manifest["selection"]["status"], "UNRESOLVED")
+        self.assertIsNone(self.manifest["selection"]["selected_count_per_split"])
+        self.assertEqual(self.manifest["selection"]["development_problem_ids"], [])
+        self.assertEqual(self.manifest["selection"]["report_problem_ids"], [])
 
     def test_post_freeze_manifest_mutation_is_rejected(self) -> None:
         expected = canonical_sha256(self.manifest)
         changed = copy.deepcopy(self.manifest)
-        changed["selection"]["report_problem_ids"][0] = "substituted"
+        changed["benchmark"]["name"] = "substituted"
         with self.assertRaisesRegex(ValueError, "post-freeze"):
             validate_static_manifest(
                 changed,
@@ -165,14 +161,6 @@ class ConfirmatoryBenchmarkTests(unittest.TestCase):
                 "development": ["invented-a", "invented-b"],
                 "report": ["invented-c", "invented-d"],
             }
-            forged["selection"]["development_problem_ids"] = [
-                "invented-a",
-                "invented-b",
-            ]
-            forged["selection"]["report_problem_ids"] = [
-                "invented-c",
-                "invented-d",
-            ]
             validate_static_manifest(forged, lock, sources)
             with self.assertRaisesRegex(ValueError, "hash-verified population"):
                 validate_locked_dataset(forged, directory)
