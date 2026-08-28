@@ -463,6 +463,8 @@ class AttemptResult(_AttemptResultTuple):
     def validate_for(self, request: FrozenProblemRequest) -> None:
         if type(request) is not FrozenProblemRequest:
             raise TypeError("request must be an exact FrozenProblemRequest")
+        request = FrozenProblemRequest.from_mapping(request.to_mapping())
+        result = AttemptResult.from_mapping(self.to_mapping())
         expected = (
             request.frozen_request_sha256,
             request.run_id,
@@ -472,12 +474,12 @@ class AttemptResult(_AttemptResultTuple):
             request.request_artifact.artifact_id,
         )
         actual = (
-            self.frozen_request_sha256,
-            self.run_id,
-            self.problem_id,
-            self.arm,
-            self.attempt,
-            self.request_artifact_id,
+            result.frozen_request_sha256,
+            result.run_id,
+            result.problem_id,
+            result.arm,
+            result.attempt,
+            result.request_artifact_id,
         )
         if actual != expected:
             raise ValueError("attempt result does not match frozen request")
@@ -644,6 +646,8 @@ class LeanVerifierReceipt(_LeanVerifierReceiptTuple):
             raise TypeError("attempt_result must be an exact AttemptResult")
         if type(verifier_result) is not VerifierResult:
             raise TypeError("verifier_result must be an exact VerifierResult")
+        request = FrozenProblemRequest.from_mapping(request.to_mapping())
+        attempt_result = AttemptResult.from_mapping(attempt_result.to_mapping())
         attempt_result.validate_for(request)
         if attempt_result.status is not AttemptStatus.ANSWERED:
             raise ValueError("only an ANSWERED attempt may produce a verifier receipt")
@@ -721,6 +725,9 @@ class LeanVerifierReceipt(_LeanVerifierReceiptTuple):
             raise TypeError("request must be an exact FrozenProblemRequest")
         if type(attempt_result) is not AttemptResult:
             raise TypeError("attempt_result must be an exact AttemptResult")
+        request = FrozenProblemRequest.from_mapping(request.to_mapping())
+        attempt_result = AttemptResult.from_mapping(attempt_result.to_mapping())
+        receipt = LeanVerifierReceipt.from_mapping(self.to_mapping())
         attempt_result.validate_for(request)
         if attempt_result.status is not AttemptStatus.ANSWERED:
             raise ValueError("verifier receipt requires an ANSWERED attempt")
@@ -735,14 +742,14 @@ class LeanVerifierReceipt(_LeanVerifierReceiptTuple):
             request.runtime_sha256,
         )
         actual = (
-            self.frozen_request_sha256,
-            self.attempt_result_sha256,
-            self.run_id,
-            self.problem_id,
-            self.arm,
-            self.attempt,
-            self.candidate_artifact_id,
-            self.runtime_sha256,
+            receipt.frozen_request_sha256,
+            receipt.attempt_result_sha256,
+            receipt.run_id,
+            receipt.problem_id,
+            receipt.arm,
+            receipt.attempt,
+            receipt.candidate_artifact_id,
+            receipt.runtime_sha256,
         )
         if actual != expected:
             raise ValueError(
