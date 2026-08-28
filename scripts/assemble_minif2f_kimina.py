@@ -315,6 +315,16 @@ def _write_atomic(path: Path, content: bytes) -> None:
             temporary.unlink(missing_ok=True)
 
 
+def _safe_output_path(directory: Path, filename: object, label: str) -> Path:
+    name = _require_exact_str(filename, label)
+    relative = Path(name)
+    if relative.is_absolute() or relative.name != name or name in {".", ".."}:
+        raise ValueError(f"{label} must be one relative filename without directories")
+    if directory.is_symlink():
+        raise ValueError(f"output directory must not be a symlink: {directory}")
+    return directory / relative
+
+
 def assemble(
     *,
     manifest_path: Path,
@@ -342,17 +352,27 @@ def assemble(
     )
     assembly = _require_mapping(manifest["assembly"], "assembly")
     output_files = _require_mapping(assembly.get("output_files"), "assembly.output_files")
-    validation_path = output_directory / _require_exact_str(output_files.get("validation"), "validation output")
-    test_path = output_directory / _require_exact_str(output_files.get("test"), "test output")
+    validation_path = _safe_output_path(
+        output_directory, output_files.get("validation"), "validation output"
+    )
+    test_path = _safe_output_path(output_directory, output_files.get("test"), "test output")
+    if validation_path == test_path:
+        raise ValueError("validation and test outputs must use distinct filenames")
 
     payloads = {
-        "validation": (validation_path, _serialize_jsonl(validation)),
-        "test": (test_path, _serialize_jsonl(test)),
+        "validation": (validation_path, _serialize_jsonl(validation), len(validation)),
+        "test": (test_path, _serialize_jsonl(test), len(test)),
     }
-    summary: dict[str, Any] = {"status": "ASSEMBLED", "outputs": {}}
     expected_outputs = _require_mapping(manifest["outputs"], "outputs")
-    for split, (path, payload) in payloads.items():
+    observed: dict[str, dict[str, Any]] = {}
+    for split, (path, payload, record_count) in payloads.items():
         expected = _require_mapping(expected_outputs.get(split), f"outputs.{split}")
+        expected_records = _require_exact_int(expected.get("records"), f"outputs.{split}.records")
+        if record_count != expected_records:
+            raise ValueError(
+                f"{split} output record count mismatch: "
+                f"expected {expected_records}, observed {record_count}"
+            )
         digest = _sha256_bytes(payload)
         byte_count = len(payload)
         expected_digest = expected.get("sha256")
@@ -365,14 +385,16 @@ def assemble(
             raise ValueError(
                 f"{split} output byte count mismatch: expected {expected_bytes}, observed {byte_count}"
             )
-        _write_atomic(path, payload)
-        summary["outputs"][split] = {
+        observed[split] = {
             "path": path.as_posix(),
-            "records": len(validation if split == "validation" else test),
+            "records": record_count,
             "sha256": digest,
             "bytes": byte_count,
         }
-    return summary
+
+    for split, (path, payload, _) in payloads.items():
+        _write_atomic(path, payload)
+    return {"status": "ASSEMBLED", "outputs": observed}
 
 
 def _parser() -> argparse.ArgumentParser:
