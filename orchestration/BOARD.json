@@ -30,7 +30,9 @@
       "status": "READY",
       "paths": [
         "goal1/CONFIRMATORY_PROTOCOL.json",
-        "tests/test_confirmatory_protocol.py"
+        "tests/test_confirmatory_protocol.py",
+        "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+        "tests/test_confirmatory_execution_authority.py"
       ],
       "depends_on": [
         "G1-120",
@@ -40,12 +42,13 @@
         "G1-125",
         "G1-126"
       ],
-      "objective": "Seal the powered family-aware selection, accepted benchmark/runtime/five-arm/cost rules, execution interface, and fail-closed opening gate into one immutable protocol-rules digest; confirmatory execution remains blocked until the same MF02 worker is sequentially reassigned after G1-121 completion to bind an admissible execution authority.",
+      "objective": "Complete one two-phase MF02 ticket: first seal powered family-aware protocol rules and a fail-closed execution interface; then, without mutating those rules, add the immutable exact model/executor/fresh-context authority bundle required to mark G1-121 DONE.",
       "acceptance": [
         "All declared freeze dependencies are DONE at the bound revisions.",
         "A prospective 244-problem family-aware selection and power basis are frozen before held-out release.",
-        "One canonical digest binds every presently available scientific rule and interface.",
-        "The protocol explicitly returns BLOCKED_NO_EXECUTION_AUTHORITY until a later sequential MF02 execution-authority ticket supplies an admissible immutable bundle.",
+        "One canonical protocol-rules digest binds every presently available scientific rule and interface.",
+        "Before execution authority exists, the protocol returns BLOCKED_NO_EXECUTION_AUTHORITY and G1-121 remains not DONE.",
+        "Completion additionally requires an immutable bundle binding exact model/version/settings, executor digest, receipt issuer and verification key, authentic fresh-empty-context preflight receipt, scheduling, and serving-pool policy.",
         "No second simultaneous MF02 ticket or replacement scheduled task is created."
       ]
     },
@@ -158,7 +161,12 @@
         "tests/test_evidence_bridge.py"
       ],
       "depends_on": [
-        "G1-121",
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126",
         "G1-128"
       ],
       "objective": "Build the typed authority-to-evaluator bridge so only a closed dispatch joined to authenticated completions, verifier evidence, execution-ledger evidence, and reconciled costs can produce evaluator inputs.",
@@ -177,7 +185,12 @@
         "tests/test_confirmatory_manifest.py"
       ],
       "depends_on": [
-        "G1-121"
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126"
       ],
       "objective": "Expand the frozen protocol rules into one blinded one-shot paired manifest schema with every problem, arm, attempt, retry allowance, and budget preregistered; allow deterministic non-credit draft manifests but block production dispatch until the later execution-authority ticket.",
       "acceptance": [
@@ -253,7 +266,8 @@
         "reviews/G1_CONFIRMATORY_REVIEW.md"
       ],
       "depends_on": [
-        "G1-130"
+        "G1-130",
+        "G1-121"
       ],
       "objective": "Independently review the exact frozen protocol, implementation, tests, evidence lineage, and unresolved assumptions without authoring or merging reviewed code.",
       "acceptance": [
