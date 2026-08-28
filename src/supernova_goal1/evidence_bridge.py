@@ -1376,6 +1376,126 @@ class ExecutionLedgerAuthority:
             ordered.append(receipt)
         return tuple(ordered)
 
+    def _issue_evidence_bridge_receipt(
+        self, bridge_sha256: str
+    ) -> "EvidenceBridgeReceipt":
+        bridge_sha256 = _sha256(bridge_sha256, "bridge_sha256")
+        body = {
+            "bridge_sha256": bridge_sha256,
+            "execution_authority_sha256": self.execution_authority_sha256,
+            "issuer_id": self.issuer_id,
+            "run_id": self.run_id,
+            "schema": "supernova.evidence-bridge-receipt.v1",
+        }
+        signature = hmac.new(
+            self.__secret,
+            _canonical_bytes("supernova.evidence-bridge.signature.v1", body),
+            hashlib.sha256,
+        ).hexdigest()
+        return EvidenceBridgeReceipt(
+            issuer_id=self.issuer_id,
+            run_id=self.run_id,
+            execution_authority_sha256=self.execution_authority_sha256,
+            bridge_sha256=bridge_sha256,
+            signature=signature,
+        )
+
+    def verify_evidence_bridge_bundle(
+        self, bundle: "EvidenceBridgeBundle"
+    ) -> str:
+        if type(bundle) is not EvidenceBridgeBundle:
+            raise TypeError("bundle must be an exact EvidenceBridgeBundle")
+        receipt = bundle.authority_receipt
+        if type(receipt) is not EvidenceBridgeReceipt:
+            raise TypeError("bundle authority receipt must be exact")
+        expected_body = {
+            "bridge_sha256": bundle.bridge_sha256,
+            "execution_authority_sha256": self.execution_authority_sha256,
+            "issuer_id": self.issuer_id,
+            "run_id": self.run_id,
+            "schema": "supernova.evidence-bridge-receipt.v1",
+        }
+        if (
+            bundle.run_id != self.run_id
+            or bundle.execution_authority_sha256
+            != self.execution_authority_sha256
+            or bundle.protocol_rules_sha256 != self.protocol_rules_sha256
+            or bundle.confirmatory_manifest_sha256
+            != self.confirmatory_manifest_sha256
+            or receipt.body() != expected_body
+        ):
+            raise ValueError("evidence bridge receipt does not bind trusted authority")
+        expected_signature = hmac.new(
+            self.__secret,
+            _canonical_bytes(
+                "supernova.evidence-bridge.signature.v1", expected_body
+            ),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(receipt.signature, expected_signature):
+            raise ValueError("evidence bridge authentication failed")
+        return receipt.receipt_sha256
+
+
+
+@dataclass(frozen=True)
+class EvidenceBridgeReceipt:
+    """Trusted-host authentication for one complete bridge summary."""
+
+    issuer_id: str
+    run_id: str
+    execution_authority_sha256: str
+    bridge_sha256: str
+    signature: str
+
+    def __post_init__(self) -> None:
+        _token(self.issuer_id, "issuer_id")
+        _token(self.run_id, "run_id")
+        _sha256(self.execution_authority_sha256, "execution_authority_sha256")
+        _sha256(self.bridge_sha256, "bridge_sha256")
+        _sha256(self.signature, "signature")
+
+    def body(self) -> dict[str, object]:
+        return {
+            "bridge_sha256": self.bridge_sha256,
+            "execution_authority_sha256": self.execution_authority_sha256,
+            "issuer_id": self.issuer_id,
+            "run_id": self.run_id,
+            "schema": "supernova.evidence-bridge-receipt.v1",
+        }
+
+    @property
+    def receipt_sha256(self) -> str:
+        return _digest(
+            "supernova.evidence-bridge-receipt.v1",
+            {"body": self.body(), "signature": self.signature},
+        )
+
+
+def _evidence_bundle_body(
+    *,
+    run_id: str,
+    manifest_credit_status: str,
+    protocol_rules_sha256: str,
+    confirmatory_manifest_sha256: str,
+    dispatch_manifest_sha256: str,
+    close_sha256: str,
+    completion_set_sha256: str,
+    execution_authority_sha256: str,
+    records: tuple["EvaluatorEvidenceRecord", ...],
+) -> dict[str, object]:
+    return {
+        "close_sha256": close_sha256,
+        "completion_set_sha256": completion_set_sha256,
+        "confirmatory_manifest_sha256": confirmatory_manifest_sha256,
+        "dispatch_manifest_sha256": dispatch_manifest_sha256,
+        "execution_authority_sha256": execution_authority_sha256,
+        "manifest_credit_status": manifest_credit_status,
+        "protocol_rules_sha256": protocol_rules_sha256,
+        "record_sha256s": [record.evidence_sha256 for record in records],
+        "run_id": run_id,
+    }
+
 
 _RecordTuple = namedtuple(
     "EvaluatorEvidenceRecord",
@@ -1493,6 +1613,13 @@ class EvaluatorEvidenceRecord(_RecordTuple):
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("EvaluatorEvidenceRecord may not be subclassed")
 
+    @classmethod
+    def _make(cls, iterable: object) -> "EvaluatorEvidenceRecord":
+        raise TypeError("EvaluatorEvidenceRecord cannot be reconstructed directly")
+
+    def _replace(self, **kwargs: object) -> "EvaluatorEvidenceRecord":
+        raise TypeError("EvaluatorEvidenceRecord cannot be replaced directly")
+
     @property
     def solved(self) -> bool:
         return CompletionStatus.SUCCEEDED in self.completion_statuses
@@ -1562,6 +1689,7 @@ _BundleTuple = namedtuple(
         "completion_set_sha256",
         "execution_authority_sha256",
         "records",
+        "authority_receipt",
     ),
     module=__name__,
 )
@@ -1580,6 +1708,8 @@ class EvidenceBridgeBundle(_BundleTuple):
             raise ValueError("bridge bundle requires a non-empty record tuple")
         if not all(type(value) is EvaluatorEvidenceRecord for value in records):
             raise TypeError("bridge records must be exact EvaluatorEvidenceRecord values")
+        if type(raw["authority_receipt"]) is not EvidenceBridgeReceipt:
+            raise TypeError("authority_receipt must be an exact EvidenceBridgeReceipt")
         keys = [(value.problem_id, value.arm) for value in records]
         if len(keys) != len(set(keys)):
             raise ValueError("bridge bundle contains duplicate problem/arm cells")
@@ -1600,27 +1730,39 @@ class EvidenceBridgeBundle(_BundleTuple):
                 "execution_authority_sha256",
             ),
             tuple(records),
+            raw["authority_receipt"],
         )
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("EvidenceBridgeBundle may not be subclassed")
 
+    @classmethod
+    def _make(cls, iterable: object) -> "EvidenceBridgeBundle":
+        raise TypeError("EvidenceBridgeBundle cannot be reconstructed directly")
+
+    def _replace(self, **kwargs: object) -> "EvidenceBridgeBundle":
+        raise TypeError("EvidenceBridgeBundle cannot be replaced directly")
+
     @property
     def bridge_sha256(self) -> str:
         return _digest(
             "supernova.evidence-bridge-bundle.v2",
-            {
-                "close_sha256": self.close_sha256,
-                "completion_set_sha256": self.completion_set_sha256,
-                "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
-                "dispatch_manifest_sha256": self.dispatch_manifest_sha256,
-                "execution_authority_sha256": self.execution_authority_sha256,
-                "manifest_credit_status": self.manifest_credit_status,
-                "protocol_rules_sha256": self.protocol_rules_sha256,
-                "record_sha256s": [r.evidence_sha256 for r in self.records],
-                "run_id": self.run_id,
-            },
+            _evidence_bundle_body(
+                run_id=self.run_id,
+                manifest_credit_status=self.manifest_credit_status,
+                protocol_rules_sha256=self.protocol_rules_sha256,
+                confirmatory_manifest_sha256=self.confirmatory_manifest_sha256,
+                dispatch_manifest_sha256=self.dispatch_manifest_sha256,
+                close_sha256=self.close_sha256,
+                completion_set_sha256=self.completion_set_sha256,
+                execution_authority_sha256=self.execution_authority_sha256,
+                records=self.records,
+            ),
         )
+
+    @property
+    def authority_receipt_sha256(self) -> str:
+        return self.authority_receipt.receipt_sha256
 
     def to_evaluator_mappings(self) -> tuple[dict[str, object], ...]:
         return tuple(record.to_evaluator_mapping() for record in self.records)
@@ -1935,6 +2077,24 @@ def bridge_closed_evidence(
                 )
             )
 
+    records_tuple = tuple(records)
+    bridge_sha256 = _digest(
+        "supernova.evidence-bridge-bundle.v2",
+        _evidence_bundle_body(
+            run_id=authoritative_join.receipt.run_id,
+            manifest_credit_status=manifest_credit_status,
+            protocol_rules_sha256=protocol_rules_sha256,
+            confirmatory_manifest_sha256=confirmatory_manifest_sha256,
+            dispatch_manifest_sha256=authoritative_join.receipt.manifest_sha256,
+            close_sha256=authoritative_join.receipt.close_sha256,
+            completion_set_sha256=authoritative_join.receipt.completion_set_sha256,
+            execution_authority_sha256=execution_ledger.execution_authority_sha256,
+            records=records_tuple,
+        ),
+    )
+    authority_receipt = execution_ledger._issue_evidence_bridge_receipt(
+        bridge_sha256
+    )
     return EvidenceBridgeBundle(
         run_id=authoritative_join.receipt.run_id,
         manifest_credit_status=manifest_credit_status,
@@ -1944,7 +2104,8 @@ def bridge_closed_evidence(
         close_sha256=authoritative_join.receipt.close_sha256,
         completion_set_sha256=authoritative_join.receipt.completion_set_sha256,
         execution_authority_sha256=execution_ledger.execution_authority_sha256,
-        records=tuple(records),
+        records=records_tuple,
+        authority_receipt=authority_receipt,
         _factory=_BUNDLE_FACTORY,
     )
 
@@ -1953,6 +2114,7 @@ __all__ = [
     "ATTEMPTS_PER_CELL",
     "ContextIsolationReceipt",
     "EvidenceBridgeBundle",
+    "EvidenceBridgeReceipt",
     "EvaluatorEvidenceRecord",
     "ExecutionLedgerAuthority",
     "ExecutionLedgerReceipt",

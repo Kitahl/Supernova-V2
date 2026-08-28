@@ -31,6 +31,7 @@ from supernova_goal1.cost import (
 from supernova_goal1.dispatch import (
     CompletionPayload,
     CompletionSigner,
+    CompletionStatus,
     DispatchAuthority,
 )
 from supernova_goal1.evidence_bridge import (
@@ -345,7 +346,46 @@ class EvidenceBridgeTests(unittest.TestCase):
         self.assertEqual(16, len(record.predecessor_reconciliation_sha256s))
         mapping = record.to_evaluator_mapping()
         self.assertEqual(record.evidence_sha256, mapping["evidence_sha256"])
-        self.assertEqual(bundle.bridge_sha256, bundle.bridge_sha256)
+        self.assertEqual(bundle.bridge_sha256, bundle.authority_receipt.bridge_sha256)
+        self.assertEqual(
+            bundle.authority_receipt_sha256,
+            self.ledger.verify_evidence_bridge_bundle(bundle),
+        )
+
+    def test_bridge_summary_is_authority_authenticated(self) -> None:
+        bundle = self._bridge()
+        record = bundle.records[-1]
+        record_values = list(record)
+        record_values[record._fields.index("completion_statuses")] = (
+            CompletionStatus.SUCCEEDED,
+        ) * 16
+        forged_record = tuple.__new__(
+            EvaluatorEvidenceRecord, tuple(record_values)
+        )
+        bundle_values = list(bundle)
+        bundle_values[bundle._fields.index("records")] = (
+            *bundle.records[:-1],
+            forged_record,
+        )
+        bundle_values[bundle._fields.index("manifest_credit_status")] = (
+            "CONFIRMATORY_CREDIT_ELIGIBLE"
+        )
+        forged_bundle = tuple.__new__(
+            EvidenceBridgeBundle, tuple(bundle_values)
+        )
+        with self.assertRaisesRegex(
+            ValueError, "does not bind|authentication failed"
+        ):
+            self.ledger.verify_evidence_bridge_bundle(forged_bundle)
+
+        with self.assertRaisesRegex(TypeError, "cannot be replaced"):
+            bundle._replace(manifest_credit_status="forged")
+        with self.assertRaisesRegex(TypeError, "cannot be reconstructed"):
+            EvidenceBridgeBundle._make(tuple(bundle))
+        with self.assertRaisesRegex(TypeError, "cannot be replaced"):
+            record._replace(completion_statuses=())
+        with self.assertRaisesRegex(TypeError, "cannot be reconstructed"):
+            EvaluatorEvidenceRecord._make(tuple(record))
 
     def test_bridge_api_has_no_raw_outcome_hash_or_cost_parameter(self) -> None:
         parameters = inspect.signature(bridge_closed_evidence).parameters
