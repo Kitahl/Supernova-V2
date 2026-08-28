@@ -3,15 +3,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
+import json
 from math import comb
+from pathlib import Path
 from typing import Iterable
 
 from .confirmatory_manifest import NON_CREDIT_DRAFT, canonical_sha256
 from .contracts import Arm, CompleteCost, GoalDecision
 from .dispatch import CompletionStatus
+from .execution_authority import (
+    PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
+    PRODUCTION_CREDIT_STATUS,
+    load_execution_authority,
+)
 from .evidence_bridge import (
     ATTEMPTS_PER_CELL,
     EvidenceBridgeBundle,
+    EvidenceBridgeReceipt,
     EvaluatorEvidenceRecord,
     ExecutionLedgerAuthority,
 )
@@ -481,7 +489,7 @@ def _validate_authenticated_bundle(
         blockers.append("PROTOCOL_RULES_DIGEST_MISMATCH")
     if bundle.manifest_credit_status == NON_CREDIT_DRAFT:
         blockers.append("NON_CREDIT_DRAFT")
-    else:
+    elif bundle.manifest_credit_status != PRODUCTION_CREDIT_STATUS:
         blockers.append("NO_SEALED_PRODUCTION_CREDIT_STATUS")
 
     records = bundle.records
@@ -825,29 +833,14 @@ def _evaluate_complete_snapshots(
     }
 
 
-def evaluate_confirmatory(
+def _evaluate_authenticated_bundle(
     bundle: EvidenceBridgeBundle,
-    *,
-    evidence_authority: ExecutionLedgerAuthority,
+    verified_receipt_sha256: str,
 ) -> dict[str, object]:
-    """Evaluate one authenticated frozen cohort without accepting raw outcomes."""
+    """Evaluate a bundle only after its fixed authority has authenticated it."""
 
-    if type(bundle) is not EvidenceBridgeBundle:
-        raise TypeError("bundle must be an exact EvidenceBridgeBundle")
-    if type(evidence_authority) is not ExecutionLedgerAuthority:
-        raise TypeError(
-            "evidence_authority must be an exact ExecutionLedgerAuthority"
-        )
     result = _base_result(bundle)
-
-    try:
-        verified_receipt = evidence_authority.verify_evidence_bridge_bundle(bundle)
-    except Exception as exc:
-        result["blockers"] = ["BRIDGE_AUTHENTICATION_FAILED"]
-        result["reason"] = "BRIDGE_AUTHENTICATION_FAILED"
-        result["authentication_error_type"] = type(exc).__name__
-        return _finish(result)
-    result["bridge_authority_receipt_sha256"] = verified_receipt
+    result["bridge_authority_receipt_sha256"] = verified_receipt_sha256
 
     try:
         blockers, incomplete, missing, extra, snapshots = (
@@ -889,6 +882,91 @@ def evaluate_confirmatory(
     result.update(scientific)
     result["decision_eligible"] = True
     return _finish(result)
+
+
+def _evaluate_non_credit_draft(
+    bundle: EvidenceBridgeBundle,
+    *,
+    evidence_authority: ExecutionLedgerAuthority,
+) -> dict[str, object]:
+    """Exercise draft fixtures without creating a production decision path."""
+
+    if type(bundle) is not EvidenceBridgeBundle:
+        raise TypeError("bundle must be an exact EvidenceBridgeBundle")
+    if type(evidence_authority) is not ExecutionLedgerAuthority:
+        raise TypeError(
+            "evidence_authority must be an exact ExecutionLedgerAuthority"
+        )
+    result = _base_result(bundle)
+    try:
+        verified_receipt = evidence_authority.verify_evidence_bridge_bundle(bundle)
+    except Exception as exc:
+        result["blockers"] = ["BRIDGE_AUTHENTICATION_FAILED"]
+        result["reason"] = "BRIDGE_AUTHENTICATION_FAILED"
+        result["authentication_error_type"] = type(exc).__name__
+        return _finish(result)
+    if bundle.manifest_credit_status != NON_CREDIT_DRAFT:
+        result["blockers"] = ["NON_CREDIT_DRAFT_REQUIRED"]
+        result["reason"] = "NON_CREDIT_DRAFT_REQUIRED"
+        return _finish(result)
+    return _evaluate_authenticated_bundle(bundle, verified_receipt)
+
+
+def evaluate_confirmatory(
+    bundle: EvidenceBridgeBundle,
+) -> dict[str, object]:
+    """Evaluate production evidence only under the fixed repository trust root."""
+
+    if type(bundle) is not EvidenceBridgeBundle:
+        raise TypeError("bundle must be an exact EvidenceBridgeBundle")
+    result = _base_result(bundle)
+    root = Path(__file__).resolve().parents[2]
+    try:
+        protocol = json.loads(
+            (root / "goal1" / "CONFIRMATORY_PROTOCOL.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        goal1 = json.loads(
+            (root / "goal1" / "GOAL1.json").read_text(encoding="utf-8")
+        )
+        authority = load_execution_authority(protocol, goal1)
+    except Exception as exc:
+        result["blockers"] = ["PRODUCTION_EXECUTION_AUTHORITY_UNAVAILABLE"]
+        result["reason"] = "PRODUCTION_EXECUTION_AUTHORITY_UNAVAILABLE"
+        result["authentication_error_type"] = type(exc).__name__
+        return _finish(result)
+
+    receipt = bundle.authority_receipt
+    expected_body = {
+        "bridge_sha256": bundle.bridge_sha256,
+        "execution_authority_sha256": authority.authority_sha256,
+        "issuer_id": authority.issuer_id,
+        "run_id": bundle.run_id,
+        "schema": "supernova.evidence-bridge-receipt.v1",
+    }
+    try:
+        if type(receipt) is not EvidenceBridgeReceipt:
+            raise TypeError("bundle authority receipt must be exact")
+        if (
+            bundle.execution_authority_sha256 != authority.authority_sha256
+            or bundle.protocol_rules_sha256 != protocol["sealed_rules_sha256"]
+            or receipt.body() != expected_body
+        ):
+            raise ValueError(
+                "evidence bridge receipt does not bind fixed execution authority"
+            )
+        authority.verify_receipt_signature(
+            receipt.signature,
+            domain=PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
+            body=expected_body,
+        )
+    except Exception as exc:
+        result["blockers"] = ["BRIDGE_AUTHENTICATION_FAILED"]
+        result["reason"] = "BRIDGE_AUTHENTICATION_FAILED"
+        result["authentication_error_type"] = type(exc).__name__
+        return _finish(result)
+    return _evaluate_authenticated_bundle(bundle, receipt.receipt_sha256)
 
 
 __all__ = [

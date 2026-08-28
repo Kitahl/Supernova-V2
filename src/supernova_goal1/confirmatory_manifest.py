@@ -8,6 +8,13 @@ import json
 import unicodedata
 from typing import Any, Mapping, Sequence
 
+from .execution_authority import (
+    AUTHORIZED_DISPATCH_STATUS,
+    PRODUCTION_CREDIT_STATUS,
+    ValidatedExecutionAuthority,
+    load_execution_authority,
+)
+
 
 CONFIRMATORY_MANIFEST_SCHEMA = "supernova.confirmatory-manifest.v1"
 OPERATOR_PLAN_SCHEMA = "supernova.confirmatory-operator-plan.v1"
@@ -110,8 +117,11 @@ def _validate_protocol(protocol: Mapping[str, Any]) -> Mapping[str, Any]:
         raise ValueError("protocol must be an object")
     if protocol.get("protocol_rules_status") != "SEALED":
         raise ValueError("confirmatory protocol rules are not SEALED")
-    if protocol.get("confirmatory_execution_status") != BLOCKED_NO_EXECUTION_AUTHORITY:
-        raise ValueError("draft builder requires the sealed pre-execution protocol")
+    if protocol.get("confirmatory_execution_status") not in {
+        BLOCKED_NO_EXECUTION_AUTHORITY,
+        AUTHORIZED_DISPATCH_STATUS,
+    }:
+        raise ValueError("unsupported confirmatory execution status")
     rules = _as_mapping(protocol.get("sealed_rules"), "sealed_rules")
     recorded_digest = _sha256_hex(
         protocol.get("sealed_rules_sha256"), "sealed_rules_sha256"
@@ -455,20 +465,106 @@ def build_non_credit_draft(
     )
 
 
+def _bind_authorized_manifest(
+    protocol: Mapping[str, Any],
+    *,
+    operator_seed: bytes,
+    execution_authority: ValidatedExecutionAuthority,
+) -> ConfirmatoryManifestBundle:
+    """Bind an authorized manifest from a fixed-loader-issued capability."""
+
+    draft = build_non_credit_draft(protocol, operator_seed=operator_seed)
+    if type(execution_authority) is not ValidatedExecutionAuthority:
+        raise PermissionError(
+            "production requires a capability issued by the execution-authority validator"
+        )
+    gate = protocol.get("execution_opening_gate")
+    if (
+        protocol.get("confirmatory_execution_status") != AUTHORIZED_DISPATCH_STATUS
+        or not isinstance(gate, Mapping)
+        or gate.get("state") != AUTHORIZED_DISPATCH_STATUS
+        or gate.get("missing_artifact") is not None
+    ):
+        raise PermissionError(
+            "BLOCKED_NO_EXECUTION_AUTHORITY: operational protocol gate is not open"
+        )
+
+    public_manifest = json.loads(json.dumps(draft.public_manifest))
+    operator_plan = json.loads(json.dumps(draft.operator_plan))
+    bindings = public_manifest["bindings"]
+    bindings["execution_authority_sha256"] = execution_authority.authority_sha256
+    bindings["model_identity_sha256"] = execution_authority.model_identity_sha256
+    public_manifest["credit_status"] = PRODUCTION_CREDIT_STATUS
+    public_manifest["dispatch_status"] = AUTHORIZED_DISPATCH_STATUS
+    public_manifest["purpose"] = "CONFIRMATORY_PRODUCTION"
+    public_manifest.pop("manifest_sha256")
+    manifest_sha256 = canonical_sha256(public_manifest)
+    public_manifest["manifest_sha256"] = manifest_sha256
+    operator_plan["manifest_sha256"] = manifest_sha256
+    return ConfirmatoryManifestBundle(
+        public_manifest=public_manifest,
+        operator_plan=operator_plan,
+    )
+
+
 def build_confirmatory_manifest(
     protocol: Mapping[str, Any],
     *,
     operator_seed: bytes,
-    execution_authority: Mapping[str, Any] | None = None,
+    execution_authority: ValidatedExecutionAuthority | None = None,
 ) -> ConfirmatoryManifestBundle:
-    """Build a draft now; production construction opens only with G1-121 phase two."""
+    """Build only a non-credit draft; production construction is activation-only."""
 
     if execution_authority is not None:
         raise PermissionError(
-            "production manifest construction is blocked until the G1-121 "
-            "execution-authority validator is merged"
+            "production manifest construction is activation-only and revalidates fixed artifacts"
         )
     return build_non_credit_draft(protocol, operator_seed=operator_seed)
+
+
+def _build_authorized_confirmatory_manifest(
+    preactivation_protocol: Mapping[str, Any],
+    opened_protocol: Mapping[str, Any],
+    goal1: Mapping[str, Any],
+    *,
+    operator_seed: bytes,
+) -> tuple[ConfirmatoryManifestBundle, ValidatedExecutionAuthority]:
+    """Build production only after the fixed repository loader revalidates authority."""
+
+    authority = load_execution_authority(preactivation_protocol, goal1)
+    manifest = _bind_authorized_manifest(
+        opened_protocol,
+        operator_seed=operator_seed,
+        execution_authority=authority,
+    )
+    return manifest, authority
+
+
+def validate_manifest_bundle(
+    public_manifest: Mapping[str, Any],
+    operator_plan: Mapping[str, Any],
+    protocol: Mapping[str, Any],
+    *,
+    execution_authority: ValidatedExecutionAuthority | None = None,
+) -> None:
+    """Reconstruct either the draft or the authority-bound production manifest."""
+
+    if execution_authority is None:
+        validate_draft_bundle(public_manifest, operator_plan, protocol)
+        return
+    if not isinstance(operator_plan, Mapping):
+        raise ValueError("operator_plan must be an object")
+    seed_hex = operator_plan.get("operator_seed_hex")
+    _sha256_hex(seed_hex, "operator_seed_hex")
+    expected = _bind_authorized_manifest(
+        protocol,
+        operator_seed=bytes.fromhex(seed_hex),
+        execution_authority=execution_authority,
+    )
+    if canonical_sha256(public_manifest) != canonical_sha256(expected.public_manifest):
+        raise ValueError("public confirmatory manifest differs from authorized reconstruction")
+    if canonical_sha256(operator_plan) != canonical_sha256(expected.operator_plan):
+        raise ValueError("operator plan differs from authorized reconstruction")
 
 
 def validate_draft_bundle(
@@ -508,13 +604,20 @@ def assert_dispatch_authorized(
     public_manifest: Mapping[str, Any],
     operator_plan: Mapping[str, Any],
     protocol: Mapping[str, Any],
+    *,
+    execution_authority: ValidatedExecutionAuthority | None = None,
 ) -> None:
-    """Fail closed: a non-credit draft is never dispatch authority."""
+    """Authorize only an exact production reconstruction under a sealed capability."""
 
-    validate_draft_bundle(public_manifest, operator_plan, protocol)
-    raise PermissionError(
-        "confirmatory dispatch is BLOCKED_NO_EXECUTION_AUTHORITY; "
-        "NON_CREDIT_DRAFT cannot authorize a model call"
+    if execution_authority is None:
+        validate_draft_bundle(public_manifest, operator_plan, protocol)
+        raise PermissionError(
+            "confirmatory dispatch is BLOCKED_NO_EXECUTION_AUTHORITY; "
+            "NON_CREDIT_DRAFT cannot authorize a model call"
+        )
+    validate_manifest_bundle(
+        public_manifest, operator_plan, protocol,
+        execution_authority=execution_authority,
     )
 
 

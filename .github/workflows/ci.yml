@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install pinned package and verifier dependencies
+        run: python -m pip install --disable-pip-version-check -e .
       - name: Unit tests
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: G1-114 non-credit integration pilot

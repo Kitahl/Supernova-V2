@@ -14,14 +14,21 @@ import sqlite3
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 from .confirmatory_manifest import (
     NON_CREDIT_DRAFT,
     canonical_sha256,
     validate_draft_bundle,
+    validate_manifest_bundle,
 )
 from .contracts import Arm, CompleteCost
+from .execution_authority import (
+    PRODUCTION_CREDIT_STATUS,
+    PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
+    PRODUCTION_RECEIPT_SCHEMA,
+    ValidatedExecutionAuthority,
+)
 from .cost import (
     ArmCostTrace,
     CompleteCostReport,
@@ -281,6 +288,96 @@ class ContextIsolationReceipt:
     def receipt_sha256(self) -> str:
         return _digest(
             "supernova.context-isolation-receipt.v1",
+            {"body": self.body(), "signature": self.signature},
+        )
+
+
+@dataclass(frozen=True)
+class HermeticContextReceipt:
+    issuer_id: str
+    execution_authority_sha256: str
+    confirmatory_manifest_sha256: str
+    model_identity_sha256: str
+    executor_artifact_sha256: str
+    run_id: str
+    protocol_dispatch_id: str
+    dispatch_id: str
+    problem_id: str
+    arm: str
+    attempt_index: int
+    sequence: int
+    instance_nonce: str
+    clean_image_sha256: str
+    initial_context_sha256: str
+    request_artifact_sha256: str
+    response_artifact_sha256: str
+    opened_at: str
+    closed_at: str
+    network_policy: str
+    persistent_writable_state: str
+    teardown_observed: bool
+    signature: str
+
+    def __post_init__(self) -> None:
+        _token(self.issuer_id, "issuer_id")
+        for field in (
+            "execution_authority_sha256",
+            "confirmatory_manifest_sha256",
+            "model_identity_sha256",
+            "executor_artifact_sha256",
+            "dispatch_id",
+            "clean_image_sha256",
+            "initial_context_sha256",
+            "request_artifact_sha256",
+            "response_artifact_sha256",
+        ):
+            _sha256(getattr(self, field), field)
+        _token(self.run_id, "run_id")
+        _protocol_dispatch_id(self.protocol_dispatch_id, "protocol_dispatch_id")
+        _token(self.problem_id, "problem_id")
+        _arm(self.arm)
+        _natural(self.attempt_index, "attempt_index")
+        _natural(self.sequence, "sequence")
+        for field in ("instance_nonce", "opened_at", "closed_at", "signature"):
+            _token(getattr(self, field), field)
+        if self.network_policy != "NONE":
+            raise ValueError("production context receipt must prove network NONE")
+        if self.persistent_writable_state != "DISABLED":
+            raise ValueError("production context receipt must prove no persistent state")
+        if self.teardown_observed is not True:
+            raise ValueError("production context receipt must prove teardown")
+
+    def body(self) -> dict[str, object]:
+        return {
+            "arm": self.arm,
+            "attempt_index": self.attempt_index,
+            "clean_image_sha256": self.clean_image_sha256,
+            "closed_at": self.closed_at,
+            "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "dispatch_id": self.dispatch_id,
+            "execution_authority_sha256": self.execution_authority_sha256,
+            "executor_artifact_sha256": self.executor_artifact_sha256,
+            "initial_context_sha256": self.initial_context_sha256,
+            "instance_nonce": self.instance_nonce,
+            "issuer_id": self.issuer_id,
+            "model_identity_sha256": self.model_identity_sha256,
+            "network_policy": self.network_policy,
+            "opened_at": self.opened_at,
+            "persistent_writable_state": self.persistent_writable_state,
+            "problem_id": self.problem_id,
+            "protocol_dispatch_id": self.protocol_dispatch_id,
+            "request_artifact_sha256": self.request_artifact_sha256,
+            "response_artifact_sha256": self.response_artifact_sha256,
+            "run_id": self.run_id,
+            "schema": PRODUCTION_RECEIPT_SCHEMA,
+            "sequence": self.sequence,
+            "teardown_observed": self.teardown_observed,
+        }
+
+    @property
+    def receipt_sha256(self) -> str:
+        return _digest(
+            PRODUCTION_RECEIPT_SCHEMA,
             {"body": self.body(), "signature": self.signature},
         )
 
@@ -602,6 +699,7 @@ class ExecutionLedgerAuthority:
         protocol: Mapping[str, object],
         public_manifest: Mapping[str, object],
         operator_plan: Mapping[str, object],
+        execution_authority: ValidatedExecutionAuthority | None = None,
     ) -> None:
         path_text = os.fspath(database_path)
         if not path_text or path_text == ":memory:" or path_text.startswith("file:"):
@@ -624,7 +722,22 @@ class ExecutionLedgerAuthority:
         ):
             if type(value) is not dict:
                 raise TypeError(f"{field} must be an exact dict")
-        validate_draft_bundle(public_manifest, operator_plan, protocol)
+        if execution_authority is None:
+            validate_draft_bundle(public_manifest, operator_plan, protocol)
+        else:
+            if type(execution_authority) is not ValidatedExecutionAuthority:
+                raise TypeError("execution_authority must be a validator-issued capability")
+            validate_manifest_bundle(
+                public_manifest,
+                operator_plan,
+                protocol,
+                execution_authority=execution_authority,
+            )
+            if execution_authority_sha256 != execution_authority.authority_sha256:
+                raise ValueError("caller execution authority digest differs from capability")
+            if issuer_id != execution_authority.issuer_id:
+                raise ValueError("caller issuer differs from validated execution authority")
+        self.production_authority = execution_authority
         self.protocol_rules_sha256 = _sha256(
             protocol["sealed_rules_sha256"], "sealed_rules_sha256"
         )
@@ -668,6 +781,15 @@ class ExecutionLedgerAuthority:
                     receipt_json TEXT NOT NULL,
                     receipt_sha256 TEXT NOT NULL,
                     PRIMARY KEY (run_id, dispatch_id)
+                )"""
+            )
+            con.execute(
+                """CREATE TABLE IF NOT EXISTS hermetic_instance_receipts (
+                    instance_nonce TEXT NOT NULL PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    receipt_sha256 TEXT NOT NULL,
+                    UNIQUE (run_id, sequence)
                 )"""
             )
             con.commit()
@@ -1026,6 +1148,10 @@ class ExecutionLedgerAuthority:
     def _issue_context_isolation_receipt(
         self, completion: CompletionRecord
     ) -> ContextIsolationReceipt:
+        if self.production_authority is not None:
+            raise PermissionError(
+                "production context receipts are issued only by the hermetic supervisor"
+            )
         body = self._context_body(completion)
         signature = hmac.new(
             self.__secret,
@@ -1113,19 +1239,62 @@ class ExecutionLedgerAuthority:
     def _verify_context_receipt(
         self,
         completion: CompletionRecord,
-        receipt: ContextIsolationReceipt,
-    ) -> ContextIsolationReceipt:
-        if type(receipt) is not ContextIsolationReceipt:
+        receipt: ContextIsolationReceipt | HermeticContextReceipt,
+    ) -> ContextIsolationReceipt | HermeticContextReceipt:
+        if self.production_authority is None:
+            if type(receipt) is not ContextIsolationReceipt:
+                raise TypeError(
+                    "draft context receipt must be an exact ContextIsolationReceipt"
+                )
+            expected = self._issue_context_isolation_receipt(completion)
+            if receipt.body() != expected.body() or not hmac.compare_digest(
+                receipt.signature, expected.signature
+            ):
+                raise ValueError(
+                    "context-isolation receipt is not authenticated for this dispatch"
+                )
+            return receipt
+
+        if type(receipt) is not HermeticContextReceipt:
             raise TypeError(
-                "context_isolation_receipt must be an exact ContextIsolationReceipt"
+                "production context receipt must be an exact HermeticContextReceipt"
             )
-        expected = self._issue_context_isolation_receipt(completion)
-        if receipt.body() != expected.body() or not hmac.compare_digest(
-            receipt.signature, expected.signature
-        ):
-            raise ValueError(
-                "context-isolation receipt is not authenticated for this dispatch"
-            )
+        authority = self.production_authority
+        slot = self._slot_for_completion(completion)
+        request = completion.payload.request
+        response = completion.payload.attempt_result.response_artifact
+        expected = {
+            "arm": request.arm.value,
+            "attempt_index": request.attempt,
+            "clean_image_sha256": authority.clean_image_sha256,
+            "closed_at": receipt.closed_at,
+            "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "dispatch_id": completion.dispatch_id,
+            "execution_authority_sha256": authority.authority_sha256,
+            "executor_artifact_sha256": authority.executor_artifact_sha256,
+            "initial_context_sha256": hashlib.sha256(b"").hexdigest(),
+            "instance_nonce": receipt.instance_nonce,
+            "issuer_id": authority.issuer_id,
+            "model_identity_sha256": authority.model_identity_sha256,
+            "network_policy": "NONE",
+            "opened_at": receipt.opened_at,
+            "persistent_writable_state": "DISABLED",
+            "problem_id": request.problem.native_id,
+            "protocol_dispatch_id": slot["dispatch_id"],
+            "request_artifact_sha256": request.frozen_request_sha256,
+            "response_artifact_sha256": response.sha256_hex,
+            "run_id": self.run_id,
+            "schema": PRODUCTION_RECEIPT_SCHEMA,
+            "sequence": slot["dispatch_index"],
+            "teardown_observed": True,
+        }
+        if receipt.body() != expected:
+            raise ValueError("production context receipt does not bind actual execution")
+        authority.verify_receipt_signature(
+            receipt.signature,
+            domain=PRODUCTION_RECEIPT_SCHEMA,
+            body=expected,
+        )
         return receipt
 
     def _verify_predecessor_receipt(
@@ -1151,7 +1320,7 @@ class ExecutionLedgerAuthority:
         self,
         completion: CompletionRecord,
         *,
-        context_isolation_receipt: ContextIsolationReceipt,
+        context_isolation_receipt: ContextIsolationReceipt | HermeticContextReceipt,
         predecessor_reconciliation_receipt: PredecessorReconciliationReceipt,
         orchestration_milliseconds: int,
     ) -> ExecutionLedgerReceipt:
@@ -1204,6 +1373,17 @@ class ExecutionLedgerAuthority:
         con = self._connect()
         try:
             try:
+                if type(context_receipt) is HermeticContextReceipt:
+                    con.execute(
+                        "INSERT INTO hermetic_instance_receipts "
+                        "(instance_nonce,run_id,sequence,receipt_sha256) VALUES(?,?,?,?)",
+                        (
+                            context_receipt.instance_nonce,
+                            self.run_id,
+                            context_receipt.sequence,
+                            context_receipt.receipt_sha256,
+                        ),
+                    )
                 con.execute(
                     "INSERT INTO execution_receipts "
                     "(run_id,dispatch_id,receipt_json,receipt_sha256) VALUES(?,?,?,?)",
@@ -1217,7 +1397,7 @@ class ExecutionLedgerAuthority:
                 con.commit()
             except sqlite3.IntegrityError as exc:
                 raise ValueError(
-                    "execution receipt already issued for dispatch; replay rejected"
+                    "execution, sequence, or hermetic instance replay rejected"
                 ) from exc
         finally:
             con.close()
@@ -1425,15 +1605,24 @@ class ExecutionLedgerAuthority:
             or receipt.body() != expected_body
         ):
             raise ValueError("evidence bridge receipt does not bind trusted authority")
-        expected_signature = hmac.new(
-            self.__secret,
-            _canonical_bytes(
-                "supernova.evidence-bridge.signature.v1", expected_body
-            ),
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(receipt.signature, expected_signature):
-            raise ValueError("evidence bridge authentication failed")
+
+        production_authority = getattr(self, "production_authority", None)
+        if production_authority is None:
+            expected_signature = hmac.new(
+                self.__secret,
+                _canonical_bytes(
+                    "supernova.evidence-bridge.signature.v1", expected_body
+                ),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(receipt.signature, expected_signature):
+                raise ValueError("evidence bridge authentication failed")
+        else:
+            production_authority.verify_receipt_signature(
+                receipt.signature,
+                domain=PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
+                body=expected_body,
+            )
         return receipt.receipt_sha256
 
 
@@ -1453,7 +1642,7 @@ class EvidenceBridgeReceipt:
         _token(self.run_id, "run_id")
         _sha256(self.execution_authority_sha256, "execution_authority_sha256")
         _sha256(self.bridge_sha256, "bridge_sha256")
-        _sha256(self.signature, "signature")
+        _token(self.signature, "signature")
 
     def body(self) -> dict[str, object]:
         return {
@@ -1836,6 +2025,9 @@ def bridge_closed_evidence(
     public_manifest: Mapping[str, object],
     operator_plan: Mapping[str, object],
     cost_reports_by_problem: Mapping[str, CompleteCostReport],
+    production_receipt_issuer: (
+        Callable[[str], EvidenceBridgeReceipt] | None
+    ) = None,
 ) -> EvidenceBridgeBundle:
     """Derive evidence-only evaluator inputs; a draft stays explicitly non-credit."""
 
@@ -1854,7 +2046,16 @@ def bridge_closed_evidence(
         if type(value) is not dict:
             raise TypeError(f"{field} must be an exact dict")
 
-    validate_draft_bundle(public_manifest, operator_plan, protocol)
+    requested_credit_status = public_manifest.get("credit_status")
+    if requested_credit_status == NON_CREDIT_DRAFT:
+        validate_draft_bundle(public_manifest, operator_plan, protocol)
+    else:
+        validate_manifest_bundle(
+            public_manifest,
+            operator_plan,
+            protocol,
+            execution_authority=execution_ledger.production_authority,
+        )
     protocol_rules_sha256 = _sha256(
         protocol["sealed_rules_sha256"], "sealed_rules_sha256"
     )
@@ -1868,10 +2069,15 @@ def bridge_closed_evidence(
     manifest_credit_status = _token(
         public_manifest["credit_status"], "credit_status"
     )
-    if manifest_credit_status != NON_CREDIT_DRAFT:
+    if manifest_credit_status == NON_CREDIT_DRAFT:
+        if execution_ledger.production_authority is not None:
+            raise ValueError("production authority cannot authenticate a draft bridge")
+    elif manifest_credit_status == PRODUCTION_CREDIT_STATUS:
+        if execution_ledger.production_authority is None:
+            raise ValueError("production bridge lacks validated execution authority")
+    else:
         raise ValueError(
-            "this bridge version accepts only validated non-credit draft manifests; "
-            "production opens with the G1-121 execution-authority validator"
+            "unsupported manifest credit status"
         )
 
     rules = protocol["sealed_rules"]
@@ -1880,9 +2086,11 @@ def bridge_closed_evidence(
     runtime_sha256 = bindings["runtime_sha256"]
     cost_policy_sha256 = bindings["cost_policy_sha256"]
     bound_execution_authority = bindings["execution_authority_sha256"]
-    if bound_execution_authority is not None:
-        if bound_execution_authority != execution_ledger.execution_authority_sha256:
-            raise ValueError("execution authority does not match confirmatory manifest")
+    if manifest_credit_status == NON_CREDIT_DRAFT:
+        if bound_execution_authority is not None:
+            raise ValueError("draft manifest unexpectedly binds execution authority")
+    elif bound_execution_authority != execution_ledger.execution_authority_sha256:
+        raise ValueError("execution authority does not match confirmatory manifest")
     if execution_ledger.protocol_rules_sha256 != protocol_rules_sha256:
         raise ValueError("execution ledger protocol binding changed")
     if (
@@ -2092,9 +2300,37 @@ def bridge_closed_evidence(
             records=records_tuple,
         ),
     )
-    authority_receipt = execution_ledger._issue_evidence_bridge_receipt(
-        bridge_sha256
-    )
+    if manifest_credit_status == NON_CREDIT_DRAFT:
+        if production_receipt_issuer is not None:
+            raise ValueError("draft bridge cannot use a production receipt issuer")
+        authority_receipt = execution_ledger._issue_evidence_bridge_receipt(
+            bridge_sha256
+        )
+    else:
+        if production_receipt_issuer is None:
+            raise PermissionError(
+                "production bridge requires the hermetic supervisor receipt issuer"
+            )
+        authority_receipt = production_receipt_issuer(bridge_sha256)
+        if type(authority_receipt) is not EvidenceBridgeReceipt:
+            raise TypeError("production receipt issuer returned the wrong type")
+        expected_body = {
+            "bridge_sha256": bridge_sha256,
+            "execution_authority_sha256": execution_ledger.execution_authority_sha256,
+            "issuer_id": execution_ledger.issuer_id,
+            "run_id": authoritative_join.receipt.run_id,
+            "schema": "supernova.evidence-bridge-receipt.v1",
+        }
+        if authority_receipt.body() != expected_body:
+            raise ValueError("production bridge receipt does not bind this bridge")
+        authority = execution_ledger.production_authority
+        if authority is None:
+            raise PermissionError("production bridge lacks fixed execution authority")
+        authority.verify_receipt_signature(
+            authority_receipt.signature,
+            domain=PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
+            body=expected_body,
+        )
     return EvidenceBridgeBundle(
         run_id=authoritative_join.receipt.run_id,
         manifest_credit_status=manifest_credit_status,
@@ -2118,6 +2354,7 @@ __all__ = [
     "EvaluatorEvidenceRecord",
     "ExecutionLedgerAuthority",
     "ExecutionLedgerReceipt",
+    "HermeticContextReceipt",
     "PredecessorReconciliationReceipt",
     "ProtocolDispatchReceipt",
     "bridge_closed_evidence",

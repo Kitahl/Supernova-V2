@@ -32,6 +32,7 @@ from supernova_goal1.execution_authority import (
     PRODUCTION_CREDIT_STATUS,
     PRODUCTION_RECEIPT_SCHEMA,
     ValidatedExecutionAuthority,
+    _issue_validated_authority,
     _validate_authority_artifact,
     canonical_sha256,
     load_execution_authority,
@@ -339,6 +340,87 @@ class ConfirmatoryExecutionAuthorityTests(unittest.TestCase):
         )
         self.assertIsNot(type(details), ValidatedExecutionAuthority)
         self.assertEqual(canonical_sha256(authority), details.authority_sha256)
+
+
+    def test_fixed_loader_activation_opens_only_exact_operational_fields(self) -> None:
+        artifact, root_private, _ = _signed_fixture()
+        validation = _validate_authority_artifact(
+            artifact,
+            protocol=PROTOCOL,
+            goal1=GOAL1,
+            root_key_id="fixture-root-v1",
+            root_public_key=_public_bytes(root_private),
+        )
+        capability = _issue_validated_authority(validation)
+        with patch(
+            "supernova_goal1.confirmatory_manifest.load_execution_authority",
+            return_value=capability,
+        ) as fixed_loader:
+            activated = activate_confirmatory_execution(
+                PROTOCOL,
+                GOAL1,
+                operator_seed=bytes.fromhex("9f" * 32),
+            )
+        fixed_loader.assert_called_once_with(PROTOCOL, GOAL1)
+
+        expected = copy.deepcopy(PROTOCOL)
+        expected["confirmatory_execution_status"] = AUTHORIZED_DISPATCH_STATUS
+        expected["execution_opening_gate"]["state"] = AUTHORIZED_DISPATCH_STATUS
+        expected["execution_opening_gate"]["missing_artifact"] = None
+        self.assertEqual(expected, activated.protocol)
+        self.assertEqual(PROTOCOL["sealed_rules"], activated.protocol["sealed_rules"])
+        self.assertEqual(
+            PROTOCOL["sealed_rules_sha256"],
+            activated.protocol["sealed_rules_sha256"],
+        )
+        self.assertEqual(
+            PRODUCTION_CREDIT_STATUS,
+            activated.manifest.public_manifest["credit_status"],
+        )
+        self.assertEqual(
+            capability.authority_sha256,
+            activated.manifest.public_manifest["bindings"]["execution_authority_sha256"],
+        )
+        self.assertEqual(
+            capability.model_identity_sha256,
+            activated.manifest.public_manifest["bindings"]["model_identity_sha256"],
+        )
+        assert_dispatch_authorized(
+            activated.manifest.public_manifest,
+            activated.manifest.operator_plan,
+            activated.protocol,
+            execution_authority=capability,
+        )
+
+        relabeled = copy.deepcopy(activated.manifest.public_manifest)
+        relabeled["bindings"]["execution_authority_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "authorized reconstruction"):
+            assert_dispatch_authorized(
+                relabeled,
+                activated.manifest.operator_plan,
+                activated.protocol,
+                execution_authority=capability,
+            )
+
+    def test_public_manifest_builder_rejects_caller_injected_real_capability(self) -> None:
+        artifact, root_private, _ = _signed_fixture()
+        validation = _validate_authority_artifact(
+            artifact,
+            protocol=PROTOCOL,
+            goal1=GOAL1,
+            root_key_id="fixture-root-v1",
+            root_public_key=_public_bytes(root_private),
+        )
+        capability = _issue_validated_authority(validation)
+        opened = _open_operational_gate(PROTOCOL)
+        for candidate in (PROTOCOL, opened):
+            with self.subTest(status=candidate["confirmatory_execution_status"]):
+                with self.assertRaisesRegex(PermissionError, "activation-only"):
+                    build_confirmatory_manifest(
+                        candidate,
+                        operator_seed=bytes.fromhex("9f" * 32),
+                        execution_authority=capability,
+                    )
 
     def test_fixed_root_ignores_caller_environment_key_material(self) -> None:
         trusted = Ed25519PrivateKey.generate()
