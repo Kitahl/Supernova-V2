@@ -74,8 +74,11 @@ def validate_static_manifest(
     if expected_manifest_sha256 is not None:
         if canonical_sha256(manifest) != expected_manifest_sha256:
             raise ValueError("post-freeze manifest mutation")
-    if manifest.get("schema_version") != 1 or manifest.get("status") != "FROZEN":
-        raise ValueError("confirmatory benchmark is not frozen")
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("status") != "FROZEN_POOL"
+    ):
+        raise ValueError("confirmatory benchmark pool is not frozen")
 
     benchmark = manifest["benchmark"]
     if benchmark["benchmark_root_sha256"] != lock["content"]["root_sha256"]:
@@ -120,17 +123,32 @@ def validate_static_manifest(
         raise ValueError("development/report identity leakage")
 
     selection = manifest["selection"]
-    count = selection["selected_count_per_split"]
-    if selection["algorithm_id"] != "unicode_sorted_systematic_v1":
+    if selection.get("status") != "UNRESOLVED":
+        raise ValueError("selection was resolved without the G1-121 analysis gate")
+    if selection.get("algorithm_id") != "unicode_sorted_systematic_v1":
         raise ValueError("selection algorithm drift")
-    if selection["development_problem_ids"] != systematic_selection(development, count):
-        raise ValueError("development selection drift")
-    if selection["report_problem_ids"] != systematic_selection(report, count):
-        raise ValueError("report selection drift")
-    if set(selection["development_problem_ids"]) & set(
-        selection["report_problem_ids"]
+    if selection.get("selected_count_per_split") is not None:
+        raise ValueError("unpowered selected count is forbidden")
+    if selection.get("development_problem_ids") != []:
+        raise ValueError("premature development selection")
+    if selection.get("report_problem_ids") != []:
+        raise ValueError("premature report selection")
+    if selection.get("may_enter_scientific_dispatch") is not False:
+        raise ValueError("unresolved selection became dispatchable")
+    required_blockers = {
+        "NO_PROSPECTIVE_SAMPLE_SIZE_OR_POWER_PROVENANCE",
+        "NO_FROZEN_FAMILY_IDS_OR_CLUSTER_AWARE_ANALYSIS",
+    }
+    if set(selection.get("blockers", [])) != required_blockers:
+        raise ValueError("selection blockers drift")
+
+    readiness = manifest["analysis_readiness"]
+    if readiness.get("status") != "BLOCKED":
+        raise ValueError("benchmark pool falsely claims analysis readiness")
+    if "final_development_and_report_problem_ids" not in readiness.get(
+        "g1_121_must_freeze", []
     ):
-        raise ValueError("selected-set leakage")
+        raise ValueError("G1-121 selection obligation is missing")
 
     exclusions = manifest["contamination_and_duplicate_exclusions"]
     required_true = (
@@ -230,15 +248,6 @@ def validate_locked_dataset(
         if len(values) != len(set(values)):
             raise ValueError(f"duplicate {field}")
 
-    count = manifest["selection"]["selected_count_per_split"]
-    if systematic_selection(populations["development"], count) != manifest[
-        "selection"
-    ]["development_problem_ids"]:
-        raise ValueError("loaded development selection mismatch")
-    if systematic_selection(populations["report"], count) != manifest["selection"][
-        "report_problem_ids"
-    ]:
-        raise ValueError("loaded report selection mismatch")
     return records
 
 
@@ -267,7 +276,8 @@ def validate(
         "benchmark_root_sha256": manifest["benchmark"]["benchmark_root_sha256"],
         "development_records": len(records["development"]),
         "report_records": len(records["report"]),
-        "selected_per_split": manifest["selection"]["selected_count_per_split"],
+        "selection_status": manifest["selection"]["status"],
+        "scientific_dispatch": "BLOCKED",
     }
 
 
