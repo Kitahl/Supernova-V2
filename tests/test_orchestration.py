@@ -24,7 +24,6 @@ EXPECTED_ROLES = {
     "MF06",
     "BIL00",
 }
-SUPERVISORS = {"MM06", "MF06", "BIL00"}
 VALID_STATUSES = {"READY", "WAITING", "DONE"}
 EXPECTED_SCHEDULER_IDS = {
     "MF01": "6a8416348c848191b6b4908fea710e9f",
@@ -115,8 +114,7 @@ class OrchestrationTests(unittest.TestCase):
             self.assertNotIn(ticket["id"], dependencies)
             self.assertTrue(set(dependencies) <= set(by_id))
 
-        for role in EXPECTED_ROLES - SUPERVISORS:
-            ticket = by_owner[role]
+        for ticket in self.board["tickets"]:
             unresolved = [
                 dependency
                 for dependency in ticket["depends_on"]
@@ -127,8 +125,15 @@ class OrchestrationTests(unittest.TestCase):
             elif ticket["status"] == "READY":
                 self.assertFalse(unresolved)
 
-        for role in SUPERVISORS:
-            self.assertEqual("WAITING", by_owner[role]["status"])
+        self.assertTrue(
+            all(path.startswith("reviews/") for path in by_owner["MM06"]["paths"])
+        )
+        self.assertTrue(
+            all(path.startswith("integration/") for path in by_owner["MF06"]["paths"])
+        )
+        self.assertTrue(
+            all(path.startswith("reports/") for path in by_owner["BIL00"]["paths"])
+        )
 
     def test_dependency_graph_is_acyclic(self) -> None:
         by_id = {ticket["id"]: ticket for ticket in self.board["tickets"]}
