@@ -172,6 +172,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                     completion_verifier_sha256=signer.public_commitment,
                 )
                 entry = manifest.entries[-1]
+                ledger._register_dispatch(entry, request)
 
                 no_answer = attempt == 15
                 response_bytes = (
@@ -325,6 +326,9 @@ class EvidenceBridgeTests(unittest.TestCase):
         record = by_arm[Arm.VERIFIED_CHAIN]
         self.assertEqual(self.native_problem_id, record.problem_id)
         self.assertEqual(16, len(record.protocol_dispatch_ids))
+        self.assertEqual(
+            16, len(record.protocol_binding_receipt_sha256s)
+        )
         self.assertEqual(16, len(record.execution_receipt_sha256s))
         self.assertEqual(16, len(record.context_isolation_receipt_sha256s))
         self.assertEqual(16, len(record.predecessor_reconciliation_sha256s))
@@ -520,6 +524,14 @@ class EvidenceBridgeTests(unittest.TestCase):
                 operator_plan=self.manifest_bundle.operator_plan,
             )
             completion = self.completions[0]
+            dispatch = next(
+                entry
+                for entry in self.authority.current_manifest().entries
+                if entry.dispatch_id == completion.dispatch_id
+            )
+            ledger._register_dispatch(
+                dispatch, completion.payload.request
+            )
             with self.assertRaisesRegex(TypeError, "ContextIsolationReceipt"):
                 ledger._record_completion(
                     completion,
