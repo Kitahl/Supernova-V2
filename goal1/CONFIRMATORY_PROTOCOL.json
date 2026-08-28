@@ -2647,7 +2647,7 @@
       "scientific_claim_beyond_terminal_rule": "FORBIDDEN"
     }
   },
-  "sealed_rules_sha256": "8dd1a741fe24079ce60f87bc72c09df017f66a5e41b86704258b939835fbfaba",
+  "sealed_rules_sha256": "299bb7691f55ea05a86fa21cd03b7ae0a33885f8e1baf447918ba99e49c0043b",
   "execution_opening_gate": {
     "state": "BLOCKED_NO_EXECUTION_AUTHORITY",
     "missing_artifact": "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
