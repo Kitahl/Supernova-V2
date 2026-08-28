@@ -43,7 +43,7 @@ class LeanRuntimeTests(unittest.TestCase):
         lowered = source.lower()
         for forbidden in ("sorry", "admit", "axiom"):
             self.assertNotIn(forbidden, lowered)
-        self.assertIn("native_decide", source)
+        self.assertIn("norm_num", source)
         self.assertIn("theorem supernova_goal1_runtime_smoke", source)
 
     def test_bootstrap_separates_cache_download_from_unpack(self) -> None:
