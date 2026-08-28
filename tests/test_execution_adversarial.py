@@ -16,13 +16,21 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactKind,
 )
 from supernova_goal1.contracts import Arm
-from supernova_goal1.dispatch import (\n    CompletionPayload,\n    CompletionSigner,\n    DispatchAuthority,\n)
+from supernova_goal1.dispatch import (
+    CompletionPayload,
+    CompletionSigner,
+    DispatchAuthority,
+)
 from supernova_goal1.evaluate import evaluate_experiment
 from supernova_goal1.execution.baselines import (
     ModelAttemptObservation,
     execute_ordinary,
 )
-from supernova_goal1.execution.common import (\n    AttemptResult,\n    AttemptStatus,\n    FrozenProblemRequest,\n)
+from supernova_goal1.execution.common import (
+    AttemptResult,
+    AttemptStatus,
+    FrozenProblemRequest,
+)
 from supernova_goal1.execution.product_controls import (
     ProductControlObservation,
     ProductObservationKind,
