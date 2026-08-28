@@ -301,7 +301,7 @@
         ],
         "ordering": "STRICT_ASCENDING_PRODUCER_ATTEMPT_INDEX",
         "inclusion": "ALL_AND_ONLY_ELIGIBLE_PRODUCTS",
-        "verification_state": "NOT_LEAN_VERIFIED_BEFORE_ADMISSION",
+        "verification_state": "LEAN_VERIFIER_RESULT_QUARANTINED_AND_UNUSED_FOR_ADMISSION",
         "exact_response_bytes_only": true,
         "forbidden": [
           "FINAL_ANSWER_RESPONSE",
@@ -326,16 +326,18 @@
         ],
         "one_output_kind_per_attempt": true,
         "product_candidate_requires_syntax_and_name_policy": true,
-        "product_candidate_is_never_lean_verified_before_admission": true,
         "final_answer_requires_exact_answer_discriminator": true,
-        "no_answer_requires_exact_bytes": true
+        "no_answer_requires_exact_bytes": true,
+        "product_candidate_admission_ignores_quarantined_lean_result": true
       },
       "verifier_policy": {
         "FINAL_ANSWER": "RUN_EXACTLY_ONE_FINAL_LEAN_VERIFIER_ON_THE_BOUND_FINAL_CONSTRUCTED_SOURCE_AND_NEVER_FEED_RESULT_FORWARD",
         "PRODUCT_CANDIDATE": "RUN_THE_IDENTICAL_BOUND_PRODUCT_HARNESS_LEAN_VERIFIER_THEN_QUARANTINE_ITS_RESULT_WITH_NO_EFFECT_ON_ADMISSION_VISIBILITY_OR_LATER_MODEL_BYTES",
         "NO_ANSWER": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
         "ERROR": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
-        "any_verifier_or_predecessor_completion_metadata_visible_to_later_model_attempt": "BLOCKED"
+        "any_verifier_or_predecessor_completion_metadata_visible_to_later_model_attempt": "BLOCKED",
+        "quarantined_product_receipt_retention": "RETAIN_FOR_COST_RUNTIME_AND_PARITY_EVIDENCE_ONLY_NEVER_FOR_ADMISSION_SELECTION_PROMPT_RENDERING_OR_TERMINAL_RESULT",
+        "admission_boundary": "ANY_USE_OF_QUARANTINED_PRODUCT_VERIFIER_RECEIPT_OR_RESULT_FOR_PRODUCT_ADMISSION_OR_LATER_MODEL_VISIBLE_BYTES_IS_BLOCKED"
       },
       "response_discriminator": {
         "product_prefix_lines": [
