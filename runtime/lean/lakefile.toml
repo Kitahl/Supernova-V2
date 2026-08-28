@@ -1,0 +1,11 @@
+name = "supernova_goal1_lean_runtime"
+version = "0.1.0"
+defaultTargets = ["SupernovaGoal1Smoke"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.33.1"
+
+[[lean_lib]]
+name = "SupernovaGoal1Smoke"
