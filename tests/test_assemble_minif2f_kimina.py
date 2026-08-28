@@ -194,5 +194,38 @@ class AssembleMiniF2FKiminaTests(unittest.TestCase):
                 MODULE.load_manifest(manifest)
 
 
+    def test_repository_manifest_binds_exact_sources_and_outputs(self) -> None:
+        manifest = MODULE.load_manifest(ROOT / "goal1" / "BENCHMARK_SOURCES.json")
+        self.assertEqual("OUTPUT_LOCKED", manifest["status"])
+        deepseek = manifest["sources"]["deepseek_prover_v15"]
+        kimina = manifest["sources"]["kimina_corrected_test"]
+        self.assertEqual("2c4ba9119eef74d0d611f494261b2c5bae98c69a", deepseek["commit"])
+        self.assertEqual(
+            "466e8d23e5f1ded669848066b0c20431de551ca7ac98817a22657985d0632d4b",
+            deepseek["sha256"],
+        )
+        self.assertEqual("5def318348521dfc34875045a9ecddf729a2b49f", kimina["commit"])
+        self.assertEqual(
+            "a32985e3d44b5165fbd586f453055cd17de0d081f43d7806cbba3f321346a8c5",
+            kimina["sha256"],
+        )
+        self.assertEqual(
+            {
+                "records": 244,
+                "sha256": "4da5c1f69143e2633cf7c300d8946eb28d6b88d0f94441147ff4d54ec8c09926",
+                "bytes": 226168,
+            },
+            manifest["outputs"]["validation"],
+        )
+        self.assertEqual(
+            {
+                "records": 244,
+                "sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a",
+                "bytes": 231909,
+            },
+            manifest["outputs"]["test"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
