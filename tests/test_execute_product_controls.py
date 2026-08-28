@@ -27,6 +27,7 @@ from supernova_goal1.execution.product_controls import (
     execute_multi_fidelity_stage,
     execute_product_only_step,
     render_multi_fidelity_request,
+    render_product_emission,
     render_product_only_request,
 )
 from supernova_goal1.problem import BenchmarkProblemIdentity
@@ -127,7 +128,7 @@ class ProductControlExecutionTests(unittest.TestCase):
             model_call=lambda dispatch, _payload: ProductControlObservation(
                 dispatch.entry.dispatch_id,
                 ProductObservationKind.PRODUCT,
-                content_utf8,
+                render_product_emission(content_utf8),
             ),
             verifier_call=lambda *_: (_ for _ in ()).throw(
                 AssertionError("intermediate product must not be verified")
@@ -162,7 +163,7 @@ class ProductControlExecutionTests(unittest.TestCase):
             model_call=lambda dispatch, payload: ProductControlObservation(
                 dispatch.entry.dispatch_id,
                 ProductObservationKind.PRODUCT,
-                b'{"lemma":"x + 0 = x"}',
+                render_product_emission(b'{"lemma":"x + 0 = x"}'),
             ),
             verifier_call=verifier,
         )
@@ -335,7 +336,7 @@ class ProductControlExecutionTests(unittest.TestCase):
             model_call=lambda *_: ProductControlObservation(
                 "0" * 64,
                 ProductObservationKind.PRODUCT,
-                b"foreign",
+                render_product_emission(b"foreign"),
             ),
             verifier_call=lambda *_: None,
         )
@@ -362,7 +363,10 @@ class ProductControlExecutionTests(unittest.TestCase):
             record.verifier_public_key,
             "0" * len(record.signature),
         )
-        forged_product = VisibleProduct(forged_record, product.content_utf8)
+        forged_product = VisibleProduct(
+            forged_record,
+            product.producer_response_utf8,
+        )
         request_utf8 = render_product_only_request(
             self.prompt,
             visible_products=(forged_product,),
@@ -385,6 +389,35 @@ class ProductControlExecutionTests(unittest.TestCase):
                 verifier_call=lambda *_: None,
             )
         self.assertEqual(1, len(self.authority.current_manifest().entries))
+
+    def test_signed_no_answer_cannot_be_reclassified_as_product(self) -> None:
+        request_utf8 = render_product_only_request(
+            self.prompt,
+            visible_products=(),
+            retry_of_attempt=None,
+        )
+        request = self.request(
+            arm=Arm.PRODUCT_ONLY,
+            attempt=0,
+            request_utf8=request_utf8,
+        )
+        execution = execute_product_only_step(
+            authority=self.authority,
+            manifest=self.authority.current_manifest(),
+            request=request,
+            problem_prompt_utf8=self.prompt,
+            visible_products=(),
+            retry_of_attempt=None,
+            model_call=lambda dispatch, _payload: ProductControlObservation(
+                dispatch.entry.dispatch_id,
+                ProductObservationKind.NO_ANSWER,
+                b"",
+            ),
+            verifier_call=lambda *_: None,
+        )
+        self.assertIsNone(execution.emitted_product)
+        with self.assertRaisesRegex(ValueError, "product response"):
+            VisibleProduct(execution.baseline.completion, b"")
 
     def test_multi_fidelity_stage_binds_rank_retry_and_empty_products(self) -> None:
         stage = FidelityStage("high", 2, 0)
