@@ -1,16 +1,27 @@
 {
   "benchmark": {
-    "name": "UNSELECTED",
-    "split": "UNLOCKED",
-    "version": "UNPINNED"
+    "name": "miniF2F-Lean4-Kimina-composite",
+    "split": "validation+test:dev-validation/report-test",
+    "version": "deepseek-v1.5-2c4ba911+kimina-5def318"
   },
   "content": {
     "algorithm": "sha256",
-    "file_count": 0,
-    "files": [],
-    "root_sha256": null,
-    "total_bytes": 0
+    "file_count": 2,
+    "files": [
+      {
+        "bytes": 231909,
+        "path": "test.jsonl",
+        "sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a"
+      },
+      {
+        "bytes": 226168,
+        "path": "validation.jsonl",
+        "sha256": "4da5c1f69143e2633cf7c300d8946eb28d6b88d0f94441147ff4d54ec8c09926"
+      }
+    ],
+    "root_sha256": "914c05427e1e7e0979f4ca058f90fb3138ee0d3319233b415194c10e67d3683b",
+    "total_bytes": 458077
   },
   "schema_version": 1,
-  "status": "UNSELECTED"
+  "status": "LOCKED"
 }
