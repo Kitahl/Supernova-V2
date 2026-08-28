@@ -348,7 +348,7 @@ def _completion_body(
         "response_artifact_id": payload.attempt_result.response_artifact.artifact_id,
         "response_utf8_bytes": payload.attempt_result.response_artifact.byte_length,
         "run_id": completion.run_id,
-        "schema": "supernova.execution-ledger-receipt.v2",
+        "schema": "supernova.execution-ledger-receipt.v3",
         "verifier_milliseconds": 0 if verifier is None else verifier.elapsed_milliseconds,
         "verifier_receipt_sha256": (
             _TYPED_ABSENCE if verifier is None else verifier.receipt_sha256
