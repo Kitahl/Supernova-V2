@@ -4,7 +4,14 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping
 
-from .contracts import Arm, CONTROL_ARMS, ExperimentSpec, GoalDecision, OutcomeRecord
+from .contracts import (
+    Arm,
+    CONTROL_ARMS,
+    ExperimentSpec,
+    GoalDecision,
+    OutcomeRecord,
+    UNFROZEN_MODEL_USAGE_BASIS,
+)
 from .statistics import holm_step_down, mcnemar_exact_two_sided
 
 
@@ -50,6 +57,13 @@ def evaluate_experiment(
             raise ValueError(f"unexpected problem_id: {record.problem_id}")
         if record.budget_id != spec.budget_id:
             raise ValueError("record budget_id does not match the frozen budget")
+        if (
+            spec.model_usage_basis != UNFROZEN_MODEL_USAGE_BASIS
+            and record.model_usage_basis != spec.model_usage_basis
+        ):
+            raise ValueError(
+                "record model_usage_basis does not match the experiment spec"
+            )
         if not record.cost.within(spec.budget_ceiling):
             raise ValueError(
                 f"cost ceiling exceeded for {record.problem_id}/{record.arm.value}"
@@ -119,6 +133,7 @@ def evaluate_experiment(
     return {
         "experiment_id": spec.experiment_id,
         "phase": spec.phase,
+        "model_usage_basis": spec.model_usage_basis,
         "decision": decision.value,
         "reason": reason,
         "required_problem_count": len(spec.required_problem_ids),
