@@ -561,6 +561,40 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             )
         self.assertEqual(1, len(self.authority.current_manifest().entries))
 
+    def test_bound_nonadjacent_retry_is_rejected(self) -> None:
+        manifest_binding = digest("confirmatory-manifest")
+        _failed_request, failed, _ = self.emit_product(
+            verifier_status=VerifierStatus.FAIL,
+            protocol_dispatch_id="dispatch-" + digest("retry-gap-slot-0"),
+            confirmatory_manifest_sha256=manifest_binding,
+        )
+        retry = RetryLink(failed.baseline.completion)
+        request_utf8 = render_verified_chain_request(
+            self.prompt,
+            execution_authority=self.execution_authority,
+            admitted_products=(),
+            retry_of=retry,
+        )
+        request = self.request(
+            attempt=2,
+            request_utf8=request_utf8,
+            protocol_dispatch_id="dispatch-" + digest("retry-gap-slot-2"),
+            confirmatory_manifest_sha256=manifest_binding,
+        )
+        with self.assertRaisesRegex(ValueError, "immediately preceding"):
+            execute_verified_chain_step(
+                authority=self.authority,
+                execution_authority=self.execution_authority,
+                manifest=failed.baseline.manifest,
+                request=request,
+                problem_prompt_utf8=self.prompt,
+                admitted_products=(),
+                retry_of=retry,
+                model_call=lambda *_: None,
+                verifier_call=lambda *_: None,
+            )
+        self.assertEqual(1, len(self.authority.current_manifest().entries))
+
     def test_bound_adjacent_slots_can_feed_forward_admitted_product(self) -> None:
         manifest_binding = digest("confirmatory-manifest")
         first_request, first, _ = self.emit_product(
