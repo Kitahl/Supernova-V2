@@ -1,22 +1,157 @@
 {
   "schema_version": 1,
   "repository": "Kitahl/Supernova-V2",
+  "tranche": "goal1-execution-pilot-v1",
   "integration_policy": "pull_request_only",
   "tickets": [
-    {"id":"G1-001","owner":"MF01","status":"READY","paths":["src/supernova_goal1/problem.py","tests/test_problem.py"],"objective":"Define the canonical benchmark problem identity and immutable split contract."},
-    {"id":"G1-002","owner":"MF02","status":"READY","paths":["scripts/import_benchmark.py","tests/test_import_benchmark.py","goal1/BENCHMARK.lock.json"],"objective":"Build a deterministic benchmark importer and content lock without adding benchmark data to git."},
-    {"id":"G1-003","owner":"MF03","status":"READY","paths":["src/supernova_goal1/verifier.py","tests/test_verifier.py"],"objective":"Build a timeout-bounded verifier adapter with typed PASS, FAIL, TIMEOUT, and ERROR outcomes."},
-    {"id":"G1-004","owner":"MF04","status":"READY","paths":["src/supernova_goal1/arms/ordinary.py","src/supernova_goal1/arms/portfolio.py","tests/test_baseline_arms.py"],"objective":"Define ordinary and portfolio arm request/result contracts; no model API calls."},
-    {"id":"G1-005","owner":"MF05","status":"READY","paths":["src/supernova_goal1/arms/product_only.py","src/supernova_goal1/arms/multi_fidelity.py","tests/test_product_arms.py"],"objective":"Define product-only and multi-fidelity arm contracts; no model API calls."},
-    {"id":"G1-006","owner":"MM01","status":"READY","paths":["src/supernova_goal1/arms/verified_chain.py","tests/test_verified_chain.py"],"objective":"Define the verified-chain state machine and prohibit use of unverified intermediate products."},
-    {"id":"G1-007","owner":"MM02","status":"READY","paths":["src/supernova_goal1/cost.py","tests/test_cost.py","docs/COST_MODEL.md"],"objective":"Propose and implement complete-cost accounting across all five arms with explicit assumptions."},
-    {"id":"G1-008","owner":"MM03","status":"READY","paths":["src/supernova_goal1/admission.py","tests/test_admission.py"],"objective":"Implement product admission as deterministic evidence checks, separate from scientific scoring."},
-    {"id":"G1-009","owner":"MM04","status":"READY","paths":["src/supernova_goal1/assignment.py","tests/test_assignment.py"],"objective":"Implement seeded paired assignment and blind evaluation ordering."},
-    {"id":"G1-010","owner":"MM05","status":"READY","paths":["src/supernova_goal1/statistics.py","tests/test_statistics.py"],"objective":"Extract and property-test exact McNemar plus Holm correction from the bootstrap evaluator."},
-    {"id":"G1-011","owner":"MM07","status":"READY","paths":["tests/test_adversarial.py"],"objective":"Add adversarial tests for duplicate records, missing arms, cost overruns, verifier contradictions, and order invariance."},
-    {"id":"G1-012","owner":"EXT01","status":"READY","paths":["docs/THREAT_MODEL.md","docs/PRIOR_ART.md"],"objective":"Independently attack construct validity, leakage, unfair controls, and cost-accounting loopholes; cite sources."},
-    {"id":"G1-013","owner":"MM06","status":"WAITING","paths":["reviews/"],"objective":"Review open Goal-1 PRs against ticket criteria and CI evidence; never author or merge the reviewed code."},
-    {"id":"G1-014","owner":"MF06","status":"WAITING","paths":["integration/"],"objective":"Run the assembled dry cohort after builder PRs land and report concrete seam failures."},
-    {"id":"G1-015","owner":"BIL00","status":"WAITING","paths":["reports/STATUS.md"],"objective":"Summarize board state, blockers, and next runnable milestone without changing scientific decisions."}
+    {
+      "id": "G1-101",
+      "owner": "MF01",
+      "status": "READY",
+      "paths": [
+        "goal1/BENCHMARK_SOURCES.json",
+        "scripts/assemble_minif2f_kimina.py",
+        "tests/test_assemble_minif2f_kimina.py"
+      ],
+      "objective": "Define and validate the exact public-source lineage for the 244-validation plus 244-test miniF2F composite; bind DeepSeek-Prover-V1.5 validation and AI-MO/Kimina corrected test by URL, commit, file SHA-256, record identity, and deterministic output bytes."
+    },
+    {
+      "id": "G1-102",
+      "owner": "MF02",
+      "status": "READY",
+      "paths": [
+        "goal1/BENCHMARK.lock.json",
+        "scripts/import_benchmark.py",
+        "tests/test_import_benchmark.py"
+      ],
+      "objective": "Lock the assembled validation and test bytes, verify both split counts and identities, and keep benchmark data out of git; do not change GOAL1.json."
+    },
+    {
+      "id": "G1-103",
+      "owner": "MF03",
+      "status": "READY",
+      "paths": [
+        "runtime/lean/",
+        "tests/test_lean_runtime.py"
+      ],
+      "objective": "Create a reproducible Lean 4.33.1 plus compatible Mathlib runtime definition and compile a bounded benchmark smoke fixture without any model call."
+    },
+    {
+      "id": "G1-104",
+      "owner": "MF04",
+      "status": "READY",
+      "paths": [
+        "src/supernova_goal1/execution/baselines.py",
+        "tests/test_execute_baselines.py"
+      ],
+      "objective": "Implement real ordinary and portfolio execution adapters that consume one frozen problem request, emit auditable attempts, and register expected cost events before dispatch."
+    },
+    {
+      "id": "G1-105",
+      "owner": "MF05",
+      "status": "READY",
+      "paths": [
+        "src/supernova_goal1/execution/product_controls.py",
+        "tests/test_execute_product_controls.py"
+      ],
+      "objective": "Implement real product-only and multi-fidelity execution adapters with explicit product visibility, retry, and verifier-call boundaries."
+    },
+    {
+      "id": "G1-106",
+      "owner": "MM01",
+      "status": "READY",
+      "paths": [
+        "src/supernova_goal1/execution/verified_chain.py",
+        "tests/test_execute_verified_chain.py"
+      ],
+      "objective": "Implement the real verified-chain executor so only admitted intermediate products enter later prompts, with every attempt and verifier event preregistered."
+    },
+    {
+      "id": "G1-107",
+      "owner": "MM02",
+      "status": "READY",
+      "paths": [
+        "src/supernova_goal1/cost.py",
+        "tests/test_cost.py",
+        "docs/COST_MODEL.md"
+      ],
+      "objective": "Specify and test an observable complete-cost policy for ChatGPT scheduled-task execution where provider token telemetry is unavailable; keep cost_model_frozen false and identify every remaining freeze decision."
+    },
+    {
+      "id": "G1-108",
+      "owner": "MM03",
+      "status": "READY",
+      "paths": [
+        "src/supernova_goal1/dispatch.py",
+        "tests/test_dispatch.py"
+      ],
+      "objective": "Implement an append-only pre-dispatch manifest and completion join that prevents fabricated, omitted, replayed, or cross-arm execution events."
+    },
+    {
+      "id": "G1-109",
+      "owner": "MM04",
+      "status": "READY",
+      "paths": [
+        "src/supernova_goal1/run_manifest.py",
+        "tests/test_run_manifest.py"
+      ],
+      "objective": "Generate a seeded paired pilot manifest with blinded arm labels, frozen problem identities, attempt quotas, and a separate operator-only reveal map."
+    },
+    {
+      "id": "G1-110",
+      "owner": "MM05",
+      "status": "READY",
+      "paths": [
+        "docs/ANALYSIS_PLAN.md",
+        "tests/test_analysis_plan.py"
+      ],
+      "objective": "Write a prospective pilot and confirmatory analysis plan: estimand, all four paired contrasts, Holm correction, incomplete-run handling, discordance-based power update, and no scientific PASS from the pilot."
+    },
+    {
+      "id": "G1-111",
+      "owner": "MM07",
+      "status": "READY",
+      "paths": [
+        "tests/test_execution_adversarial.py"
+      ],
+      "objective": "Add adversarial integration tests for split leakage, hidden product reuse, post-hoc dispatch registration, missing telemetry, unmatched retries, wrong Lean runtime, and partial five-arm cohorts."
+    },
+    {
+      "id": "G1-012",
+      "owner": "EXT01",
+      "status": "READY",
+      "paths": [
+        "docs/THREAT_MODEL.md",
+        "docs/PRIOR_ART.md"
+      ],
+      "objective": "Resolve the open construct-validity review on PR #8: phase-rank gates, define the first estimand as the verified-gated package effect unless reject/retry is matched, specify scheduled-chat cost proxies and sensitivity analysis, and keep evidence bindings composable."
+    },
+    {
+      "id": "G1-113",
+      "owner": "MM06",
+      "status": "WAITING",
+      "paths": [
+        "reviews/"
+      ],
+      "objective": "Review execution-tranche PRs against exact ticket paths, local tests, real CI, benchmark lineage, and unresolved scientific assumptions; never author or merge reviewed code."
+    },
+    {
+      "id": "G1-114",
+      "owner": "MF06",
+      "status": "WAITING",
+      "paths": [
+        "integration/"
+      ],
+      "objective": "After benchmark, runtime, dispatch, and five executors land, run one non-credit pilot cohort and report concrete seam failures without changing the frozen inputs."
+    },
+    {
+      "id": "G1-115",
+      "owner": "BIL00",
+      "status": "WAITING",
+      "paths": [
+        "reports/STATUS.md"
+      ],
+      "objective": "Report merged evidence, open scientific blockers, pilot readiness, and the next executable action; never declare Goal 1 PASS or FAIL without evaluator output."
+    }
   ]
 }
