@@ -33,9 +33,11 @@
   "scientific_pass_requires": [
     "a pinned benchmark and split",
     "a frozen complete-cost model",
+    "one explicit model-usage basis shared by the experiment and every outcome",
     "all five paired outcomes for every required problem",
     "kernel verification for every solved outcome",
     "verified_chain superiority over each control",
     "Holm-corrected exact paired tests below familywise alpha"
-  ]
+  ],
+  "model_usage_basis": "UNFROZEN"
 }
