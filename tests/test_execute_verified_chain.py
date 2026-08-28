@@ -67,8 +67,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         self.prompt = b"Prove the exact Lean theorem."
         self.product = b"lemma helper : 1 + 1 = 2 := by norm_num"
         self.product_response = render_verified_product_emission(self.product)
-        self.final_answer = b"by
-  norm_num"
+        self.final_answer = b"by\\n  norm_num"
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -111,8 +110,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
                 status=status,
                 command=("lake", "env", "lean", "proof.lean"),
                 returncode=0,
-                stdout=f"verified {len(candidate)} bytes
-",
+                stdout=f"verified {len(candidate)} bytes\\n",
                 stderr="",
                 elapsed_milliseconds=11,
             )
@@ -122,8 +120,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
                 command=("lake", "env", "lean", "proof.lean"),
                 returncode=1,
                 stdout="",
-                stderr="type error
-",
+                stderr="type error\\n",
                 elapsed_milliseconds=7,
             )
         return VerifierResult(
