@@ -25,7 +25,6 @@ EXPECTED_PROTOCOL_RULES_SHA256 = (
 )
 EXPECTED_BUDGET_ID = "goal1-common-envelope-v1"
 EXPECTED_USAGE_BASIS = "visible_utf8_bytes"
-PRODUCTION_CREDIT_STATUS = "CONFIRMATORY_CREDIT_ELIGIBLE"
 FAMILYWISE_ALPHA = 0.05
 FROZEN_CONTROLS = (
     Arm.ORDINARY,
@@ -478,8 +477,8 @@ def _validate_authenticated_bundle(
         blockers.append("PROTOCOL_RULES_DIGEST_MISMATCH")
     if bundle.manifest_credit_status == NON_CREDIT_DRAFT:
         blockers.append("NON_CREDIT_DRAFT")
-    elif bundle.manifest_credit_status != PRODUCTION_CREDIT_STATUS:
-        blockers.append("UNSEALED_CREDIT_STATUS")
+    else:
+        blockers.append("NO_SEALED_PRODUCTION_CREDIT_STATUS")
 
     records = bundle.records
     if type(records) is not tuple:
@@ -575,13 +574,16 @@ def _validate_authenticated_bundle(
                 blockers.append(
                     f"VERIFIER_TIMEOUT:{record.problem_id}:{record.arm.value}:{attempt}"
                 )
-            if (
-                status is CompletionStatus.ERROR
-                and not verifier_evidence.startswith("NOT_INVOKED:")
-            ):
-                blockers.append(
-                    f"VERIFIER_ERROR:{record.problem_id}:{record.arm.value}:{attempt}"
-                )
+            if status is CompletionStatus.ERROR:
+                if verifier_evidence.startswith("NOT_INVOKED:"):
+                    incomplete.append(
+                        "PROVIDER_OR_MODEL_ERROR:"
+                        f"{record.problem_id}:{record.arm.value}:{attempt}"
+                    )
+                else:
+                    blockers.append(
+                        f"VERIFIER_ERROR:{record.problem_id}:{record.arm.value}:{attempt}"
+                    )
 
         cost = record.cost
         if type(cost) is not CompleteCost:
@@ -887,7 +889,6 @@ def evaluate_confirmatory(
 
 __all__ = [
     "EXPECTED_REPORT_PROBLEM_IDS",
-    "PRODUCTION_CREDIT_STATUS",
     "RESULT_SCHEMA",
     "evaluate_confirmatory",
 ]
