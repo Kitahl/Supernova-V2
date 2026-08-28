@@ -693,3 +693,39 @@ it as complete compute parity.
 **Addendum to minimum design conditions.** 27. resource-normalized verifier/orchestration accounting,
 or an explicit elapsed-time proxy limitation, with CPU/accelerator allocation and measured usage
 bound into the scientific cost record.
+
+### T34 — Scientific cost is not bound to the closed cost-telemetry report (`CRITICAL`)
+
+**EVIDENCE — repository.** Current `OutcomeRecord` carries a standalone caller-supplied `CompleteCost`
+value. `evaluate_experiment` checks that value directly with `record.cost.within(spec.budget_ceiling)`
+and never consumes `ArmCostTrace` or `CompleteCostReport`. Conversely, merged G1-007's
+`CompleteCostReport` closes five arm traces from event/manifest telemetry but carries no
+`experiment_id`, `problem_id`, replicate/cell identity, outcome-record digest, or other subject that
+lets the scientific evaluator deterministically join one closed telemetry report to the exact
+outcome it scores. **EVIDENCE — external.** The W3C Trace Context Recommendation defines a propagated
+`trace-id` specifically so data for one distributed request/transaction can be uniquely identified
+and correlated across participating components: <https://www.w3.org/TR/trace-context/>. OpenTelemetry
+likewise defines `SpanContext` with propagated `TraceId`/`SpanId` and links for causally related work:
+<https://opentelemetry.io/docs/specs/otel/trace/api/>.
+
+**INFERENCE.** A correct complete-cost subsystem can exist beside a scientifically unbound cost
+field. As the contracts stand, a harness can supply an `OutcomeRecord.cost` that is lower than the
+cost established by a closed telemetry report, or attach a valid report from a different problem,
+replicate, or arm execution, and `evaluate_experiment` has no evidence edge on which to detect the
+mismatch. This is distinct from T25: T25 asks whether the telemetry/manifest itself is complete; T34
+asks whether even a complete telemetry record is the one actually attributable to the scored
+scientific cell. Until that join exists, evaluator budget compliance is a claim about a submitted
+aggregate, not a certificate derived from the trusted execution ledger.
+
+**Required falsifier/mitigation.** Allocate an immutable cell-execution/trace identity before any
+cost-bearing dispatch and bind it to experiment ID, exact problem/input digest, arm, replicate/run,
+and budget. Carry that subject identity through every dispatch/event and the closed cost report, then
+derive (rather than independently accept) the scientific `OutcomeRecord.cost` from the closed report
+or its authenticated digest. The evaluator should join and recompute cost from that evidence, reject
+missing/multiple/mismatched report subjects, and prevent one closed report from being replayed across
+cells. If reporting costs at a coarser run level, freeze an explicit deterministic allocation rule
+that reconciles the run-level ledger to every scored cell.
+
+**Addendum to minimum design conditions.** 28. an evidence-bound cost-to-outcome join that derives
+each scored cell's budget/accounting claim from its uniquely attributable closed telemetry/dispatch
+record rather than from an independently supplied aggregate.
