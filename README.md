@@ -14,9 +14,12 @@ complete-cost budget:
 4. multi-fidelity solving;
 5. verified-chain solving (the candidate mechanism).
 
-The repository starts deliberately small. GitHub is the shared mailbox and CI runner;
-it is not scientific authority. The exact experiment contract is
-[`goal1/GOAL1.json`](goal1/GOAL1.json), the hourly work board is
+GitHub is the shared mailbox and CI runner; it is not scientific authority.
+The active Goal-1 authority index is [`goal1/GOAL1.json`](goal1/GOAL1.json),
+and its exclusive confirmatory scientific rules are content-bound in
+[`goal1/CONFIRMATORY_PROTOCOL.json`](goal1/CONFIRMATORY_PROTOCOL.json).
+Confirmatory dispatch remains blocked until the independently verifiable execution
+authority and manifest named there exist. The hourly work board is
 [`orchestration/BOARD.json`](orchestration/BOARD.json), and the deterministic
 evaluator lives in `src/supernova_goal1`.
 
@@ -24,7 +27,8 @@ evaluator lives in `src/supernova_goal1`.
 
 ```bash
 python -m unittest discover -s tests -p "test_*.py"
-python scripts/evaluate_goal1.py goal1/GOAL1.json examples/dry_run_records.json
+python scripts/evaluate_goal1.py examples/dry_run_goal1.json examples/dry_run_records.json
 ```
 
-The example is a dry run of the data path, not evidence for the hypothesis.
+The example uses `examples/dry_run_goal1.json`; it is a dry run of the data
+path and has no scientific credit.
