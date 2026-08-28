@@ -40,12 +40,13 @@
         "G1-125",
         "G1-126"
       ],
-      "objective": "Seal the powered family-aware selection, accepted benchmark/runtime/five-arm/cost rules, execution interface, and fail-closed opening gate into one immutable protocol-rules digest; confirmatory execution remains blocked until G1-134 binds an admissible execution authority.",
+      "objective": "Seal the powered family-aware selection, accepted benchmark/runtime/five-arm/cost rules, execution interface, and fail-closed opening gate into one immutable protocol-rules digest; confirmatory execution remains blocked until the same MF02 worker is sequentially reassigned after G1-121 completion to bind an admissible execution authority.",
       "acceptance": [
         "All declared freeze dependencies are DONE at the bound revisions.",
         "A prospective 244-problem family-aware selection and power basis are frozen before held-out release.",
         "One canonical digest binds every presently available scientific rule and interface.",
-        "The protocol explicitly returns BLOCKED_NO_EXECUTION_AUTHORITY until G1-134 supplies an admissible immutable authority bundle."
+        "The protocol explicitly returns BLOCKED_NO_EXECUTION_AUTHORITY until a later sequential MF02 execution-authority ticket supplies an admissible immutable bundle.",
+        "No second simultaneous MF02 ticket or replacement scheduled task is created."
       ]
     },
     {
@@ -178,12 +179,12 @@
       "depends_on": [
         "G1-121"
       ],
-      "objective": "Expand the frozen protocol rules into one blinded one-shot paired manifest schema with every problem, arm, attempt, retry allowance, and budget preregistered; allow deterministic non-credit draft manifests but block production dispatch until G1-134.",
+      "objective": "Expand the frozen protocol rules into one blinded one-shot paired manifest schema with every problem, arm, attempt, retry allowance, and budget preregistered; allow deterministic non-credit draft manifests but block production dispatch until the later execution-authority ticket.",
       "acceptance": [
         "The manifest is derived only from the frozen protocol-rules digest.",
         "All five arms are paired for every selected problem.",
         "No attempt or retry can be added after dispatch begins.",
-        "Without an admissible G1-134 execution-authority bundle the manifest is NON_CREDIT_DRAFT and dispatch is BLOCKED."
+        "Without an admissible execution-authority bundle the manifest is NON_CREDIT_DRAFT and dispatch is BLOCKED."
       ]
     },
     {
@@ -220,7 +221,7 @@
         "Each named attack is deterministically rejected.",
         "No error path can yield scientific PASS.",
         "The tests exercise the real bridge and evaluator boundary.",
-        "Draft protocols, simulation issuers, recurring-chat receipts, and absent or invalid G1-134 authority bundles are blocked from confirmatory credit."
+        "Draft protocols, simulation issuers, recurring-chat receipts, and absent or invalid execution-authority bundles are blocked from confirmatory credit."
       ]
     },
     {
@@ -245,25 +246,6 @@
       }
     },
     {
-      "id": "G1-134",
-      "owner": "MF02",
-      "status": "WAITING",
-      "paths": [
-        "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
-        "tests/test_confirmatory_execution_authority.py"
-      ],
-      "depends_on": [
-        "G1-121"
-      ],
-      "objective": "Bind the exact model/version/settings, concrete executor digest, receipt issuer and verification key, provider-attested fresh-empty-context capability, valid preflight receipt, and frozen scheduling/serving-pool policy that open confirmatory execution.",
-      "acceptance": [
-        "The bundle is immutable and binds the G1-121 protocol-rules digest plus every model, executor, issuer, receipt-schema, scheduling, and serving-pool identity.",
-        "One authentic preflight receipt proves the selected executor can create and close a fresh empty context under the bound model settings.",
-        "Aliases, self-asserted capability, recurring-chat identity, simulation issuers, missing signatures, and digest drift are BLOCKED.",
-        "G1-131, G1-132, and G1-133 cannot produce confirmatory credit without this admissible bundle."
-      ]
-    },
-    {
       "id": "G1-131",
       "owner": "MM06",
       "status": "WAITING",
@@ -271,8 +253,7 @@
         "reviews/G1_CONFIRMATORY_REVIEW.md"
       ],
       "depends_on": [
-        "G1-130",
-        "G1-134"
+        "G1-130"
       ],
       "objective": "Independently review the exact frozen protocol, implementation, tests, evidence lineage, and unresolved assumptions without authoring or merging reviewed code.",
       "acceptance": [
