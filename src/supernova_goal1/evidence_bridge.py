@@ -887,6 +887,85 @@ class ExecutionLedgerAuthority:
             receipts[dispatch_id] = receipt
         return receipts
 
+    def _read_protocol_binding(
+        self, dispatch_id: str
+    ) -> ProtocolDispatchReceipt | None:
+        dispatch_id = _sha256(dispatch_id, "dispatch_id")
+        con = self._connect()
+        try:
+            row = con.execute(
+                "SELECT receipt_json,receipt_sha256 "
+                "FROM protocol_dispatch_receipts "
+                "WHERE run_id=? AND dispatch_id=?",
+                (self.run_id, dispatch_id),
+            ).fetchone()
+        finally:
+            con.close()
+        if row is None:
+            return None
+        encoded, stored_sha = row
+        raw = json.loads(encoded)
+        expected = {
+            "arm",
+            "attempt",
+            "confirmatory_manifest_sha256",
+            "dispatch_entry_sha256",
+            "dispatch_id",
+            "execution_authority_sha256",
+            "issuer_id",
+            "problem_id",
+            "problem_identity",
+            "protocol_dispatch_id",
+            "protocol_rules_sha256",
+            "receipt_sha256",
+            "request_sha256",
+            "run_id",
+            "schema",
+            "signature",
+        }
+        if not isinstance(raw, dict) or set(raw) != expected:
+            raise ValueError(
+                "persisted protocol dispatch receipt fields are not canonical"
+            )
+        if raw["schema"] != "supernova.protocol-dispatch-receipt.v1":
+            raise ValueError("persisted protocol dispatch schema changed")
+        receipt = ProtocolDispatchReceipt(
+            issuer_id=raw["issuer_id"],
+            execution_authority_sha256=raw["execution_authority_sha256"],
+            run_id=raw["run_id"],
+            dispatch_id=raw["dispatch_id"],
+            dispatch_entry_sha256=raw["dispatch_entry_sha256"],
+            request_sha256=raw["request_sha256"],
+            problem_id=raw["problem_id"],
+            problem_identity=raw["problem_identity"],
+            arm=raw["arm"],
+            attempt=raw["attempt"],
+            protocol_dispatch_id=raw["protocol_dispatch_id"],
+            protocol_rules_sha256=raw["protocol_rules_sha256"],
+            confirmatory_manifest_sha256=raw[
+                "confirmatory_manifest_sha256"
+            ],
+            signature=raw["signature"],
+        )
+        expected_signature = hmac.new(
+            self.__secret,
+            _canonical_bytes(
+                "supernova.protocol-dispatch.signature.v1",
+                receipt.body(),
+            ),
+            hashlib.sha256,
+        ).hexdigest()
+        if (
+            not hmac.compare_digest(receipt.signature, expected_signature)
+            or receipt.dispatch_id != dispatch_id
+            or raw["receipt_sha256"] != receipt.receipt_sha256
+            or stored_sha != receipt.receipt_sha256
+        ):
+            raise ValueError(
+                "persisted protocol dispatch receipt authentication failed"
+            )
+        return receipt
+
     def _verify_protocol_binding(
         self,
         entry: DispatchEntry,
@@ -1069,8 +1148,7 @@ class ExecutionLedgerAuthority:
 
         completion = _snapshot_completion(completion)
         slot = self._slot_for_completion(completion)
-        bindings = self._read_protocol_bindings()
-        binding = bindings.get(completion.dispatch_id)
+        binding = self._read_protocol_binding(completion.dispatch_id)
         if binding is None:
             raise ValueError(
                 "completion has no pre-dispatch protocol binding receipt"
