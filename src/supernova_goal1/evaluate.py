@@ -47,6 +47,9 @@ def evaluate_experiment(
 ) -> dict[str, Any]:
     spec = ExperimentSpec.from_mapping(spec_raw)
     records = [OutcomeRecord.from_mapping(raw) for raw in records_raw]
+    observed_usage_bases = {record.model_usage_basis for record in records}
+    if len(observed_usage_bases) > 1:
+        raise ValueError("outcomes contain mixed model_usage_basis values")
     expected_problems = set(spec.required_problem_ids)
     seen: dict[tuple[str, Arm], OutcomeRecord] = {}
 
