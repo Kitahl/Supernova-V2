@@ -246,6 +246,44 @@ class BenchmarkRuntimeCheckerTests(unittest.TestCase):
         self.assertEqual([], report["checks"])
         self.assertEqual([], runner.materialized)
 
+    def test_verifier_result_coherence_and_version_prefix_are_enforced(self) -> None:
+        incoherent = VerifierResult(
+            status=VerifierStatus.PASS,
+            command=("lean", "--version"),
+            returncode=1,
+            stdout="Lean (version 4.33.1, test)\n",
+            stderr="",
+            elapsed_milliseconds=1,
+        )
+        with self.assertRaisesRegex(ValueError, "PASS verifier result"):
+            CHECKER._validate_verifier_result(incoherent)
+
+        temporary, benchmark, lock_path, runtime, _ = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        base = FakeRunner()
+
+        def prefixed_runner(command, *, timeout_seconds, cwd):
+            result = base(command, timeout_seconds=timeout_seconds, cwd=cwd)
+            if command[-1] == "--version":
+                return VerifierResult(
+                    status=VerifierStatus.PASS,
+                    command=result.command,
+                    returncode=0,
+                    stdout="untrusted-prefix Lean (version 4.33.1, test)\n",
+                    stderr="",
+                    elapsed_milliseconds=1,
+                )
+            return result
+
+        report = CHECKER.check_benchmark_runtime(
+            benchmark_root=benchmark,
+            lock_path=lock_path,
+            runtime_root=runtime,
+            runner=prefixed_runner,
+        )
+        self.assertEqual("FAIL", report["status"])
+        self.assertEqual("LEAN_VERSION_MISMATCH", report["failures"][0]["code"])
+
     def test_sample_failure_is_machine_readable_and_never_credit(self) -> None:
         temporary, benchmark, lock_path, runtime, _ = self._fixture()
         self.addCleanup(temporary.cleanup)
