@@ -265,6 +265,8 @@ class FrozenProblemRequest(_FrozenProblemRequestTuple):
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "FrozenProblemRequest":
+        if not isinstance(raw, Mapping):
+            raise ValueError("frozen request must be an object")
         expected = {
             "arm",
             "attempt",
@@ -427,6 +429,8 @@ class AttemptResult(_AttemptResultTuple):
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "AttemptResult":
+        if not isinstance(raw, Mapping):
+            raise ValueError("attempt result must be an object")
         expected = {
             "arm",
             "attempt",
@@ -673,6 +677,8 @@ class LeanVerifierReceipt(_LeanVerifierReceiptTuple):
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "LeanVerifierReceipt":
+        if not isinstance(raw, Mapping):
+            raise ValueError("verifier receipt must be an object")
         expected = {
             "arm",
             "attempt",
