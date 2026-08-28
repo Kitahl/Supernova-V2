@@ -155,7 +155,7 @@
     {
       "id": "G1-127",
       "owner": "MM03",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/evidence_bridge.py",
         "tests/test_evidence_bridge.py"
@@ -174,7 +174,11 @@
         "Raw caller-supplied solved or cost booleans are not accepted.",
         "Every evaluator record binds the protocol, manifest, completion, verifier, and cost evidence.",
         "Partial, replayed, cross-run, or unaccounted evidence is rejected."
-      ]
+      ],
+      "completion": {
+        "pull_request": 74,
+        "merge_commit": "5d4bc9775e485b17e6ff91faadb8379a725a622b"
+      }
     },
     {
       "id": "G1-128",
@@ -210,7 +214,7 @@
     {
       "id": "G1-129",
       "owner": "MM05",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
         "src/supernova_goal1/evaluate_confirmatory.py",
         "tests/test_evaluate_confirmatory.py"
