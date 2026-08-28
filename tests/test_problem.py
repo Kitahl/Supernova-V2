@@ -73,6 +73,15 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             object.__setattr__(problem, "native_id", "43")
 
+    def test_identity_does_not_alias_plain_tuple(self) -> None:
+        problem = BenchmarkProblemIdentity("bench", "v1", "test", "42")
+        raw = ("bench", "v1", "test", "42")
+
+        self.assertNotEqual(problem, raw)
+        self.assertNotEqual(raw, problem)
+        self.assertNotIn(raw, {problem})
+        self.assertIn(problem, {problem})
+
     def test_namedtuple_helpers_preserve_identity_validation(self) -> None:
         with self.assertRaisesRegex(
             ValueError, "native_id must be a non-empty trimmed string"
@@ -207,6 +216,17 @@ class SplitContractTests(unittest.TestCase):
             object.__setattr__(contract, "split", "train")
         with self.assertRaises(AttributeError):
             object.__setattr__(contract, "problems", ())
+
+    def test_contract_does_not_alias_plain_tuple(self) -> None:
+        contract = SplitContract.from_native_ids(
+            benchmark="bench", version="v1", split="test", native_ids=["p1"]
+        )
+        raw = (contract.benchmark, contract.version, contract.split, contract.problems)
+
+        self.assertNotEqual(contract, raw)
+        self.assertNotEqual(raw, contract)
+        self.assertNotIn(raw, {contract})
+        self.assertIn(contract, {contract})
 
     def test_low_level_reassignment_cannot_mutate_member_identity(self) -> None:
         contract = SplitContract.from_native_ids(
