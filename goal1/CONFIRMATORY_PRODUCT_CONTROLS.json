@@ -39,8 +39,12 @@
     "prompt_base_authority": {
       "path": "goal1/CONFIRMATORY_BASELINES.json",
       "git_blob_sha1": "2ab23d89b22dd7c21963da1e3543bf2dc0e39193",
-      "field": "common.prompt_rendering.common_template",
-      "rendering": "UTF-8_LF_SINGLE_PASS_EXACT_NO_TRIMMING"
+      "source_fields": [
+        "SOURCE_SHA256",
+        "THEOREM_NAME",
+        "SOURCE_WITH_PROOF_HOLE"
+      ],
+      "rule": "REUSE_EXACT_FROZEN_SOURCE_BINDINGS_BUT_USE_THE_SHARED_PRODUCT_CHAIN_TEMPLATE_BELOW"
     },
     "response_safety": {
       "encoding": "UTF-8",
@@ -88,6 +92,24 @@
       "missing_or_self_asserted_receipt": "BLOCKED"
     },
     "predecessor_completion_binding": {
+      "applies_to_attempt_indices": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "predecessor_rule": "ATTEMPT_I_BINDS_AUTHENTICATED_TERMINAL_COMPLETION_OF_ATTEMPT_I_MINUS_1_REGARDLESS_OF_OUTCOME",
       "required_fields": [
         "predecessor_attempt_index",
         "predecessor_dispatch_id",
@@ -97,8 +119,8 @@
         "completion_authentication"
       ],
       "same_run_problem_and_arm_required": true,
-      "immediate_predecessor_or_frozen_eligible_parent_required": true,
-      "registration_without_terminal_completion": "DOES_NOT_AUTHORIZE_RETRY",
+      "model_visible": false,
+      "registration_without_terminal_completion": "DOES_NOT_AUTHORIZE_SUCCESSOR",
       "missing_invalid_replayed_or_cross_cell_binding": "BLOCKED"
     },
     "terminal_result_rule": {
@@ -106,94 +128,98 @@
       "selected_attempt": "LOWEST_ATTEMPT_INDEX_WITH_AN_ADMISSIBLE_FINAL_KERNEL_PASS_AFTER_ALL_16_COMPLETE",
       "no_passing_attempt": "UNSOLVED_ONLY_WHEN_ALL_16_CELLS_AND_COST_EVENTS_ARE_COMPLETE_OTHERWISE_INCOMPLETE",
       "human_selection_or_posthoc_rerun": "FORBIDDEN"
-    }
+    },
+    "product_chain_prompt_template": "You are working on exactly one frozen Lean 4 theorem in one fresh context.\nUse only the frozen source and the admitted product declarations printed below.\nReturn exactly one canonical PRODUCT_CANDIDATE or FINAL_ANSWER response.\nA PRODUCT_CANDIDATE starts with the two frozen product discriminator comment lines and then contains exactly one permitted theorem or lemma declaration with the required declaration name.\nA FINAL_ANSWER starts with the two frozen answer discriminator comment lines and then contains only the tactic body that replaces the unique frozen proof hole.\nDo not return Markdown or prose. Do not add imports, axioms, commands, namespaces, sections, notation, macros, attributes, options, unsafe declarations, `sorry`, or `admit`.\nDo not rely on any earlier conversation, unprinted attempt, response, verifier result, memory, file, app, tool, or network.\nMODEL_VISIBLE_ARM_LABEL=product_chain\nATTEMPT={ATTEMPT_INDEX}\nREQUIRED_PRODUCT_DECLARATION_NAME={PRODUCT_DECLARATION_NAME}\nFROZEN_SOURCE_SHA256={SOURCE_SHA256}\nFROZEN_THEOREM_NAME={THEOREM_NAME}\nBEGIN_FROZEN_SOURCE\n{SOURCE_WITH_PROOF_HOLE}\nEND_FROZEN_SOURCE\nBEGIN_ADMITTED_PRODUCTS\n{ORDERED_ADMITTED_PRODUCT_RESPONSE_BYTES}\nEND_ADMITTED_PRODUCTS"
   },
   "arms": {
     "product_only": {
-      "attempt_relationship": "ONE_PREDECLARED_16_NODE_LINEAR_TRACE_WITH_FRESH_CONTEXT_AT_EVERY_NODE",
+      "attempt_relationship": "ONE_PREDECLARED_16_NODE_LINEAR_SUCCESSOR_TRACE_WITH_FRESH_CONTEXT_AT_EVERY_NODE",
       "predecessor_graph": [
         {
           "attempt_index": 0,
-          "retry_of_attempt": null
+          "predecessor_completion_of_attempt": null
         },
         {
           "attempt_index": 1,
-          "retry_of_attempt": 0
+          "predecessor_completion_of_attempt": 0
         },
         {
           "attempt_index": 2,
-          "retry_of_attempt": 1
+          "predecessor_completion_of_attempt": 1
         },
         {
           "attempt_index": 3,
-          "retry_of_attempt": 2
+          "predecessor_completion_of_attempt": 2
         },
         {
           "attempt_index": 4,
-          "retry_of_attempt": 3
+          "predecessor_completion_of_attempt": 3
         },
         {
           "attempt_index": 5,
-          "retry_of_attempt": 4
+          "predecessor_completion_of_attempt": 4
         },
         {
           "attempt_index": 6,
-          "retry_of_attempt": 5
+          "predecessor_completion_of_attempt": 5
         },
         {
           "attempt_index": 7,
-          "retry_of_attempt": 6
+          "predecessor_completion_of_attempt": 6
         },
         {
           "attempt_index": 8,
-          "retry_of_attempt": 7
+          "predecessor_completion_of_attempt": 7
         },
         {
           "attempt_index": 9,
-          "retry_of_attempt": 8
+          "predecessor_completion_of_attempt": 8
         },
         {
           "attempt_index": 10,
-          "retry_of_attempt": 9
+          "predecessor_completion_of_attempt": 9
         },
         {
           "attempt_index": 11,
-          "retry_of_attempt": 10
+          "predecessor_completion_of_attempt": 10
         },
         {
           "attempt_index": 12,
-          "retry_of_attempt": 11
+          "predecessor_completion_of_attempt": 11
         },
         {
           "attempt_index": 13,
-          "retry_of_attempt": 12
+          "predecessor_completion_of_attempt": 12
         },
         {
           "attempt_index": 14,
-          "retry_of_attempt": 13
+          "predecessor_completion_of_attempt": 13
         },
         {
           "attempt_index": 15,
-          "retry_of_attempt": 14
+          "predecessor_completion_of_attempt": 14
         }
       ],
-      "prompt_delta": "ARM=product_only\nATTEMPT={ATTEMPT_INDEX}\nRETRY_BINDING_SHA256={RETRY_BINDING_SHA256_OR_NONE}\nVISIBLE_UNVERIFIED_PRODUCTS={CANONICAL_VISIBLE_PRODUCTS_JSON}\nYou may emit either one reusable intermediate product or one final tactic body. Reusable products are unverified and may be wrong. Use only the explicitly supplied products; do not infer verifier feedback or hidden history.",
+      "prompt_delta": "EXACT_SHARED_PRODUCT_CHAIN_PROMPT_TEMPLATE",
       "allowed_model_visible_predecessor_material": {
-        "source": "AUTHENTICATED_TERMINAL_PRODUCT_RESPONSES_FROM_LOWER_ATTEMPTS_IN_THIS_EXACT_RUN_PROBLEM_AND_ARM",
+        "source": "ALL_SYNTACTICALLY_ADMISSIBLE_PRODUCT_CANDIDATE_RESPONSES_FROM_LOWER_ATTEMPTS_IN_THIS_EXACT_RUN_PROBLEM_AND_ARM",
         "kinds": [
-          "PRODUCT"
+          "PRODUCT_CANDIDATE"
         ],
         "ordering": "STRICT_ASCENDING_PRODUCER_ATTEMPT_INDEX",
         "inclusion": "ALL_AND_ONLY_ELIGIBLE_PRODUCTS",
-        "verification_state": "UNVERIFIED",
+        "verification_state": "NOT_LEAN_VERIFIED_BEFORE_ADMISSION",
+        "exact_response_bytes_only": true,
         "forbidden": [
           "FINAL_ANSWER_RESPONSE",
           "NO_ANSWER",
           "ERROR_TEXT",
           "VERIFIER_STATUS",
+          "VERIFIER_RECEIPT",
           "VERIFIER_STDOUT",
           "VERIFIER_STDERR",
           "VERIFIER_TIMING",
+          "PREDECESSOR_COMPLETION_METADATA",
           "CROSS_PROBLEM_PRODUCT",
           "CROSS_ARM_PRODUCT",
           "UNAUTHENTICATED_PRODUCT"
@@ -201,26 +227,96 @@
       },
       "output_contract": {
         "allowed_kinds": [
-          "PRODUCT",
-          "ANSWERED",
+          "PRODUCT_CANDIDATE",
+          "FINAL_ANSWER",
           "NO_ANSWER"
         ],
-        "product_schema": "supernova.product-emission.v1",
-        "product_canonical_fields": [
-          "content_utf8",
-          "kind",
-          "schema"
-        ],
-        "product_kind_literal": "PRODUCT",
         "one_output_kind_per_attempt": true,
-        "product_is_never_kernel_admitted": true
+        "product_candidate_requires_syntax_and_name_policy": true,
+        "product_candidate_is_never_lean_verified_before_admission": true,
+        "final_answer_requires_exact_answer_discriminator": true
       },
       "verifier_policy": {
-        "ANSWERED": "RUN_EXACTLY_ONE_FINAL_LEAN_VERIFIER_AND_NEVER_FEED_RESULT_FORWARD",
-        "PRODUCT": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
+        "FINAL_ANSWER": "RUN_EXACTLY_ONE_FINAL_LEAN_VERIFIER_ON_THE_BOUND_FINAL_CONSTRUCTED_SOURCE_AND_NEVER_FEED_RESULT_FORWARD",
+        "PRODUCT_CANDIDATE": "NO_LEAN_INVOCATION_BEFORE_ADMISSION_RECORD_TYPED_NOT_INVOKED",
         "NO_ANSWER": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
         "ERROR": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
-        "any_verifier_feedback_visible_to_later_model_attempt": "BLOCKED"
+        "any_verifier_or_predecessor_completion_metadata_visible_to_later_model_attempt": "BLOCKED"
+      },
+      "response_discriminator": {
+        "product_prefix_lines": [
+          "-- supernova-kind: PRODUCT_CANDIDATE",
+          "-- supernova-schema: supernova.product-candidate-emission.v1"
+        ],
+        "final_answer_prefix_lines": [
+          "-- supernova-kind: FINAL_ANSWER",
+          "-- supernova-schema: supernova.final-answer-emission.v1"
+        ],
+        "classification": "EXACT_FIRST_TWO_VISIBLE_LINES",
+        "missing_duplicate_or_ambiguous_discriminator": "BLOCKED"
+      },
+      "product_declaration_policy": {
+        "required_name_template": "SupernovaProduct.P_{FULL_PROBLEM_SHA256}.a{ATTEMPT_INDEX_TWO_DIGITS}",
+        "declaration_count": 1,
+        "allowed_declaration_kinds": [
+          "theorem",
+          "lemma"
+        ],
+        "parser_mode": "PINNED_LEAN_PARSER_WITHOUT_ELABORATION",
+        "forbidden_syntax": [
+          "import",
+          "namespace",
+          "end",
+          "section",
+          "variable",
+          "notation",
+          "macro",
+          "syntax",
+          "attribute",
+          "set_option",
+          "axiom",
+          "opaque",
+          "unsafe",
+          "sorry",
+          "admit",
+          "declaration_attributes"
+        ],
+        "unique_name_and_attempt_binding_required": true,
+        "parse_failure_or_name_kind_policy_violation": "PRODUCT_NOT_ADMISSIBLE"
+      },
+      "construction_policy": {
+        "product_harness": "FROZEN_IMPORT_AND_PREFIX_BYTES_PLUS_ALL_EARLIER_ADMITTED_PRODUCT_RESPONSE_BYTES_IN_ATTEMPT_ORDER_PLUS_EXACT_CURRENT_PRODUCT_RESPONSE_BYTES",
+        "product_harness_forbidden_material": [
+          "TARGET_DECLARATION",
+          "SOLVED_TARGET_STUB",
+          "UNADMITTED_PRODUCT"
+        ],
+        "final_harness": "INSERT_ALL_ADMITTED_PRODUCT_RESPONSE_BYTES_IN_ATTEMPT_ORDER_AT_THE_FROZEN_PRE_TARGET_OFFSET_THEN_REPLACE_ONLY_THE_UNIQUE_FROZEN_PROOF_HOLE_BYTE_SLICE_WITH_EXACT_FINAL_ANSWER_RESPONSE_BYTES",
+        "transformation": "BYTE_SLICE_ONLY_NO_PARSING_NORMALIZATION_OR_TARGET_REGENERATION",
+        "required_bindings": [
+          "frozen_target_source_sha256",
+          "unique_proof_hole_start_byte",
+          "unique_proof_hole_end_byte",
+          "ordered_admitted_product_response_sha256",
+          "exact_response_sha256",
+          "constructed_source_sha256"
+        ],
+        "target_statement_or_import_mutation": "BLOCKED"
+      },
+      "verified_chain_surface_parity": {
+        "must_match_verified_chain": [
+          "attempt_slots",
+          "fresh_context_rule",
+          "model_visible_prompt_template",
+          "response_discriminators",
+          "product_declaration_policy",
+          "predecessor_completion_requirement",
+          "cost_schedule",
+          "product_and_final_harness_construction",
+          "terminal_result_rule"
+        ],
+        "sole_permitted_difference": "PRODUCT_ADMISSION_RULE_UNVERIFIED_SYNTACTIC_ADMISSION_VERSUS_LEAN_PASS_ADMISSION",
+        "mismatch": "BLOCKED"
       }
     },
     "multi_fidelity": {
