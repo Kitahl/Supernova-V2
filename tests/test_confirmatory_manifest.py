@@ -301,7 +301,7 @@ class ConfirmatoryManifestTests(unittest.TestCase):
         changed = copy.deepcopy(self.protocol)
         changed["sealed_rules_sha256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "sealed_rules_sha256"):
-            build_non_credit_draft(changed)
+            build_non_credit_draft(changed, operator_seed=OPERATOR_SEED)
 
     def test_bundle_is_json_serializable_without_custom_encoder(self) -> None:
         public_round_trip = json.loads(
