@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "goal2" / "GOAL2.json"
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 FIXTURE_KEY = b"goal2-contract-test-key-not-a-production-secret"
+EVALUATOR_KEY = b"goal2-independent-evaluator-test-key"
 DIMENSIONS = {
     "model_calls",
     "input_utf8_bytes",
@@ -32,10 +33,10 @@ def valid_sha256(value):
     return isinstance(value, str) and HEX64.fullmatch(value) is not None
 
 
-def signed(schema, payload, key=FIXTURE_KEY):
+def signed(schema, payload, key=FIXTURE_KEY, key_id="goal2-test-authority"):
     return {
         "schema": schema,
-        "key_id": "goal2-test-authority",
+        "key_id": key_id,
         "payload": payload,
         "signature": hmac.new(
             key, canonical_bytes(payload), hashlib.sha256
@@ -43,10 +44,10 @@ def signed(schema, payload, key=FIXTURE_KEY):
     }
 
 
-def verify_signed(record, schema, key):
+def verify_signed(record, schema, key, key_id="goal2-test-authority"):
     if not isinstance(record, dict) or record.get("schema") != schema:
         return None
-    if record.get("key_id") != "goal2-test-authority":
+    if record.get("key_id") != key_id:
         return None
     payload = record.get("payload")
     if not isinstance(payload, dict):
@@ -57,12 +58,34 @@ def verify_signed(record, schema, key):
     return payload
 
 
+def component_fixture():
+    roles = ["solver_F", "memory_M0", "improver_I0", "memory_M1", "improver_I1"]
+    return {
+        role: {
+            "component_id": role + "-id",
+            "artifact_sha256": digest(role + "-artifact"),
+            "runtime_or_schema_sha256": digest(role + "-runtime"),
+        }
+        for role in roles
+    }
+
+
 def frozen_fixture(contract):
     frozen = copy.deepcopy(contract)
     frozen["phase"] = "FROZEN"
     gate = frozen["opening_gate"]
     gate["authority_key_id"] = "goal2-test-authority"
     gate["authority_key_sha256"] = hashlib.sha256(FIXTURE_KEY).hexdigest()
+    fresh = frozen["fresh_evaluation"]
+    fresh["evaluator_authority_key_id"] = "goal2-test-evaluator"
+    fresh["evaluator_authority_key_sha256"] = hashlib.sha256(EVALUATOR_KEY).hexdigest()
+    source_components = {
+        role: component_fixture()[role]
+        for role in frozen["components"]["frozen_source_roles"]
+    }
+    frozen["components"]["source_component_manifest_sha256"] = hashlib.sha256(
+        canonical_bytes(source_components)
+    ).hexdigest()
 
     cost = frozen["complete_r_and_d_cost"]
     cost["budget_id"] = "g2-budget-v1"
@@ -114,13 +137,10 @@ def complete_bundle(contract):
         "goal1_evidence_bridge_sha256": digest("goal1-bridge"),
         "goal1_evaluator_sha256": digest("goal1-evaluator"),
     }
-    components = {
-        role: {
-            "component_id": role + "-id",
-            "artifact_sha256": digest(role + "-artifact"),
-            "runtime_or_schema_sha256": digest(role + "-runtime"),
-        }
-        for role in contract["components"]["required_roles"]
+    components = component_fixture()
+    source_components = {
+        role: components[role]
+        for role in contract["components"]["frozen_source_roles"]
     }
     parent = components["solver_F"]["artifact_sha256"]
     control_descendant = digest("control-descendant")
@@ -148,6 +168,9 @@ def complete_bundle(contract):
             "evaluation_manifest_sha256"
         ],
         "analysis_plan_sha256": contract["effect_target"]["analysis_plan_sha256"],
+        "source_component_manifest_sha256": contract["components"]["source_component_manifest_sha256"],
+        "evaluator_authority_key_id": contract["fresh_evaluation"]["evaluator_authority_key_id"],
+        "evaluator_authority_key_sha256": contract["fresh_evaluation"]["evaluator_authority_key_sha256"],
     }
 
     lineage = {
@@ -158,7 +181,9 @@ def complete_bundle(contract):
                 "arm": "control",
                 "parent_solver_sha256": parent,
                 "improver_id": components["improver_I0"]["component_id"],
+                "improver_artifact_sha256": components["improver_I0"]["artifact_sha256"],
                 "memory_id": components["memory_M0"]["component_id"],
+                "memory_artifact_sha256": components["memory_M0"]["artifact_sha256"],
                 "descendant_sha256": control_descendant,
             },
         ),
@@ -169,9 +194,13 @@ def complete_bundle(contract):
                 "arm": "treatment",
                 "parent_solver_sha256": parent,
                 "starting_improver_id": components["improver_I0"]["component_id"],
+                "starting_improver_artifact_sha256": components["improver_I0"]["artifact_sha256"],
                 "starting_memory_id": components["memory_M0"]["component_id"],
+                "starting_memory_artifact_sha256": components["memory_M0"]["artifact_sha256"],
                 "improved_improver_id": components["improver_I1"]["component_id"],
+                "improved_improver_artifact_sha256": components["improver_I1"]["artifact_sha256"],
                 "improved_memory_id": components["memory_M1"]["component_id"],
+                "improved_memory_artifact_sha256": components["memory_M1"]["artifact_sha256"],
                 "descendant_sha256": treatment_descendant,
             },
         ),
@@ -253,6 +282,8 @@ def complete_bundle(contract):
             "same_protocol_for_all_arms": True,
             "untouched_solver_outcome_present": True,
         },
+        key=EVALUATOR_KEY,
+        key_id="goal2-test-evaluator",
     )
 
     return {
@@ -263,6 +294,7 @@ def complete_bundle(contract):
         "frozen_artifact_receipt": signed(
             contract["opening_gate"]["frozen_artifact_receipt_schema"], freeze
         ),
+        "source_components": source_components,
         "components": components,
         "lineage": lineage,
         "cost_ledgers": {
@@ -274,7 +306,80 @@ def complete_bundle(contract):
     }
 
 
-def execution_gate(contract, bundle, authority_key):
+def pre_dispatch_admission(contract, bundle, authority_key):
+    gate = contract.get("opening_gate", {})
+    if contract.get("phase") != gate.get("required_contract_phase"):
+        return "BLOCKED"
+    if hashlib.sha256(authority_key).hexdigest() != gate.get("authority_key_sha256"):
+        return "BLOCKED"
+
+    goal1 = verify_signed(
+        bundle.get("goal1_receipt"), gate.get("goal1_receipt_schema"), authority_key
+    )
+    if goal1 is None or goal1.get("decision") != gate.get("required_goal1_decision"):
+        return "BLOCKED"
+    required = gate.get("required_goal1_payload_fields", [])
+    if any(field not in goal1 for field in required):
+        return "BLOCKED"
+    if not isinstance(goal1.get("run_id"), str) or not goal1["run_id"]:
+        return "BLOCKED"
+    if any(
+        not valid_sha256(goal1.get(field))
+        for field in required
+        if field.endswith("_sha256")
+    ):
+        return "BLOCKED"
+
+    freeze = verify_signed(
+        bundle.get("frozen_artifact_receipt"),
+        gate.get("frozen_artifact_receipt_schema"),
+        authority_key,
+    )
+    if freeze is None:
+        return "BLOCKED"
+    cost = contract["complete_r_and_d_cost"]
+    selection = contract["selection_and_sealing"]
+    fresh = contract["fresh_evaluation"]
+    effect = contract["effect_target"]
+    expected = {
+        "contract_id": contract["contract_id"],
+        "budget_id": cost["budget_id"],
+        "budget_manifest_sha256": cost["budget_manifest_sha256"],
+        "budget_ceiling_by_dimension": cost["budget_ceiling_by_dimension"],
+        "expected_event_ids_by_arm": cost["expected_event_ids_by_arm"],
+        "selection_rule_sha256": selection["selection_rule_sha256"],
+        "candidate_set_manifest_sha256_by_arm": selection[
+            "candidate_set_manifest_sha256_by_arm"
+        ],
+        "evaluation_manifest_sha256": fresh["evaluation_manifest_sha256"],
+        "analysis_plan_sha256": effect["analysis_plan_sha256"],
+        "source_component_manifest_sha256": contract["components"][
+            "source_component_manifest_sha256"
+        ],
+        "evaluator_authority_key_id": fresh["evaluator_authority_key_id"],
+        "evaluator_authority_key_sha256": fresh["evaluator_authority_key_sha256"],
+    }
+    if freeze != expected:
+        return "BLOCKED"
+    if fresh["evaluator_authority_key_id"] == gate["authority_key_id"]:
+        return "BLOCKED"
+    if fresh["evaluator_authority_key_sha256"] == gate["authority_key_sha256"]:
+        return "BLOCKED"
+    source = bundle.get("source_components")
+    source_roles = contract["components"]["frozen_source_roles"]
+    if not isinstance(source, dict) or set(source) != set(source_roles):
+        return "BLOCKED"
+    if hashlib.sha256(canonical_bytes(source)).hexdigest() != contract["components"][
+        "source_component_manifest_sha256"
+    ]:
+        return "BLOCKED"
+    return gate["open_state"]
+
+
+def evidence_admission(contract, bundle, authority_key, evaluator_key):
+    if pre_dispatch_admission(contract, bundle, authority_key) != "OPEN":
+        return "BLOCKED"
+
     gate = contract.get("opening_gate", {})
     if contract.get("phase") != gate.get("required_contract_phase"):
         return "BLOCKED"
@@ -323,6 +428,9 @@ def execution_gate(contract, bundle, authority_key):
         ],
         "evaluation_manifest_sha256": fresh_contract["evaluation_manifest_sha256"],
         "analysis_plan_sha256": effect["analysis_plan_sha256"],
+        "source_component_manifest_sha256": contract["components"]["source_component_manifest_sha256"],
+        "evaluator_authority_key_id": fresh_contract["evaluator_authority_key_id"],
+        "evaluator_authority_key_sha256": fresh_contract["evaluator_authority_key_sha256"],
     }
     if freeze != expected_freeze:
         return "BLOCKED"
@@ -387,16 +495,28 @@ def execution_gate(contract, bundle, authority_key):
     if (
         lineage_payloads["control"].get("improver_id")
         != components["improver_I0"]["component_id"]
+        or lineage_payloads["control"].get("improver_artifact_sha256")
+        != components["improver_I0"]["artifact_sha256"]
         or lineage_payloads["control"].get("memory_id")
         != components["memory_M0"]["component_id"]
+        or lineage_payloads["control"].get("memory_artifact_sha256")
+        != components["memory_M0"]["artifact_sha256"]
         or lineage_payloads["treatment"].get("starting_improver_id")
         != components["improver_I0"]["component_id"]
+        or lineage_payloads["treatment"].get("starting_improver_artifact_sha256")
+        != components["improver_I0"]["artifact_sha256"]
         or lineage_payloads["treatment"].get("starting_memory_id")
         != components["memory_M0"]["component_id"]
+        or lineage_payloads["treatment"].get("starting_memory_artifact_sha256")
+        != components["memory_M0"]["artifact_sha256"]
         or lineage_payloads["treatment"].get("improved_improver_id")
         != components["improver_I1"]["component_id"]
+        or lineage_payloads["treatment"].get("improved_improver_artifact_sha256")
+        != components["improver_I1"]["artifact_sha256"]
         or lineage_payloads["treatment"].get("improved_memory_id")
         != components["memory_M1"]["component_id"]
+        or lineage_payloads["treatment"].get("improved_memory_artifact_sha256")
+        != components["memory_M1"]["artifact_sha256"]
     ):
         return "BLOCKED"
     descendants = [
@@ -469,7 +589,8 @@ def execution_gate(contract, bundle, authority_key):
     release = verify_signed(
         bundle.get("evaluation_release"),
         fresh_contract["evaluation_receipt_schema"],
-        authority_key,
+        evaluator_key,
+        key_id=fresh_contract["evaluator_authority_key_id"],
     )
     if release is None or release.get("run_id") != run_id:
         return "BLOCKED"
@@ -524,7 +645,7 @@ class Goal2ContractTests(unittest.TestCase):
     def assert_blocked(self, contract=None, bundle=None):
         contract = self.frozen if contract is None else contract
         bundle = complete_bundle(contract) if bundle is None else bundle
-        self.assertEqual(execution_gate(contract, bundle, FIXTURE_KEY), "BLOCKED")
+        self.assertEqual(evidence_admission(contract, bundle, FIXTURE_KEY, EVALUATOR_KEY), "BLOCKED")
 
     def test_checked_in_contract_is_definition_only_and_blocked(self):
         self.assertEqual(self.contract["phase"], "CONTRACT_ONLY")
@@ -532,10 +653,16 @@ class Goal2ContractTests(unittest.TestCase):
             contract=self.contract, bundle=complete_bundle(self.frozen)
         )
 
+    def test_pre_dispatch_opens_without_post_run_evidence(self):
+        bundle = complete_bundle(self.frozen)
+        for field in ("lineage", "cost_ledgers", "selection_ledgers", "evaluation_release", "components"):
+            bundle.pop(field)
+        self.assertEqual(pre_dispatch_admission(self.frozen, bundle, FIXTURE_KEY), "OPEN")
+
     def test_complete_authenticated_fixture_opens(self):
         self.assertEqual(
-            execution_gate(
-                self.frozen, complete_bundle(self.frozen), FIXTURE_KEY
+            evidence_admission(
+                self.frozen, complete_bundle(self.frozen), FIXTURE_KEY, EVALUATOR_KEY
             ),
             "OPEN",
         )
@@ -594,6 +721,19 @@ class Goal2ContractTests(unittest.TestCase):
         bundle = complete_bundle(self.frozen)
         payload = bundle["evaluation_release"]["payload"]
         payload["r_and_d_item_ids"].append("heldout-1")
+        bundle["evaluation_release"] = signed(
+            self.frozen["fresh_evaluation"]["evaluation_receipt_schema"], payload
+        )
+        self.assert_blocked(bundle=bundle)
+
+    def test_successor_artifact_substitution_is_blocked(self):
+        bundle = complete_bundle(self.frozen)
+        bundle["components"]["improver_I1"]["artifact_sha256"] = digest("substituted-i1")
+        self.assert_blocked(bundle=bundle)
+
+    def test_independent_evaluator_key_is_required(self):
+        bundle = complete_bundle(self.frozen)
+        payload = bundle["evaluation_release"]["payload"]
         bundle["evaluation_release"] = signed(
             self.frozen["fresh_evaluation"]["evaluation_receipt_schema"], payload
         )
