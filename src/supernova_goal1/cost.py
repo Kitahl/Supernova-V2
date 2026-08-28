@@ -29,6 +29,11 @@ class CostRelation(StrEnum):
     INCOMPARABLE = "INCOMPARABLE"
 
 
+class ModelUsageBasis(StrEnum):
+    PROVIDER_TOKENS = "provider_tokens"
+    VISIBLE_UTF8_BYTES = "visible_utf8_bytes"
+
+
 def _natural(value: int, field: str) -> int:
     if type(value) is not int or value < 0:
         raise ValueError(f"{field} must be a non-negative integer")
@@ -83,21 +88,50 @@ def _normalize_arm(arm: Arm | str) -> Arm:
         raise ValueError(f"unknown arm: {arm!r}") from exc
 
 
+def _normalize_usage_basis(value: ModelUsageBasis | str | None) -> ModelUsageBasis:
+    if value is None:
+        return ModelUsageBasis.PROVIDER_TOKENS
+    if type(value) is ModelUsageBasis:
+        return value
+    if type(value) is not str:
+        raise ValueError(f"unknown model usage basis: {value!r}")
+    try:
+        return ModelUsageBasis(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"unknown model usage basis: {value!r}") from exc
+
+
 @dataclass(frozen=True)
 class ExpectedCostEvent:
     """One event that the execution harness expects telemetry for before report closure."""
 
     event_id: str
     kind: CostEventKind
+    model_usage_basis: ModelUsageBasis | None = None
 
     def __post_init__(self) -> None:
         if type(self.event_id) is not str or not self.event_id.strip():
             raise ValueError("expected event_id must be a non-empty string")
         object.__setattr__(self, "kind", _normalize_event_kind(self.kind))
+        if self.kind is CostEventKind.MODEL_CALL:
+            object.__setattr__(
+                self, "model_usage_basis", _normalize_usage_basis(self.model_usage_basis)
+            )
+        elif self.model_usage_basis is not None:
+            raise ValueError("only model_call expectations may declare a usage basis")
 
     @classmethod
-    def model_call(cls, event_id: str) -> "ExpectedCostEvent":
-        return cls(event_id, CostEventKind.MODEL_CALL)
+    def model_call(
+        cls,
+        event_id: str,
+        *,
+        usage_basis: ModelUsageBasis | str = ModelUsageBasis.PROVIDER_TOKENS,
+    ) -> "ExpectedCostEvent":
+        return cls(event_id, CostEventKind.MODEL_CALL, _normalize_usage_basis(usage_basis))
+
+    @classmethod
+    def scheduled_chat_model_call(cls, event_id: str) -> "ExpectedCostEvent":
+        return cls.model_call(event_id, usage_basis=ModelUsageBasis.VISIBLE_UTF8_BYTES)
 
     @classmethod
     def verifier(cls, event_id: str) -> "ExpectedCostEvent":
@@ -115,11 +149,18 @@ class CostEvent:
     input_tokens: int | None = None
     output_tokens: int | None = None
     milliseconds: int | None = None
+    model_usage_basis: ModelUsageBasis | None = None
 
     def __post_init__(self) -> None:
         if type(self.event_id) is not str or not self.event_id.strip():
             raise ValueError("event_id must be a non-empty string")
         object.__setattr__(self, "kind", _normalize_event_kind(self.kind))
+        if self.kind is CostEventKind.MODEL_CALL:
+            object.__setattr__(
+                self, "model_usage_basis", _normalize_usage_basis(self.model_usage_basis)
+            )
+        elif self.model_usage_basis is not None:
+            raise ValueError("only model_call events may declare a usage basis")
         object.__setattr__(
             self,
             "input_tokens",
@@ -156,12 +197,36 @@ class CostEvent:
         *,
         input_tokens: int | None,
         output_tokens: int | None,
+        usage_basis: ModelUsageBasis | str = ModelUsageBasis.PROVIDER_TOKENS,
     ) -> "CostEvent":
         return cls(
             event_id=event_id,
             kind=CostEventKind.MODEL_CALL,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            model_usage_basis=_normalize_usage_basis(usage_basis),
+        )
+
+    @classmethod
+    def scheduled_chat_model_call(
+        cls,
+        event_id: str,
+        *,
+        request_utf8: bytes,
+        response_utf8: bytes,
+    ) -> "CostEvent":
+        if type(request_utf8) is not bytes or type(response_utf8) is not bytes:
+            raise ValueError("scheduled-chat request and response must be exact UTF-8 bytes")
+        try:
+            request_utf8.decode("utf-8")
+            response_utf8.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("scheduled-chat artifacts must be valid UTF-8") from exc
+        return cls.model_call(
+            event_id,
+            input_tokens=len(request_utf8),
+            output_tokens=len(response_utf8),
+            usage_basis=ModelUsageBasis.VISIBLE_UTF8_BYTES,
         )
 
     @classmethod
@@ -250,6 +315,7 @@ class ArmCostTrace:
                     input_tokens=event.input_tokens,
                     output_tokens=event.output_tokens,
                     milliseconds=event.milliseconds,
+                    model_usage_basis=event.model_usage_basis,
                 )
                 for event in raw_events
             ),
@@ -258,7 +324,11 @@ class ArmCostTrace:
             self,
             "expected_events",
             tuple(
-                ExpectedCostEvent(event_id=event.event_id, kind=event.kind)
+                ExpectedCostEvent(
+                    event_id=event.event_id,
+                    kind=event.kind,
+                    model_usage_basis=event.model_usage_basis,
+                )
                 for event in raw_expected_events
             ),
         )
@@ -303,12 +373,22 @@ class ArmCostTrace:
         )
 
     @property
-    def observed_event_manifest(self) -> dict[str, CostEventKind]:
-        return {event.event_id: event.kind for event in self.events}
+    def observed_event_manifest(
+        self,
+    ) -> dict[str, tuple[CostEventKind, ModelUsageBasis | None]]:
+        return {
+            event.event_id: (event.kind, event.model_usage_basis)
+            for event in self.events
+        }
 
     @property
-    def expected_event_manifest(self) -> dict[str, CostEventKind]:
-        return {event.event_id: event.kind for event in self.expected_events}
+    def expected_event_manifest(
+        self,
+    ) -> dict[str, tuple[CostEventKind, ModelUsageBasis | None]]:
+        return {
+            event.event_id: (event.kind, event.model_usage_basis)
+            for event in self.expected_events
+        }
 
     @property
     def coverage_complete(self) -> bool:
@@ -320,7 +400,7 @@ class ArmCostTrace:
         return tuple(
             event.event_id
             for event in self.expected_events
-            if observed.get(event.event_id) is not event.kind
+            if observed.get(event.event_id) != (event.kind, event.model_usage_basis)
         )
 
     @property
@@ -329,7 +409,7 @@ class ArmCostTrace:
         return tuple(
             event.event_id
             for event in self.events
-            if expected.get(event.event_id) is not event.kind
+            if expected.get(event.event_id) != (event.kind, event.model_usage_basis)
         )
 
     @property
@@ -437,6 +517,49 @@ class CompleteCostReport:
                 f"replayed={sorted(replayed_event_ids)}"
             )
 
+        usage_bases = {
+            event.model_usage_basis
+            for trace in self.traces
+            for event in trace.events
+            if event.kind is CostEventKind.MODEL_CALL
+        }
+        if len(usage_bases) != 1:
+            raise ValueError(
+                "all five arms must use one model usage basis; "
+                f"observed={sorted(basis.value for basis in usage_bases if basis is not None)}"
+            )
+
+    @property
+    def model_usage_basis(self) -> ModelUsageBasis:
+        bases = {
+            event.model_usage_basis
+            for trace in self.traces
+            for event in trace.events
+            if event.kind is CostEventKind.MODEL_CALL
+        }
+        if len(bases) != 1:
+            raise AssertionError("complete-cost report usage-basis invariant violated")
+        basis = next(iter(bases))
+        assert basis is not None
+        return basis
+
+    @property
+    def model_usage_dimension_names(self) -> tuple[str, str]:
+        if self.model_usage_basis is ModelUsageBasis.PROVIDER_TOKENS:
+            return "input_tokens", "output_tokens"
+        return "input_utf8_bytes", "output_utf8_bytes"
+
+    @property
+    def cost_dimension_names(self) -> tuple[str, ...]:
+        input_name, output_name = self.model_usage_dimension_names
+        return (
+            "model_calls",
+            input_name,
+            output_name,
+            "verifier_milliseconds",
+            "orchestration_milliseconds",
+        )
+
     @classmethod
     def from_traces(cls, traces: Iterable[ArmCostTrace]) -> "CompleteCostReport":
         return cls(tuple(traces))
@@ -459,7 +582,7 @@ class CompleteCostReport:
             exceeded = tuple(
                 dimension
                 for dimension, used, allowed in zip(
-                    COST_DIMENSIONS,
+                    self.cost_dimension_names,
                     actual.as_tuple(),
                     allowed_tuple,
                     strict=True,

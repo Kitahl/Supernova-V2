@@ -15,6 +15,7 @@ from supernova_goal1.cost import (
     CostEventKind,
     CostRelation,
     ExpectedCostEvent,
+    ModelUsageBasis,
     compare_complete_cost,
 )
 
@@ -477,6 +478,109 @@ class CompleteCostAccountingTests(unittest.TestCase):
         report = self._zero_report()
         self.assertEqual(
             CompleteCost(1, 0, 0, 0, 0), report.total_for(Arm.PORTFOLIO)
+        )
+
+
+    def test_scheduled_chat_usage_counts_exact_visible_utf8_bytes(self) -> None:
+        event = CostEvent.scheduled_chat_model_call(
+            "scheduled-attempt",
+            request_utf8="é".encode("utf-8"),
+            response_utf8="✓".encode("utf-8"),
+        )
+        self.assertEqual(ModelUsageBasis.VISIBLE_UTF8_BYTES, event.model_usage_basis)
+        self.assertEqual(2, event.input_tokens)
+        self.assertEqual(3, event.output_tokens)
+        self.assertEqual(
+            CompleteCost(1, 2, 3, 0, 0),
+            event.cost_increment(),
+        )
+        with self.assertRaisesRegex(ValueError, "exact UTF-8 bytes"):
+            CostEvent.scheduled_chat_model_call(
+                "bad",
+                request_utf8="not-bytes",  # type: ignore[arg-type]
+                response_utf8=b"ok",
+            )
+        with self.assertRaisesRegex(ValueError, "valid UTF-8"):
+            CostEvent.scheduled_chat_model_call(
+                "bad-utf8",
+                request_utf8=b"ok",
+                response_utf8=b"\xff",
+            )
+
+    def test_expected_manifest_binds_model_usage_basis(self) -> None:
+        observed = CostEvent.scheduled_chat_model_call(
+            "attempt",
+            request_utf8=b"request",
+            response_utf8=b"response",
+        )
+        trace = ArmCostTrace.from_events(
+            Arm.ORDINARY,
+            (observed,),
+            expected_events=(ExpectedCostEvent.model_call("attempt"),),
+            accounting_complete=True,
+        )
+        self.assertFalse(trace.coverage_complete)
+        self.assertEqual(("attempt",), trace.missing_expected_events)
+        self.assertEqual(("attempt",), trace.unexpected_events)
+
+    def test_closed_report_rejects_mixed_usage_bases(self) -> None:
+        traces = [self._zero_trace(arm) for arm in Arm]
+        scheduled = CostEvent.scheduled_chat_model_call(
+            "ordinary-attempt",
+            request_utf8=b"request",
+            response_utf8=b"response",
+        )
+        traces[0] = ArmCostTrace.from_events(
+            Arm.ORDINARY,
+            (scheduled,),
+            expected_events=(
+                ExpectedCostEvent.scheduled_chat_model_call("ordinary-attempt"),
+            ),
+            accounting_complete=True,
+        )
+        with self.assertRaisesRegex(ValueError, "one model usage basis"):
+            CompleteCostReport.from_traces(traces)
+
+    def test_closed_scheduled_chat_report_labels_byte_dimensions(self) -> None:
+        traces = []
+        for arm in Arm:
+            event_id = f"{arm.value}-attempt"
+            traces.append(
+                ArmCostTrace.from_events(
+                    arm,
+                    (
+                        CostEvent.scheduled_chat_model_call(
+                            event_id,
+                            request_utf8=f"request:{arm.value}".encode("utf-8"),
+                            response_utf8=b"visible-response",
+                        ),
+                    ),
+                    expected_events=(
+                        ExpectedCostEvent.scheduled_chat_model_call(event_id),
+                    ),
+                    accounting_complete=True,
+                )
+            )
+        report = CompleteCostReport.from_traces(traces)
+        self.assertEqual(ModelUsageBasis.VISIBLE_UTF8_BYTES, report.model_usage_basis)
+        self.assertEqual(
+            ("input_utf8_bytes", "output_utf8_bytes"),
+            report.model_usage_dimension_names,
+        )
+        self.assertEqual(
+            (
+                "model_calls",
+                "input_utf8_bytes",
+                "output_utf8_bytes",
+                "verifier_milliseconds",
+                "orchestration_milliseconds",
+            ),
+            report.cost_dimension_names,
+        )
+        violations = report.budget_violations(CompleteCost(1, 0, 0, 0, 0))
+        self.assertEqual(
+            ("input_utf8_bytes", "output_utf8_bytes"),
+            violations[Arm.ORDINARY],
         )
 
 
