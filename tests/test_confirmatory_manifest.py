@@ -118,7 +118,8 @@ class ConfirmatoryManifestTests(unittest.TestCase):
         for record in self.public["public_records"]:
             self.assertNotIn("arm", record)
             self.assertNotIn("dispatch_id", record)
-            self.assertNotIn("predecessor_dispatch_id", record)
+            self.assertNotIn("eligible_predecessor_dispatch_ids", record)
+            self.assertNotIn("selected_predecessor_dispatch_id", record)
         self.assertEqual(
             "OPAQUE_IDS_AND_ORDER_BOUND_TO_OPERATOR_ONLY_256_BIT_SEED",
             self.public["blinding"]["classification"],
@@ -184,8 +185,11 @@ class ConfirmatoryManifestTests(unittest.TestCase):
             "arm",
             "arm_position",
             "budget_attempt_index",
-            "predecessor_attempt_index",
-            "predecessor_dispatch_id",
+            "eligible_predecessor_attempt_indices",
+            "eligible_predecessor_dispatch_ids",
+            "predecessor_policy",
+            "selected_predecessor_attempt_index",
+            "selected_predecessor_dispatch_id",
             "retry_allowance",
         )
         self.assertEqual(
@@ -199,26 +203,82 @@ class ConfirmatoryManifestTests(unittest.TestCase):
             ],
         )
 
-    def test_chain_predecessors_are_registered_without_baseline_leakage(self) -> None:
+    def test_linear_and_multifidelity_predecessors_are_exactly_registered(self) -> None:
         entries = {
             (entry["problem_id"], entry["arm"], entry["budget_attempt_index"]): entry
             for entry in self.operator["entries"]
         }
         problem_id = self.operator["entries"][0]["problem_id"]
+
         for arm in ("ordinary", "portfolio"):
             for attempt in range(16):
-                self.assertIsNone(entries[(problem_id, arm, attempt)]["predecessor_dispatch_id"])
-                self.assertIsNone(entries[(problem_id, arm, attempt)]["predecessor_attempt_index"])
-        for arm in ("product_only", "multi_fidelity", "verified_chain"):
-            self.assertIsNone(entries[(problem_id, arm, 0)]["predecessor_dispatch_id"])
+                entry = entries[(problem_id, arm, attempt)]
+                self.assertEqual([], entry["eligible_predecessor_attempt_indices"])
+                self.assertEqual([], entry["eligible_predecessor_dispatch_ids"])
+                self.assertEqual("NONE_INDEPENDENT_ATTEMPT", entry["predecessor_policy"])
+                self.assertIsNone(entry["selected_predecessor_attempt_index"])
+                self.assertIsNone(entry["selected_predecessor_dispatch_id"])
+
+        for arm in ("product_only", "verified_chain"):
+            initial = entries[(problem_id, arm, 0)]
+            self.assertEqual([], initial["eligible_predecessor_attempt_indices"])
+            self.assertEqual(
+                "FIXED_LINEAR_AUTHENTICATED_COMPLETION",
+                initial["predecessor_policy"],
+            )
             for attempt in range(1, 16):
                 current = entries[(problem_id, arm, attempt)]
                 predecessor = entries[(problem_id, arm, attempt - 1)]
-                self.assertEqual(attempt - 1, current["predecessor_attempt_index"])
+                self.assertEqual(
+                    [attempt - 1],
+                    current["eligible_predecessor_attempt_indices"],
+                )
+                self.assertEqual(
+                    [predecessor["dispatch_id"]],
+                    current["eligible_predecessor_dispatch_ids"],
+                )
+                self.assertEqual(
+                    attempt - 1,
+                    current["selected_predecessor_attempt_index"],
+                )
                 self.assertEqual(
                     predecessor["dispatch_id"],
-                    current["predecessor_dispatch_id"],
+                    current["selected_predecessor_dispatch_id"],
                 )
+
+        expected_multifidelity_graph = {
+            8: [0, 1],
+            9: [2, 3],
+            10: [4, 5],
+            11: [6, 7],
+            12: [8, 9],
+            13: [10, 11],
+            14: [12, 13],
+            15: [14],
+        }
+        for attempt in range(16):
+            current = entries[(problem_id, "multi_fidelity", attempt)]
+            eligible_attempts = expected_multifidelity_graph.get(attempt, [])
+            self.assertEqual(
+                eligible_attempts,
+                current["eligible_predecessor_attempt_indices"],
+            )
+            self.assertEqual(
+                [
+                    entries[
+                        (problem_id, "multi_fidelity", predecessor_attempt)
+                    ]["dispatch_id"]
+                    for predecessor_attempt in eligible_attempts
+                ],
+                current["eligible_predecessor_dispatch_ids"],
+            )
+            self.assertEqual(
+                "FROZEN_SUCCESSIVE_HALVING_ELIGIBLE_SET_SELECTION",
+                current["predecessor_policy"],
+            )
+            self.assertIsNone(current["selected_predecessor_attempt_index"])
+            self.assertIsNone(current["selected_predecessor_dispatch_id"])
+
 
     def test_no_post_manifest_retry_or_capacity_reallocation_exists(self) -> None:
         self.assertEqual(
