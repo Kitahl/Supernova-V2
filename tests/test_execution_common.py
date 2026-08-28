@@ -249,6 +249,8 @@ class CommonExecutionContractTests(unittest.TestCase):
             self.request(runtime_sha256="A" * 64)
         with self.assertRaises(ValueError):
             self.request(model_usage_basis="estimated_tokens")
+        with self.assertRaisesRegex(ValueError, "object"):
+            FrozenProblemRequest.from_mapping([])  # type: ignore[arg-type]
 
     def test_attempt_result_round_trip_and_request_binding(self) -> None:
         request = self.request()
@@ -296,6 +298,8 @@ class CommonExecutionContractTests(unittest.TestCase):
             self.result(request, status=AttemptStatus.NO_ANSWER, error="bad")
         with self.assertRaisesRegex(ValueError, "non-empty"):
             self.result(request, status=AttemptStatus.ERROR, error=None)
+        with self.assertRaisesRegex(ValueError, "object"):
+            AttemptResult.from_mapping([])  # type: ignore[arg-type]
 
     def test_verifier_receipt_round_trip_hashes_exact_outputs_and_binds_inputs(self) -> None:
         request = self.request()
@@ -327,6 +331,8 @@ class CommonExecutionContractTests(unittest.TestCase):
         raw["receipt_sha256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "PASS receipt"):
             LeanVerifierReceipt.from_mapping(raw)
+        with self.assertRaisesRegex(ValueError, "object"):
+            LeanVerifierReceipt.from_mapping([])  # type: ignore[arg-type]
 
     def test_only_answered_attempts_are_verifier_eligible(self) -> None:
         request = self.request()
