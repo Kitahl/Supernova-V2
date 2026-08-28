@@ -111,6 +111,7 @@ class BaselineExecutionTests(unittest.TestCase):
                 ],
             )
             return ModelAttemptObservation(
+                dispatch.entry.dispatch_id,
                 b"by\n  norm_num",
                 AttemptStatus.ANSWERED,
             )
@@ -154,6 +155,7 @@ class BaselineExecutionTests(unittest.TestCase):
                 )
             )
             return ModelAttemptObservation(
+                dispatch.entry.dispatch_id,
                 b"by\n  norm_num",
                 AttemptStatus.ANSWERED,
             )
@@ -216,6 +218,77 @@ class BaselineExecutionTests(unittest.TestCase):
             )
         self.assertEqual(0, len(self.authority.current_manifest().entries))
 
+    def test_completion_bundle_rejects_cross_manifest_substitution(self) -> None:
+        from supernova_goal1.execution.baselines import BaselineExecution
+
+        first = execute_ordinary(
+            authority=self.authority,
+            manifest=self.authority.current_manifest(),
+            request=self.request(attempt=0),
+            request_utf8=b"Prove the exact Lean theorem.",
+            model_call=lambda dispatch, *_: ModelAttemptObservation(
+                dispatch.entry.dispatch_id,
+                b"by\n  norm_num",
+                AttemptStatus.ANSWERED,
+            ),
+            verifier_call=self.passing_verifier,
+        )
+        second = execute_ordinary(
+            authority=self.authority,
+            manifest=first.manifest,
+            request=self.request(attempt=1),
+            request_utf8=b"Prove the exact Lean theorem.",
+            model_call=lambda dispatch, *_: ModelAttemptObservation(
+                dispatch.entry.dispatch_id,
+                b"by\n  norm_num",
+                AttemptStatus.ANSWERED,
+            ),
+            verifier_call=self.passing_verifier,
+        )
+        with self.assertRaisesRegex(ValueError, "manifest entry"):
+            BaselineExecution(
+                first.manifest,
+                second.completion,
+                second.cost_trace,
+            )
+
+    def test_portfolio_rejects_replayed_observation_from_prior_dispatch(self) -> None:
+        saved = {}
+
+        def model_call(dispatch, _request_utf8):
+            if "observation" not in saved:
+                saved["observation"] = ModelAttemptObservation(
+                    dispatch.entry.dispatch_id,
+                    b"by\n  norm_num",
+                    AttemptStatus.ANSWERED,
+                )
+            return saved["observation"]
+
+        first = execute_portfolio_attempt(
+            authority=self.authority,
+            manifest=self.authority.current_manifest(),
+            request=self.request(arm=Arm.PORTFOLIO, attempt=0),
+            request_utf8=b"Prove the exact Lean theorem.",
+            model_call=model_call,
+            verifier_call=self.passing_verifier,
+        )
+        second = execute_portfolio_attempt(
+            authority=self.authority,
+            manifest=first.manifest,
+            request=self.request(arm=Arm.PORTFOLIO, attempt=1),
+            request_utf8=b"Prove the exact Lean theorem.",
+            model_call=model_call,
+            verifier_call=self.passing_verifier,
+        )
+        self.assertEqual(
+            AttemptStatus.ERROR,
+            second.completion.payload.attempt_result.status,
+        )
+        self.assertIn(
+            "different dispatch",
+            second.completion.payload.attempt_result.error,
+        )
+
     def test_model_exception_becomes_signed_terminal_error(self) -> None:
         verifier_called = False
 
@@ -268,7 +341,8 @@ class BaselineExecutionTests(unittest.TestCase):
             manifest=self.authority.current_manifest(),
             request=self.request(),
             request_utf8=b"Prove the exact Lean theorem.",
-            model_call=lambda *_: ModelAttemptObservation(
+            model_call=lambda dispatch, *_: ModelAttemptObservation(
+                dispatch.entry.dispatch_id,
                 b"by\n  norm_num",
                 AttemptStatus.ANSWERED,
             ),
@@ -295,7 +369,8 @@ class BaselineExecutionTests(unittest.TestCase):
             manifest=self.authority.current_manifest(),
             request=self.request(),
             request_utf8=b"Prove the exact Lean theorem.",
-            model_call=lambda *_: ModelAttemptObservation(
+            model_call=lambda dispatch, *_: ModelAttemptObservation(
+                dispatch.entry.dispatch_id,
                 b"",
                 AttemptStatus.NO_ANSWER,
             ),
