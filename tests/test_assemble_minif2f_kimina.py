@@ -200,11 +200,13 @@ class AssembleMiniF2FKiminaTests(unittest.TestCase):
         deepseek = manifest["sources"]["deepseek_prover_v15"]
         kimina = manifest["sources"]["kimina_corrected_test"]
         self.assertEqual("2c4ba9119eef74d0d611f494261b2c5bae98c69a", deepseek["commit"])
+        self.assertIn(deepseek["commit"], deepseek["raw_url"])
         self.assertEqual(
             "d6654c88476ff14db19d57dea25bd955a240525fb52171e460f89d98f83d7dd5",
             deepseek["sha256"],
         )
         self.assertEqual("5def318348521dfc34875045a9ecddf729a2b49f", kimina["commit"])
+        self.assertIn(kimina["commit"], kimina["raw_url"])
         self.assertEqual(
             "a32985e3d44b5165fbd586f453055cd17de0d081f43d7806cbba3f321346a8c5",
             kimina["sha256"],
