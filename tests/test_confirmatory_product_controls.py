@@ -323,7 +323,8 @@ class ConfirmatoryProductControlContractTests(unittest.TestCase):
         cls.contract = load_contract()
 
     def test_checked_in_bytes_are_frozen(self) -> None:
-        canonical_lf = CONTRACT_PATH.read_bytes().replace(b"\\r\\n", b"\\n")\n        self.assertEqual(EXPECTED_GIT_BLOB_SHA1, git_blob_sha1(canonical_lf))
+        canonical_lf = CONTRACT_PATH.read_bytes().replace(b"\r\n", b"\n")
+        self.assertEqual(EXPECTED_GIT_BLOB_SHA1, git_blob_sha1(canonical_lf))
 
     def test_checked_in_contract_is_closed(self) -> None:
         validate_contract(self.contract)
