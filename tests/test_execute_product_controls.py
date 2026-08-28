@@ -16,7 +16,7 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactKind,
 )
 from supernova_goal1.contracts import Arm
-from supernova_goal1.dispatch import DispatchAuthority
+from supernova_goal1.dispatch import CompletionRecord, DispatchAuthority
 from supernova_goal1.execution.baselines import ModelAttemptObservation
 from supernova_goal1.execution.common import AttemptStatus, FrozenProblemRequest
 from supernova_goal1.execution.product_controls import (
@@ -344,6 +344,47 @@ class ProductControlExecutionTests(unittest.TestCase):
             execution.baseline.completion.payload.attempt_result.status,
         )
         self.assertIsNone(execution.emitted_product)
+
+    def test_forged_producer_signature_is_rejected_before_dispatch(self) -> None:
+        producer = self.emit_product(
+            attempt=0,
+            manifest=self.authority.current_manifest(),
+            content_utf8=b"real product",
+        )
+        product = producer.emitted_product
+        self.assertIsNotNone(product)
+        record = product.producer_completion
+        forged_record = CompletionRecord(
+            record.run_id,
+            record.dispatch_id,
+            record.entry_sha256,
+            record.payload,
+            record.verifier_public_key,
+            "0" * len(record.signature),
+        )
+        forged_product = VisibleProduct(forged_record, product.content_utf8)
+        request_utf8 = render_product_only_request(
+            self.prompt,
+            visible_products=(forged_product,),
+            retry_of_attempt=None,
+        )
+        request = self.request(
+            arm=Arm.PRODUCT_ONLY,
+            attempt=1,
+            request_utf8=request_utf8,
+        )
+        with self.assertRaisesRegex(ValueError, "signature verification failed"):
+            execute_product_only_step(
+                authority=self.authority,
+                manifest=producer.baseline.manifest,
+                request=request,
+                problem_prompt_utf8=self.prompt,
+                visible_products=(forged_product,),
+                retry_of_attempt=None,
+                model_call=lambda *_: None,
+                verifier_call=lambda *_: None,
+            )
+        self.assertEqual(1, len(self.authority.current_manifest().entries))
 
     def test_multi_fidelity_stage_binds_rank_retry_and_empty_products(self) -> None:
         stage = FidelityStage("high", 2, 0)
