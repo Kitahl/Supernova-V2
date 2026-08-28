@@ -12,14 +12,18 @@ Bootstrap the already-pinned dependency graph:
 
 ```sh
 cd runtime/lean
-lake exe cache get
+lake exe cache get-
+lake exe cache unpack
 python check_runtime.py
 ```
 
-`lake exe cache get` is an acquisition optimization; correctness comes from Lean
-checking the source under the committed toolchain and dependency manifest.
-`check_runtime.py` verifies the reported Lean version and compiles
-`SupernovaGoal1Smoke.lean` with a bounded subprocess timeout.
+The cache acquisition and unpack phases are intentionally separate. This avoids
+the downloader/decompressor path race observed on Windows when the combined
+`lake exe cache get` command processed the full Mathlib cache. Cache acquisition
+is only an optimization; correctness comes from Lean checking the source under
+the committed toolchain and dependency manifest. `check_runtime.py` verifies
+the reported Lean version and compiles `SupernovaGoal1Smoke.lean` with a
+bounded subprocess timeout.
 
 Do not run `lake update` during an experiment. Updating dependencies is an
 authority-changing maintenance operation that must produce and review a new
