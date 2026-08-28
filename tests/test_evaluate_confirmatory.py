@@ -21,7 +21,8 @@ from supernova_goal1.evidence_bridge import (
 from supernova_goal1.evaluate_confirmatory import (
     EXPECTED_PROTOCOL_RULES_SHA256,
     EXPECTED_REPORT_PROBLEM_IDS,
-    PRODUCTION_CREDIT_STATUS,
+    _CellSnapshot,
+    _evaluate_complete_snapshots,
     evaluate_confirmatory,
 )
 
@@ -151,7 +152,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         *,
         verified_success_attempt: int | None,
         control_success_attempt: int | None,
-        credit_status: str = PRODUCTION_CREDIT_STATUS,
+        credit_status: str = NON_CREDIT_DRAFT,
     ) -> tuple[EvaluatorEvidenceRecord, ...]:
         records = []
         for problem_id in EXPECTED_REPORT_PROBLEM_IDS:
@@ -173,6 +174,39 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
                     )
                 )
         return tuple(records)
+
+    def full_snapshots(
+        self,
+        *,
+        verified_success_attempt: int | None,
+        control_success_attempt: int | None,
+    ) -> tuple[_CellSnapshot, ...]:
+        snapshots = []
+        for problem_id in EXPECTED_REPORT_PROBLEM_IDS:
+            for arm in Arm:
+                attempt = (
+                    verified_success_attempt
+                    if arm is Arm.VERIFIED_CHAIN
+                    else control_success_attempt
+                )
+                statuses = [CompletionStatus.FAILED] * 16
+                if attempt is not None:
+                    statuses[attempt] = CompletionStatus.SUCCEEDED
+                snapshots.append(
+                    _CellSnapshot(
+                        problem_id,
+                        arm,
+                        tuple(statuses),
+                        CompleteCost(
+                            16,
+                            list(Arm).index(arm) + 1,
+                            list(Arm).index(arm) + 2,
+                            list(Arm).index(arm) + 3,
+                            list(Arm).index(arm) + 4,
+                        ),
+                    )
+                )
+        return tuple(snapshots)
 
     def test_public_api_rejects_raw_records(self) -> None:
         with self.assertRaisesRegex(TypeError, "exact EvidenceBridgeBundle"):
@@ -206,7 +240,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         )
         values = list(genuine)
         values[genuine._fields.index("manifest_credit_status")] = (
-            PRODUCTION_CREDIT_STATUS
+            "UNSEALED_CALLER_TOKEN"
         )
         forged = tuple.__new__(EvidenceBridgeBundle, tuple(values))
         result = evaluate_confirmatory(forged, evidence_authority=authority)
@@ -226,19 +260,14 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         )
         self.assertEqual([], malformed_result["contrasts"])
 
-    def test_complete_superiority_passes_with_unequal_realized_costs(self) -> None:
-        authority = self.authority()
-        bundle = self.bundle(
-            self.full_records(
+    def test_private_frozen_statistics_pass_with_unequal_realized_costs(self) -> None:
+        result = _evaluate_complete_snapshots(
+            self.full_snapshots(
                 verified_success_attempt=15,
                 control_success_attempt=None,
-            ),
-            credit_status=PRODUCTION_CREDIT_STATUS,
-            authority=authority,
+            )
         )
-        result = evaluate_confirmatory(bundle, evidence_authority=authority)
         self.assertEqual("PASS", result["decision"])
-        self.assertTrue(result["decision_eligible"])
         self.assertEqual(4, len(result["contrasts"]))
         self.assertTrue(all(item["contrast_pass"] for item in result["contrasts"]))
         self.assertEqual(244, result["solved"]["verified_chain"]["solved"])
@@ -267,17 +296,13 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             ]
         )
 
-    def test_zero_discordance_fails_and_holm_ties_use_control_name(self) -> None:
-        authority = self.authority()
-        bundle = self.bundle(
-            self.full_records(
+    def test_private_frozen_statistics_fail_and_holm_ties_use_control_name(self) -> None:
+        result = _evaluate_complete_snapshots(
+            self.full_snapshots(
                 verified_success_attempt=0,
                 control_success_attempt=15,
-            ),
-            credit_status=PRODUCTION_CREDIT_STATUS,
-            authority=authority,
+            )
         )
-        result = evaluate_confirmatory(bundle, evidence_authority=authority)
         self.assertEqual("FAIL", result["decision"])
         by_control = {item["control"]: item for item in result["contrasts"]}
         self.assertEqual(1.0, by_control["ordinary"]["exact_two_sided_p"])
@@ -294,7 +319,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             result["prefix_frontier"][-1]["solved"]["ordinary"]["solved"],
         )
 
-    def test_missing_cell_is_incomplete_not_fail(self) -> None:
+    def test_missing_cell_is_recorded_but_draft_priority_is_blocked(self) -> None:
         authority = self.authority()
         records = self.full_records(
             verified_success_attempt=0,
@@ -302,11 +327,13 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         )
         bundle = self.bundle(
             records[:-1],
-            credit_status=PRODUCTION_CREDIT_STATUS,
+            credit_status=NON_CREDIT_DRAFT,
             authority=authority,
         )
         result = evaluate_confirmatory(bundle, evidence_authority=authority)
-        self.assertEqual("INCOMPLETE", result["decision"])
+        self.assertEqual("BLOCKED", result["decision"])
+        self.assertIn("NON_CREDIT_DRAFT", result["blockers"])
+        self.assertIn("MISSING_PAIRED_CELLS", result["incomplete_reasons"])
         self.assertEqual([], result["contrasts"])
         self.assertEqual(1, len(result["missing"]))
 
@@ -326,13 +353,48 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         records[0] = tuple.__new__(EvaluatorEvidenceRecord, tuple(values))
         bundle = self.bundle(
             tuple(records),
-            credit_status=PRODUCTION_CREDIT_STATUS,
+            credit_status=NON_CREDIT_DRAFT,
             authority=authority,
         )
         result = evaluate_confirmatory(bundle, evidence_authority=authority)
         self.assertEqual("BLOCKED", result["decision"])
         self.assertTrue(
             any(reason.startswith("VERIFIER_TIMEOUT") for reason in result["blockers"])
+        )
+        self.assertEqual([], result["contrasts"])
+
+    def test_typed_provider_error_is_incomplete_and_never_statistical(self) -> None:
+        authority = self.authority()
+        record = self.record(
+            EXPECTED_REPORT_PROBLEM_IDS[0],
+            Arm.ORDINARY,
+            credit_status=NON_CREDIT_DRAFT,
+            statuses=(CompletionStatus.ERROR,)
+            + (CompletionStatus.FAILED,) * 15,
+        )
+        values = list(record)
+        verifier_values = list(record.verifier_evidence_sha256s)
+        verifier_values[0] = (
+            "NOT_INVOKED:" + record.completion_record_sha256s[0]
+        )
+        values[record._fields.index("verifier_evidence_sha256s")] = tuple(
+            verifier_values
+        )
+        typed_error_record = tuple.__new__(
+            EvaluatorEvidenceRecord, tuple(values)
+        )
+        bundle = self.bundle(
+            (typed_error_record,),
+            credit_status=NON_CREDIT_DRAFT,
+            authority=authority,
+        )
+        result = evaluate_confirmatory(bundle, evidence_authority=authority)
+        self.assertEqual("BLOCKED", result["decision"])
+        self.assertTrue(
+            any(
+                reason.startswith("PROVIDER_OR_MODEL_ERROR")
+                for reason in result["incomplete_reasons"]
+            )
         )
         self.assertEqual([], result["contrasts"])
 
