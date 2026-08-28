@@ -27,7 +27,7 @@
     {
       "id": "G1-121",
       "owner": "MF02",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
         "goal1/CONFIRMATORY_PROTOCOL.json",
         "tests/test_confirmatory_protocol.py"
@@ -130,7 +130,7 @@
     {
       "id": "G1-126",
       "owner": "MM02",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/CONFIRMATORY_COST_POLICY.json",
         "tests/test_confirmatory_cost_policy.py"
@@ -141,7 +141,11 @@
         "One model-usage basis applies to every arm and outcome.",
         "Every expected event must be reconciled before evaluation.",
         "Unknown or over-budget cost blocks credit rather than becoming zero."
-      ]
+      ],
+      "completion": {
+        "pull_request": 66,
+        "merge_commit": "8922f0f6aebf4b0fbd8159f4c46ce649ae73771b"
+      }
     },
     {
       "id": "G1-127",
