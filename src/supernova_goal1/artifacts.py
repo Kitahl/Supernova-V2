@@ -155,9 +155,13 @@ class ScheduledChatArtifactEnvelope(_ArtifactEnvelopeTuple):
         media_type = _media_type(media_type)
         if type(byte_length) is not int or byte_length < 0:
             raise ValueError("byte_length must be a non-negative integer")
-        sha256_hex = _token(sha256_hex, "sha256_hex").lower()
-        if len(sha256_hex) != 64 or any(ch not in "0123456789abcdef" for ch in sha256_hex):
-            raise ValueError("sha256_hex must be exactly 64 lowercase hexadecimal characters")
+        sha256_hex = _token(sha256_hex, "sha256_hex")
+        if len(sha256_hex) != 64 or any(
+            ch not in "0123456789abcdef" for ch in sha256_hex
+        ):
+            raise ValueError(
+                "sha256_hex must be exactly 64 lowercase hexadecimal characters"
+            )
         return super().__new__(
             cls,
             kind,
