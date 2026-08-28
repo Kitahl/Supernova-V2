@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
+import hmac
 import json
+from pathlib import Path
+import sqlite3
 from typing import Callable
 
 from ..contracts import Arm
@@ -214,6 +217,203 @@ class AdmittedProduct:
             "verifier_receipt_sha256": receipt.receipt_sha256,
             "verification": "LEAN_PASS",
         }
+
+
+class VerifiedChainExecutionAuthority:
+    """Host-owned persistent evidence that a step ran through this executor.
+
+    Dispatch registration authenticates identity but permits a caller-selected
+    completion key. This separate HMAC-protected ledger records completions only
+    after the trusted execution adapter returns. The model receives no database
+    path or secret.
+    """
+
+    def __init__(self, database_path: str, secret: bytes) -> None:
+        if type(database_path) is not str or not database_path:
+            raise ValueError("database_path must be a non-empty string")
+        if type(secret) is not bytes or len(secret) < 32:
+            raise ValueError("execution authority secret must be at least 32 bytes")
+        self._database_path = str(Path(database_path).resolve())
+        self._secret = bytes(secret)
+        Path(self._database_path).parent.mkdir(parents=True, exist_ok=True)
+        connection = self._connect()
+        try:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS verified_chain_executions (
+                    dispatch_id TEXT PRIMARY KEY,
+                    completion_sha256 TEXT NOT NULL,
+                    request_sha256 TEXT NOT NULL,
+                    response_artifact_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    receipt_sha256 TEXT,
+                    product_admitted INTEGER NOT NULL,
+                    evidence_tag TEXT NOT NULL
+                )
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self._database_path)
+
+    @staticmethod
+    def _record_payload(
+        completion: CompletionRecord,
+        *,
+        product_admitted: bool,
+    ) -> dict[str, object]:
+        payload = completion.payload
+        receipt = payload.verifier_receipt
+        return {
+            "completion_sha256": completion.record_sha256,
+            "dispatch_id": completion.dispatch_id,
+            "product_admitted": product_admitted,
+            "receipt_sha256": None if receipt is None else receipt.receipt_sha256,
+            "request_sha256": payload.request.frozen_request_sha256,
+            "response_artifact_id": payload.attempt_result.response_artifact.artifact_id,
+            "schema": "supernova.verified-chain-execution.v1",
+            "status": payload.attempt_result.status.value,
+        }
+
+    def _tag(self, record: dict[str, object]) -> str:
+        return hmac.new(
+            self._secret,
+            _canonical_bytes(record),
+            sha256,
+        ).hexdigest()
+
+    def _record_execution(
+        self,
+        completion: CompletionRecord,
+        *,
+        product_admitted: bool,
+    ) -> str:
+        """Private issuance seam used only after the executor has completed a step."""
+
+        if type(completion) is not CompletionRecord:
+            raise TypeError("completion must be an exact CompletionRecord")
+        if type(product_admitted) is not bool:
+            raise TypeError("product_admitted must be boolean")
+        completion = CompletionRecord.from_mapping(completion.to_mapping())
+        payload = completion.payload
+        if payload.request.arm is not Arm.VERIFIED_CHAIN:
+            raise ValueError("execution ledger accepts only verified-chain completions")
+        receipt = payload.verifier_receipt
+        if product_admitted and (
+            payload.attempt_result.status is not AttemptStatus.ANSWERED
+            or receipt is None
+            or receipt.status is not VerifierStatus.PASS
+        ):
+            raise ValueError("product admission record requires an exact Lean PASS")
+        record = self._record_payload(
+            completion,
+            product_admitted=product_admitted,
+        )
+        tag = self._tag(record)
+        row = (
+            record["dispatch_id"],
+            record["completion_sha256"],
+            record["request_sha256"],
+            record["response_artifact_id"],
+            record["status"],
+            record["receipt_sha256"],
+            1 if product_admitted else 0,
+            tag,
+        )
+        connection = self._connect()
+        try:
+            existing = connection.execute(
+                """
+                SELECT dispatch_id, completion_sha256, request_sha256,
+                       response_artifact_id, status, receipt_sha256,
+                       product_admitted, evidence_tag
+                FROM verified_chain_executions
+                WHERE dispatch_id = ?
+                """,
+                (completion.dispatch_id,),
+            ).fetchone()
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO verified_chain_executions (
+                        dispatch_id, completion_sha256, request_sha256,
+                        response_artifact_id, status, receipt_sha256,
+                        product_admitted, evidence_tag
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    row,
+                )
+                connection.commit()
+            elif tuple(existing) != row:
+                raise ValueError("execution authority already recorded different evidence")
+        finally:
+            connection.close()
+        return f"hmac-sha256:{tag}"
+
+    def _verify_record(
+        self,
+        completion: CompletionRecord,
+        *,
+        require_product_admitted: bool,
+    ) -> str:
+        if type(completion) is not CompletionRecord:
+            raise TypeError("completion must be an exact CompletionRecord")
+        completion = CompletionRecord.from_mapping(completion.to_mapping())
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT completion_sha256, request_sha256, response_artifact_id,
+                       status, receipt_sha256, product_admitted, evidence_tag
+                FROM verified_chain_executions
+                WHERE dispatch_id = ?
+                """,
+                (completion.dispatch_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            raise ValueError("completion is absent from trusted execution authority")
+        product_admitted = bool(row[5])
+        record = self._record_payload(
+            completion,
+            product_admitted=product_admitted,
+        )
+        expected = (
+            record["completion_sha256"],
+            record["request_sha256"],
+            record["response_artifact_id"],
+            record["status"],
+            record["receipt_sha256"],
+            1 if product_admitted else 0,
+        )
+        if tuple(row[:6]) != expected:
+            raise ValueError("trusted execution record does not match completion")
+        if require_product_admitted and not product_admitted:
+            raise ValueError("completion has no trusted product-admission record")
+        tag = self._tag(record)
+        if not hmac.compare_digest(row[6], tag):
+            raise ValueError("trusted execution evidence authentication failed")
+        return f"hmac-sha256:{tag}"
+
+    def verify_admitted_product(self, product: AdmittedProduct) -> str:
+        if type(product) is not AdmittedProduct:
+            raise TypeError("product must be an exact AdmittedProduct")
+        return self._verify_record(
+            product.producer_completion,
+            require_product_admitted=True,
+        )
+
+    def verify_retry(self, retry_of: RetryLink) -> str:
+        if type(retry_of) is not RetryLink:
+            raise TypeError("retry_of must be an exact RetryLink")
+        return self._verify_record(
+            retry_of.predecessor_completion,
+            require_product_admitted=False,
+        )
 
 
 class VerifiedChainObservationKind(StrEnum):
