@@ -381,33 +381,37 @@ def _pairwise_counts(
     }
 
 
-def _safe_attr(value: object, name: str) -> object:
+def _safe_text_attr(value: object, name: str) -> str:
     try:
-        return getattr(value, name)
+        candidate = getattr(value, name)
     except Exception:
         return "UNAVAILABLE"
+    return candidate if type(candidate) is str and candidate else "UNAVAILABLE"
 
 
 def _base_result(bundle: EvidenceBridgeBundle) -> dict[str, object]:
-    bridge_sha256 = _safe_attr(bundle, "bridge_sha256")
-    records = _safe_attr(bundle, "records")
+    bridge_sha256 = _safe_text_attr(bundle, "bridge_sha256")
+    try:
+        records = bundle.records
+    except Exception:
+        records = ()
     return {
         "schema": RESULT_SCHEMA,
-        "run_id": _safe_attr(bundle, "run_id"),
+        "run_id": _safe_text_attr(bundle, "run_id"),
         "experiment_id": EXPECTED_EXPERIMENT_ID,
         "bridge_sha256": bridge_sha256,
         "bridge_authority_receipt_sha256": _safe_attr(
             bundle, "authority_receipt_sha256"
         ),
-        "protocol_rules_sha256": _safe_attr(bundle, "protocol_rules_sha256"),
+        "protocol_rules_sha256": _safe_text_attr(bundle, "protocol_rules_sha256"),
         "confirmatory_manifest_sha256": _safe_attr(
             bundle, "confirmatory_manifest_sha256"
         ),
         "dispatch_manifest_sha256": _safe_attr(
             bundle, "dispatch_manifest_sha256"
         ),
-        "close_sha256": _safe_attr(bundle, "close_sha256"),
-        "completion_set_sha256": _safe_attr(bundle, "completion_set_sha256"),
+        "close_sha256": _safe_text_attr(bundle, "close_sha256"),
+        "completion_set_sha256": _safe_text_attr(bundle, "completion_set_sha256"),
         "execution_authority_sha256": _safe_attr(
             bundle, "execution_authority_sha256"
         ),
