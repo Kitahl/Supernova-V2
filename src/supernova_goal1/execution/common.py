@@ -645,6 +645,8 @@ class LeanVerifierReceipt(_LeanVerifierReceiptTuple):
         if type(verifier_result) is not VerifierResult:
             raise TypeError("verifier_result must be an exact VerifierResult")
         attempt_result.validate_for(request)
+        if attempt_result.status is not AttemptStatus.ANSWERED:
+            raise ValueError("only an ANSWERED attempt may produce a verifier receipt")
         stdout = _message(verifier_result.stdout, "verifier stdout") if verifier_result.stdout else ""
         stderr = _message(verifier_result.stderr, "verifier stderr") if verifier_result.stderr else ""
         return cls(
@@ -720,6 +722,8 @@ class LeanVerifierReceipt(_LeanVerifierReceiptTuple):
         if type(attempt_result) is not AttemptResult:
             raise TypeError("attempt_result must be an exact AttemptResult")
         attempt_result.validate_for(request)
+        if attempt_result.status is not AttemptStatus.ANSWERED:
+            raise ValueError("verifier receipt requires an ANSWERED attempt")
         expected = (
             request.frozen_request_sha256,
             attempt_result.attempt_result_sha256,
