@@ -34,7 +34,7 @@
       "model_provider_version_reasoning_mode_tools_and_generation_settings": "MUST_MATCH_ACROSS_ALL_FIVE_ARMS_EXCEPT_THE_FROZEN_MULTI_FIDELITY_VISIBLE_OUTPUT_CAP_AND_BE_BOUND_BY_THE_SHARED_CONFIRMATORY_PROTOCOL",
       "external_tools": "FORBIDDEN",
       "network_during_model_attempt": "FORBIDDEN",
-      "model_visible_input": "EXACT_BASELINE_COMMON_TEMPLATE_PLUS_EXACT_ARM_DELTA_PLUS_ONLY_THE_ARM_LOCAL_ARTIFACTS_ALLOWED_BELOW"
+      "model_visible_input": "EXACT_SHARED_PRODUCT_CHAIN_PROMPT_TEMPLATE_PLUS_ONLY_THE_ARM_LOCAL_ADMITTED_PRODUCTS_ALLOWED_BELOW"
     },
     "prompt_base_authority": {
       "path": "goal1/CONFIRMATORY_BASELINES.json",
