@@ -1,0 +1,162 @@
+{
+  "schema_version": 2,
+  "contract_id": "goal2-improver-of-improver-v2",
+  "phase": "CONTRACT_ONLY",
+  "goal": "VERIFIED_IMPROVER_OF_IMPROVER",
+  "contract_status": "DEFINITION_ONLY_NO_EXECUTION_CREDIT",
+  "requires_goal1_pass": true,
+  "hypothesis": "Under a prospectively frozen authenticated protocol, an improved improver I1 with isolated memory M1 produces a selected solver descendant that exceeds both the descendant selected from untouched improver I0 with M0 and untouched solver F on fresh independent evaluation under one matched complete R&D budget.",
+  "opening_gate": {
+    "required_contract_phase": "FROZEN",
+    "open_state": "OPEN",
+    "closed_state": "BLOCKED",
+    "required_goal1_decision": "PASS",
+    "goal1_receipt_schema": "supernova.goal1.final-pass-receipt.v1",
+    "required_goal1_payload_fields": [
+      "run_id",
+      "decision",
+      "goal1_final_report_sha256",
+      "goal1_protocol_sha256",
+      "goal1_cohort_sha256",
+      "goal1_evidence_bridge_sha256",
+      "goal1_evaluator_sha256"
+    ],
+    "receipt_authentication": "HMAC-SHA256",
+    "frozen_artifact_receipt_schema": "supernova.goal2.frozen-artifacts.v1",
+    "frozen_artifact_receipt_authentication": "HMAC-SHA256",
+    "authority_key_id": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "authority_key_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "authority_secret_is_host_owned_and_must_not_be_stored_in_repository": true,
+    "execution_ticket_rule": "NO_GOAL2_EXECUTION_TICKET_MAY OPEN UNLESS PRE_DISPATCH_ADMISSION RETURNS OPEN",
+    "pre_dispatch_admission_uses_only_prospectively_available_evidence": true,
+    "post_run_evidence_admission_is_separate": true,
+    "invalid_phase_receipt_signature_run_or_digest_decision": "BLOCKED"
+  },
+  "components": {
+    "required_roles": ["solver_F", "memory_M0", "improver_I0", "memory_M1", "improver_I1"],
+    "frozen_source_roles": ["solver_F", "memory_M0", "improver_I0"],
+    "source_component_manifest_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "required_identity_fields": ["component_id", "artifact_sha256", "runtime_or_schema_sha256"],
+    "component_ids_must_be_distinct": true,
+    "component_artifact_sha256_values_must_be_distinct": true,
+    "all_components_must_be_frozen_before_open": true,
+    "pristine_solver_parent_must_match_both_arms": true,
+    "arm_lineage_schema": "supernova.goal2.arm-lineage.v1",
+    "arm_lineage_authentication": "HMAC-SHA256",
+    "control_must_use_exact_I0_and_M0": true,
+    "treatment_must_start_with_exact_I0_and_M0": true,
+    "treatment_I1_and_M1_ids_and_artifacts_must_be_new_and_distinct": true,
+    "arm_lineage_must_bind_component_ids_and_artifact_sha256_values": true,
+    "control_and_treatment_descendant_hashes_must_differ_from_parent_and_each_other": true,
+    "missing_mixed_aliased_or_unauthenticated_component_decision": "BLOCKED"
+  },
+  "complete_r_and_d_cost": {
+    "must_be_frozen_before_open": true,
+    "model_usage_basis": "visible_utf8_bytes",
+    "required_dimensions": [
+      "model_calls",
+      "input_utf8_bytes",
+      "output_utf8_bytes",
+      "verifier_milliseconds",
+      "orchestration_milliseconds"
+    ],
+    "visible_utf8_bytes_are_an_observable_proxy_not_tokens_or_physical_compute": true,
+    "describing_visible_utf8_bytes_as_tokens_or_physical_compute_is_forbidden": true,
+    "budget_id": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "budget_manifest_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "control_and_treatment_ceiling_must_be_identical": true,
+    "budget_ceiling_by_dimension": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "cost_ledger_schema": "supernova.goal2.cost-ledger.v1",
+    "cost_ledger_authentication": "HMAC-SHA256",
+    "event_ids_must_be_globally_disjoint_across_arms": true,
+    "observed_event_kind_must_match_frozen_expected_event_kind": true,
+    "zero_usage_is_allowed_only_when_the_frozen_event_kind_explicitly_allows_it": true,
+    "expected_event_records_by_arm": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "allowed_event_kinds": {
+      "scheduled_chat": {
+        "model_calls": 1,
+        "requires_nonempty_request_and_terminal_response_artifact": true,
+        "input_and_output_utf8_bytes_must_be_positive_and_match_signed_measurement": true
+      },
+      "deterministic_selection": {
+        "model_calls": 0,
+        "model_utf8_bytes": 0,
+        "requires_command_and_result_artifact": true,
+        "orchestration_milliseconds_must_be_positive": true
+      }
+    },
+    "per_arm_expected_and_observed_event_ids_must_match_exactly": true,
+    "failed_and_meta_attempt_event_ids_must_be_preregistered": true,
+    "telemetry_must_be_complete": true,
+    "unobserved_cost_may_not_be_imputed_as_zero": true,
+    "missing_replaced_malformed_unmatched_or_incomplete_cost_decision": "BLOCKED"
+  },
+  "selection_and_sealing": {
+    "selection_rule_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "selection_ledger_schema": "supernova.goal2.selection-ledger.v1",
+    "selection_ledger_authentication": "HMAC-SHA256",
+    "candidate_set_manifest_sha256_must_be_preregistered_per_arm": true,
+    "candidate_set_manifest_sha256_by_arm": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "exactly_one_selected_descendant_per_control_and_treatment": true,
+    "selected_descendants_must_match_authenticated_arm_lineage": true,
+    "selection_ledger_seal_sequence_must_be_a_nonnegative_integer": true,
+    "post_release_candidate_rule_ledger_or_descendant_substitution_forbidden": true,
+    "missing_mixed_forged_or_reordered_selection_decision": "BLOCKED"
+  },
+  "fresh_evaluation": {
+    "evaluation_receipt_schema": "supernova.goal2.evaluation-release.v1",
+    "evaluation_receipt_authentication": "HMAC-SHA256",
+    "evaluator_authority_key_id": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "evaluator_authority_key_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "evaluator_authority_must_be_distinct_from_r_and_d_authority": true,
+    "evaluation_manifest_sha256_must_be_frozen_and_content_addressed": true,
+    "evaluation_manifest_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "evaluation_items_must_be_disjoint_from_all_r_and_d_and_meta_improvement_data": true,
+    "independent_evaluation_authority_required": true,
+    "same_items_runtime_verifier_and_scoring_for_all_three_arms": true,
+    "untouched_solver_outcome_required": true,
+    "evaluation_release_sequence_must_exceed_both_selection_ledger_seal_sequences": true,
+    "missing_mixed_leaked_forged_nonindependent_or_early_evaluation_decision": "BLOCKED"
+  },
+  "effect_target": {
+    "metric_id": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "direction": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "control_margin": "MUST_BE_NUMERIC_AND_FROZEN_BEFORE_OPEN",
+    "untouched_margin": "MUST_BE_NUMERIC_AND_FROZEN_BEFORE_OPEN",
+    "sampling_unit": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "clustering_rule": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "analysis_plan_sha256": "MUST_BE_FROZEN_BEFORE_OPEN"
+  },
+  "decision_priority": ["BLOCKED", "INCOMPLETE", "PASS", "FAIL"],
+  "decision_rules": {
+    "BLOCKED": {
+      "when_any": [
+        "contract phase is not FROZEN",
+        "Goal 1 receipt or any downstream authority receipt is missing forged or substituted",
+        "F M I lineage or selected descendants are missing mixed aliased or inconsistent",
+        "budget identity dimensions event ledgers or telemetry are missing malformed replaced or incomplete",
+        "selection ledgers are forged changed or not sealed before evaluation release",
+        "fresh evaluation is leaked nonindependent forged early or omits untouched F",
+        "effect target is not completely frozen"
+      ],
+      "scientific_credit": false
+    },
+    "INCOMPLETE": {
+      "when_all": ["opening gate was OPEN", "no BLOCKED condition exists", "a required sealed outcome is pending"],
+      "scientific_credit": false
+    },
+    "PASS": {
+      "when_all": [
+        "opening gate was OPEN",
+        "no BLOCKED or INCOMPLETE condition exists",
+        "treatment exceeds control by the frozen control margin in the frozen direction",
+        "treatment exceeds untouched F by the frozen untouched margin in the frozen direction"
+      ],
+      "scientific_credit": true
+    },
+    "FAIL": {
+      "when_all": ["opening gate was OPEN", "no BLOCKED or INCOMPLETE condition exists", "the complete result misses either frozen superiority criterion"],
+      "scientific_credit": true
+    }
+  }
+}
