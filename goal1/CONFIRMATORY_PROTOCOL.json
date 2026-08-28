@@ -1,0 +1,2664 @@
+{
+  "schema_version": 1,
+  "protocol_id": "goal1-confirmatory-protocol-rules-v1",
+  "protocol_rules_status": "SEALED",
+  "confirmatory_execution_status": "BLOCKED_NO_EXECUTION_AUTHORITY",
+  "scientific_credit": "NONE_UNTIL_AN_ADMISSIBLE_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_SEALED_AND_ONE_COMPLETE_COHORT_IS_EVALUATED",
+  "canonicalization": "RFC8785_COMPATIBLE_UTF8_SORTED_KEYS_NO_INSIGNIFICANT_WHITESPACE_FOR_THIS_ASCII_DOMAIN",
+  "sealed_rules": {
+    "schema": "supernova.confirmatory-protocol-rules.v1",
+    "frozen_authorities": {
+      "benchmark": {
+        "path": "goal1/CONFIRMATORY_BENCHMARK.json",
+        "git_blob_sha1": "ade21f86d9566ce863ac09acd4c9103a48080ef4",
+        "freeze_id": "goal1-confirmatory-benchmark-v1"
+      },
+      "runtime": {
+        "path": "goal1/CONFIRMATORY_RUNTIME.json",
+        "git_blob_sha1": "1fa7caeefdf3c01cea5603f4865c2f9eec11a0fb",
+        "runtime_id": "goal1-confirmatory-lean-runtime-v1"
+      },
+      "baselines": {
+        "path": "goal1/CONFIRMATORY_BASELINES.json",
+        "git_blob_sha1": "2ab23d89b22dd7c21963da1e3543bf2dc0e39193"
+      },
+      "product_controls": {
+        "path": "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json",
+        "git_blob_sha1": "ab2b298e29022f931ec141bdba50485b0967ad3f",
+        "shared_surface_projection_sha256": "f68045d4d9554b0639b4abae86658c6bacee3f29ef1cc4b5c4f5deac7b654ed7"
+      },
+      "verified_chain": {
+        "path": "goal1/CONFIRMATORY_VERIFIED_CHAIN.json",
+        "git_blob_sha1": "089592344a85509c5a587f2d77d37d3b7c825061"
+      },
+      "cost_policy": {
+        "path": "goal1/CONFIRMATORY_COST_POLICY.json",
+        "git_blob_sha1": "5659b1a6c2318c8ea16e4c609e29e2c8f9d86ec5"
+      }
+    },
+    "benchmark_selection": {
+      "benchmark_root_sha256": "914c05427e1e7e0979f4ca058f90fb3138ee0d3319233b415194c10e67d3683b",
+      "development_split": {
+        "source": "validation",
+        "count": 244,
+        "problem_ids": [
+          "aimeII_2001_p3",
+          "aimeII_2020_p6",
+          "aimeI_2000_p7",
+          "aime_1983_p9",
+          "aime_1984_p15",
+          "aime_1984_p5",
+          "aime_1987_p8",
+          "aime_1988_p3",
+          "aime_1988_p4",
+          "aime_1990_p2",
+          "aime_1991_p1",
+          "aime_1991_p6",
+          "aime_1994_p4",
+          "aime_1996_p5",
+          "aime_1997_p11",
+          "algebra_2complexrootspoly_xsqp49eqxp7itxpn7i",
+          "algebra_2rootsintpoly_am10tap11eqasqpam110",
+          "algebra_2rootspoly_apatapbeq2asqp2ab",
+          "algebra_2varlineareq_xpeeq7_2xpeeq3_eeq11_xeqn4",
+          "algebra_3rootspoly_amdtamctambeqnasqmbpctapcbtdpasqmbpctapcbta",
+          "algebra_amgm_faxinrrp2msqrt2geq2mxm1div2x",
+          "algebra_amgm_prod1toneq1_sum1tongeqn",
+          "algebra_amgm_sqrtxymulxmyeqxpy_xpygeq4",
+          "algebra_amgm_sumasqdivbsqgeqsumbdiva",
+          "algebra_apb4leq8ta4pb4",
+          "algebra_binomnegdiscrineq_10alt28asqp1",
+          "algebra_manipexpr_2erprsqpesqeqnrpnesq",
+          "algebra_manipexpr_apbeq2cceqiacpbceqm2",
+          "algebra_sqineq_2at2pclta2c2p41pc",
+          "algebra_sqineq_2unitcircatblt1",
+          "algebra_sqineq_36azm9asqle36zsq",
+          "algebra_sqineq_4bap1lt4bsqpap1sq",
+          "algebra_xmysqpymzsqpzmxsqeqxyz_xpypzp6dvdx3y3z3",
+          "amc12_2000_p11",
+          "amc12_2000_p15",
+          "amc12_2000_p5",
+          "amc12_2001_p2",
+          "amc12_2001_p9",
+          "amc12a_2002_p1",
+          "amc12a_2002_p12",
+          "amc12a_2002_p21",
+          "amc12a_2003_p1",
+          "amc12a_2003_p24",
+          "amc12a_2003_p25",
+          "amc12a_2008_p15",
+          "amc12a_2008_p2",
+          "amc12a_2008_p4",
+          "amc12a_2008_p8",
+          "amc12a_2009_p15",
+          "amc12a_2009_p2",
+          "amc12a_2009_p25",
+          "amc12a_2009_p5",
+          "amc12a_2009_p9",
+          "amc12a_2010_p10",
+          "amc12a_2010_p11",
+          "amc12a_2010_p22",
+          "amc12a_2011_p18",
+          "amc12a_2013_p7",
+          "amc12a_2013_p8",
+          "amc12a_2015_p10",
+          "amc12a_2016_p2",
+          "amc12a_2016_p3",
+          "amc12a_2017_p2",
+          "amc12a_2017_p7",
+          "amc12a_2019_p21",
+          "amc12a_2019_p9",
+          "amc12a_2020_p13",
+          "amc12a_2020_p21",
+          "amc12a_2021_p7",
+          "amc12b_2002_p11",
+          "amc12b_2002_p3",
+          "amc12b_2002_p6",
+          "amc12b_2003_p17",
+          "amc12b_2003_p6",
+          "amc12b_2003_p9",
+          "amc12b_2004_p3",
+          "amc12b_2020_p5",
+          "amc12b_2021_p21",
+          "imo_1961_p1",
+          "imo_1962_p4",
+          "imo_1964_p1_1",
+          "imo_1964_p1_2",
+          "imo_1965_p1",
+          "imo_1966_p4",
+          "imo_1966_p5",
+          "imo_1967_p3",
+          "imo_1973_p3",
+          "imo_1974_p5",
+          "imo_1977_p5",
+          "imo_1978_p5",
+          "imo_1979_p1",
+          "imo_1984_p2",
+          "imo_1987_p4",
+          "imo_1987_p6",
+          "imo_1988_p6",
+          "imo_1990_p3",
+          "imo_1993_p5",
+          "imo_2006_p3",
+          "induction_divisibility_3div2tooddnp1",
+          "induction_divisibility_3divnto3m2n",
+          "induction_divisibility_9div10tonm1",
+          "induction_ineq_nsqlefactn",
+          "induction_seq_mul2pnp1",
+          "induction_sum2kp1npqsqm1",
+          "induction_sum_1oktkp1",
+          "induction_sum_odd",
+          "mathd_algebra_10",
+          "mathd_algebra_101",
+          "mathd_algebra_104",
+          "mathd_algebra_109",
+          "mathd_algebra_11",
+          "mathd_algebra_110",
+          "mathd_algebra_116",
+          "mathd_algebra_119",
+          "mathd_algebra_123",
+          "mathd_algebra_126",
+          "mathd_algebra_13",
+          "mathd_algebra_131",
+          "mathd_algebra_132",
+          "mathd_algebra_140",
+          "mathd_algebra_144",
+          "mathd_algebra_149",
+          "mathd_algebra_15",
+          "mathd_algebra_151",
+          "mathd_algebra_159",
+          "mathd_algebra_181",
+          "mathd_algebra_182",
+          "mathd_algebra_185",
+          "mathd_algebra_190",
+          "mathd_algebra_192",
+          "mathd_algebra_206",
+          "mathd_algebra_214",
+          "mathd_algebra_22",
+          "mathd_algebra_224",
+          "mathd_algebra_234",
+          "mathd_algebra_245",
+          "mathd_algebra_247",
+          "mathd_algebra_251",
+          "mathd_algebra_267",
+          "mathd_algebra_28",
+          "mathd_algebra_282",
+          "mathd_algebra_31",
+          "mathd_algebra_323",
+          "mathd_algebra_327",
+          "mathd_algebra_35",
+          "mathd_algebra_37",
+          "mathd_algebra_393",
+          "mathd_algebra_405",
+          "mathd_algebra_410",
+          "mathd_algebra_421",
+          "mathd_algebra_422",
+          "mathd_algebra_43",
+          "mathd_algebra_433",
+          "mathd_algebra_437",
+          "mathd_algebra_451",
+          "mathd_algebra_455",
+          "mathd_algebra_462",
+          "mathd_algebra_48",
+          "mathd_algebra_480",
+          "mathd_algebra_482",
+          "mathd_algebra_493",
+          "mathd_algebra_509",
+          "mathd_algebra_51",
+          "mathd_algebra_510",
+          "mathd_algebra_536",
+          "mathd_algebra_547",
+          "mathd_algebra_55",
+          "mathd_algebra_568",
+          "mathd_algebra_59",
+          "mathd_algebra_616",
+          "mathd_algebra_67",
+          "mathd_algebra_69",
+          "mathd_algebra_73",
+          "mathd_algebra_77",
+          "mathd_algebra_89",
+          "mathd_algebra_96",
+          "mathd_numbertheory_101",
+          "mathd_numbertheory_102",
+          "mathd_numbertheory_109",
+          "mathd_numbertheory_110",
+          "mathd_numbertheory_126",
+          "mathd_numbertheory_13",
+          "mathd_numbertheory_132",
+          "mathd_numbertheory_136",
+          "mathd_numbertheory_149",
+          "mathd_numbertheory_155",
+          "mathd_numbertheory_156",
+          "mathd_numbertheory_169",
+          "mathd_numbertheory_188",
+          "mathd_numbertheory_198",
+          "mathd_numbertheory_200",
+          "mathd_numbertheory_202",
+          "mathd_numbertheory_211",
+          "mathd_numbertheory_22",
+          "mathd_numbertheory_221",
+          "mathd_numbertheory_232",
+          "mathd_numbertheory_236",
+          "mathd_numbertheory_24",
+          "mathd_numbertheory_252",
+          "mathd_numbertheory_257",
+          "mathd_numbertheory_269",
+          "mathd_numbertheory_284",
+          "mathd_numbertheory_30",
+          "mathd_numbertheory_301",
+          "mathd_numbertheory_303",
+          "mathd_numbertheory_32",
+          "mathd_numbertheory_326",
+          "mathd_numbertheory_33",
+          "mathd_numbertheory_335",
+          "mathd_numbertheory_35",
+          "mathd_numbertheory_37",
+          "mathd_numbertheory_370",
+          "mathd_numbertheory_403",
+          "mathd_numbertheory_405",
+          "mathd_numbertheory_412",
+          "mathd_numbertheory_42",
+          "mathd_numbertheory_43",
+          "mathd_numbertheory_45",
+          "mathd_numbertheory_458",
+          "mathd_numbertheory_461",
+          "mathd_numbertheory_466",
+          "mathd_numbertheory_48",
+          "mathd_numbertheory_530",
+          "mathd_numbertheory_543",
+          "mathd_numbertheory_629",
+          "mathd_numbertheory_64",
+          "mathd_numbertheory_640",
+          "mathd_numbertheory_668",
+          "mathd_numbertheory_690",
+          "mathd_numbertheory_709",
+          "mathd_numbertheory_739",
+          "mathd_numbertheory_780",
+          "mathd_numbertheory_81",
+          "mathd_numbertheory_84",
+          "mathd_numbertheory_92",
+          "mathd_numbertheory_961",
+          "numbertheory_2dvd4expn",
+          "numbertheory_aneqprodakp4_anmsqrtanp1eq2",
+          "numbertheory_nckeqnm1ckpnm1ckm1",
+          "numbertheory_prmdvsneqnsqmodpeq0",
+          "numbertheory_sqmod3in01d",
+          "numbertheory_sqmod4in01d",
+          "numbertheory_sumkmulnckeqnmul2pownm1",
+          "numbertheory_xsqpysqintdenomeq"
+        ]
+      },
+      "report_split": {
+        "source": "test",
+        "count": 244,
+        "problem_ids": [
+          "aime_1983_p1",
+          "aime_1983_p2",
+          "aime_1983_p3",
+          "aime_1984_p1",
+          "aime_1984_p7",
+          "aime_1987_p5",
+          "aime_1988_p8",
+          "aime_1989_p8",
+          "aime_1990_p15",
+          "aime_1990_p4",
+          "aime_1991_p9",
+          "aime_1994_p3",
+          "aime_1995_p7",
+          "aime_1997_p9",
+          "aime_1999_p11",
+          "algebra_2varlineareq_fp3zeq11_3tfm1m5zeqn68_feqn10_zeq7",
+          "algebra_9onxpypzleqsum2onxpy",
+          "algebra_abpbcpcageq3_sumaonsqrtapbgeq3onsqrt2",
+          "algebra_absapbon1pabsapbleqsumabsaon1pabsa",
+          "algebra_absxm1pabsxpabsxp1eqxp2_0leqxleq1",
+          "algebra_amgm_sum1toneqn_prod1tonleq1",
+          "algebra_amgm_sumasqdivbgeqsuma",
+          "algebra_apbmpcneq0_aeq0anbeq0anceq0",
+          "algebra_apbon2pownleqapownpbpowon2",
+          "algebra_apbpceq2_abpbcpcaeq1_aleq1on3anbleq1ancleq4on3",
+          "algebra_bleqa_apbon2msqrtableqambsqon8b",
+          "algebra_cubrtrp1oncubrtreq3_rcubp1onrcubeq5778",
+          "algebra_ineq_nto1onlt2m1on",
+          "algebra_others_exirrpowirrrat",
+          "algebra_sqineq_at2malt1",
+          "algebra_sqineq_unitcircatbpabsamblt1",
+          "algebra_sqineq_unitcircatbpamblt1",
+          "algebra_sum1onsqrt2to1onsqrt10000lt198",
+          "amc12_2000_p1",
+          "amc12_2000_p12",
+          "amc12_2000_p20",
+          "amc12_2000_p6",
+          "amc12_2001_p21",
+          "amc12_2001_p5",
+          "amc12a_2002_p13",
+          "amc12a_2002_p6",
+          "amc12a_2003_p23",
+          "amc12a_2003_p5",
+          "amc12a_2008_p25",
+          "amc12a_2009_p6",
+          "amc12a_2009_p7",
+          "amc12a_2013_p4",
+          "amc12a_2019_p12",
+          "amc12a_2020_p10",
+          "amc12a_2020_p15",
+          "amc12a_2020_p25",
+          "amc12a_2020_p4",
+          "amc12a_2020_p7",
+          "amc12a_2020_p9",
+          "amc12a_2021_p12",
+          "amc12a_2021_p14",
+          "amc12a_2021_p18",
+          "amc12a_2021_p19",
+          "amc12a_2021_p22",
+          "amc12a_2021_p25",
+          "amc12a_2021_p3",
+          "amc12a_2021_p8",
+          "amc12a_2021_p9",
+          "amc12b_2002_p19",
+          "amc12b_2002_p2",
+          "amc12b_2002_p4",
+          "amc12b_2002_p7",
+          "amc12b_2020_p13",
+          "amc12b_2020_p2",
+          "amc12b_2020_p21",
+          "amc12b_2020_p22",
+          "amc12b_2020_p6",
+          "amc12b_2021_p1",
+          "amc12b_2021_p13",
+          "amc12b_2021_p18",
+          "amc12b_2021_p3",
+          "amc12b_2021_p4",
+          "amc12b_2021_p9",
+          "imo_1959_p1",
+          "imo_1960_p2",
+          "imo_1962_p2",
+          "imo_1963_p5",
+          "imo_1964_p2",
+          "imo_1965_p2",
+          "imo_1968_p5_1",
+          "imo_1969_p2",
+          "imo_1974_p3",
+          "imo_1977_p6",
+          "imo_1981_p6",
+          "imo_1982_p1",
+          "imo_1983_p6",
+          "imo_1984_p6",
+          "imo_1985_p6",
+          "imo_1992_p1",
+          "imo_1997_p5",
+          "imo_2001_p6",
+          "imo_2019_p1",
+          "imosl_2007_algebra_p6",
+          "induction_11div10tonmn1ton",
+          "induction_12dvd4expnp1p20",
+          "induction_1pxpownlt1pnx",
+          "induction_nfactltnexpnm1ngt3",
+          "induction_pord1p1on2powklt5on2",
+          "induction_pprime_pdvdapowpma",
+          "induction_prod1p1onk3le3m1onn",
+          "induction_sumkexp3eqsumksq",
+          "mathd_algebra_107",
+          "mathd_algebra_113",
+          "mathd_algebra_114",
+          "mathd_algebra_125",
+          "mathd_algebra_129",
+          "mathd_algebra_137",
+          "mathd_algebra_139",
+          "mathd_algebra_141",
+          "mathd_algebra_142",
+          "mathd_algebra_143",
+          "mathd_algebra_148",
+          "mathd_algebra_153",
+          "mathd_algebra_156",
+          "mathd_algebra_158",
+          "mathd_algebra_160",
+          "mathd_algebra_17",
+          "mathd_algebra_170",
+          "mathd_algebra_171",
+          "mathd_algebra_176",
+          "mathd_algebra_184",
+          "mathd_algebra_188",
+          "mathd_algebra_196",
+          "mathd_algebra_208",
+          "mathd_algebra_209",
+          "mathd_algebra_215",
+          "mathd_algebra_24",
+          "mathd_algebra_246",
+          "mathd_algebra_263",
+          "mathd_algebra_270",
+          "mathd_algebra_275",
+          "mathd_algebra_276",
+          "mathd_algebra_288",
+          "mathd_algebra_289",
+          "mathd_algebra_293",
+          "mathd_algebra_296",
+          "mathd_algebra_302",
+          "mathd_algebra_304",
+          "mathd_algebra_313",
+          "mathd_algebra_314",
+          "mathd_algebra_320",
+          "mathd_algebra_329",
+          "mathd_algebra_33",
+          "mathd_algebra_332",
+          "mathd_algebra_338",
+          "mathd_algebra_342",
+          "mathd_algebra_346",
+          "mathd_algebra_354",
+          "mathd_algebra_359",
+          "mathd_algebra_362",
+          "mathd_algebra_388",
+          "mathd_algebra_392",
+          "mathd_algebra_398",
+          "mathd_algebra_400",
+          "mathd_algebra_412",
+          "mathd_algebra_419",
+          "mathd_algebra_427",
+          "mathd_algebra_432",
+          "mathd_algebra_44",
+          "mathd_algebra_440",
+          "mathd_algebra_441",
+          "mathd_algebra_452",
+          "mathd_algebra_459",
+          "mathd_algebra_478",
+          "mathd_algebra_484",
+          "mathd_algebra_487",
+          "mathd_algebra_513",
+          "mathd_algebra_598",
+          "mathd_algebra_756",
+          "mathd_algebra_76",
+          "mathd_algebra_80",
+          "mathd_numbertheory_100",
+          "mathd_numbertheory_1124",
+          "mathd_numbertheory_12",
+          "mathd_numbertheory_127",
+          "mathd_numbertheory_135",
+          "mathd_numbertheory_150",
+          "mathd_numbertheory_175",
+          "mathd_numbertheory_185",
+          "mathd_numbertheory_207",
+          "mathd_numbertheory_212",
+          "mathd_numbertheory_222",
+          "mathd_numbertheory_227",
+          "mathd_numbertheory_229",
+          "mathd_numbertheory_233",
+          "mathd_numbertheory_234",
+          "mathd_numbertheory_235",
+          "mathd_numbertheory_237",
+          "mathd_numbertheory_239",
+          "mathd_numbertheory_247",
+          "mathd_numbertheory_254",
+          "mathd_numbertheory_277",
+          "mathd_numbertheory_293",
+          "mathd_numbertheory_296",
+          "mathd_numbertheory_299",
+          "mathd_numbertheory_3",
+          "mathd_numbertheory_314",
+          "mathd_numbertheory_320",
+          "mathd_numbertheory_321",
+          "mathd_numbertheory_328",
+          "mathd_numbertheory_34",
+          "mathd_numbertheory_341",
+          "mathd_numbertheory_342",
+          "mathd_numbertheory_343",
+          "mathd_numbertheory_345",
+          "mathd_numbertheory_353",
+          "mathd_numbertheory_427",
+          "mathd_numbertheory_430",
+          "mathd_numbertheory_435",
+          "mathd_numbertheory_447",
+          "mathd_numbertheory_451",
+          "mathd_numbertheory_457",
+          "mathd_numbertheory_483",
+          "mathd_numbertheory_495",
+          "mathd_numbertheory_5",
+          "mathd_numbertheory_517",
+          "mathd_numbertheory_521",
+          "mathd_numbertheory_541",
+          "mathd_numbertheory_551",
+          "mathd_numbertheory_552",
+          "mathd_numbertheory_559",
+          "mathd_numbertheory_582",
+          "mathd_numbertheory_618",
+          "mathd_numbertheory_66",
+          "mathd_numbertheory_711",
+          "mathd_numbertheory_728",
+          "mathd_numbertheory_764",
+          "mathd_numbertheory_765",
+          "mathd_numbertheory_769",
+          "mathd_numbertheory_85",
+          "mathd_numbertheory_99",
+          "numbertheory_2pownm1prime_nprime",
+          "numbertheory_3pow2pownm1mod2pownp3eq2pownp2",
+          "numbertheory_4x3m7y3neq2003",
+          "numbertheory_aoddbdiv4asqpbsqmod8eq1",
+          "numbertheory_exk2powkeqapb2mulbpa2_aeq1",
+          "numbertheory_fxeq4powxp6powxp9powx_f2powmdvdf2pown",
+          "numbertheory_notequiv2i2jasqbsqdiv8",
+          "numbertheory_x5neqy2p4"
+        ]
+      },
+      "selection_rule": "SELECT_ALL_ELIGIBLE_LOCKED_RECORDS_SORTED_BY_UNICODE_CODE_POINT",
+      "selection_time": "BEFORE_EXECUTION_AUTHORITY_MANIFEST_OR_ANY_REPORT_DISPATCH",
+      "development_use": "PROMPT_AND_PIPELINE_DEVELOPMENT_ONLY",
+      "report_use": "ONE_SHOT_CONFIRMATORY_REPORT_ONLY",
+      "report_problem_bytes_release": "ONLY_AFTER_PROTOCOL_RULES_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_ALL_SEALED",
+      "post_selection_add_drop_replace_or_reorder": "BLOCKED"
+    },
+    "family_design": {
+      "family_rule_id": "source-problem-id-sha256-v1",
+      "rule": "FAMILY_ID_IS_PREFIX_sf1_DASH_PLUS_SHA256_OF_ASCII_supernova.source-problem-family.v1_NUL_PLUS_EXACT_FROZEN_PROBLEM_ID",
+      "operational_basis": "ONE_LOCKED_MINIF2F_SOURCE_PROBLEM_ID_AFTER_THE_BENCHMARK_FREEZE_DUPLICATE_CHECKS",
+      "development_problem_family_map": [
+        {
+          "problem_id": "aimeII_2001_p3",
+          "family_id": "sf1-aa4c2ed09d63768c2da8da22db0d5a37bdf29ad3067c09e3833b3db925dddf6f"
+        },
+        {
+          "problem_id": "aimeII_2020_p6",
+          "family_id": "sf1-6bc856cfab3eaa1e098e5f3d68d64eec65af13fcbb25295f8f978e404df24d40"
+        },
+        {
+          "problem_id": "aimeI_2000_p7",
+          "family_id": "sf1-bcab48fe46ad7273dcf52585f805ecece124d8d6211bffb35c696b4cba26f221"
+        },
+        {
+          "problem_id": "aime_1983_p9",
+          "family_id": "sf1-fd9ba640eb1196c087e6d60d1f5425687a886f509ee5c58999d902fb5ff640a9"
+        },
+        {
+          "problem_id": "aime_1984_p15",
+          "family_id": "sf1-4567c2127ce3198ee0d8ccb514f1444e11aabdc8096d9c3a4f933b4627415b61"
+        },
+        {
+          "problem_id": "aime_1984_p5",
+          "family_id": "sf1-d564334ad1a34e82c4554842344c96a5165e7d3ead49bc03b627ff7aecd1f74d"
+        },
+        {
+          "problem_id": "aime_1987_p8",
+          "family_id": "sf1-a2d4f391005a76d15ca9901421111199602433a7c01f3deff133bed088fab7ab"
+        },
+        {
+          "problem_id": "aime_1988_p3",
+          "family_id": "sf1-5501f7b6a4ecc94d5bf4f9a8b19aef27869eacf75e12776fb0c968b36c69c8ba"
+        },
+        {
+          "problem_id": "aime_1988_p4",
+          "family_id": "sf1-3008b65a1a023b98f2b8d878c7c68864ea27e0d43ec9c68dc9c79c5da8c75ad1"
+        },
+        {
+          "problem_id": "aime_1990_p2",
+          "family_id": "sf1-0a59879176177ad86ca4d3945db590970e35acaa4e37de36a70557d46ca3a1bb"
+        },
+        {
+          "problem_id": "aime_1991_p1",
+          "family_id": "sf1-745a851bd4f143db00a90f8f5b983523cac3373c8128fae2066f1d9a5ce5b1d5"
+        },
+        {
+          "problem_id": "aime_1991_p6",
+          "family_id": "sf1-3fe887f7764733e4b18af388cc816d3f763048fecae0200abdfcd26b732ce161"
+        },
+        {
+          "problem_id": "aime_1994_p4",
+          "family_id": "sf1-a29002aaa3cab20ba41a945751111b3df0f8573d4eab588b2013311abcc5f030"
+        },
+        {
+          "problem_id": "aime_1996_p5",
+          "family_id": "sf1-01ce30698607a893f9bacb74e12257269afbca05b292dbce7bc87cd5f31b161b"
+        },
+        {
+          "problem_id": "aime_1997_p11",
+          "family_id": "sf1-1d3a375502a9ebc41c4e73ad86e766fee06ff247e5f9d1fad904d832ef0c8381"
+        },
+        {
+          "problem_id": "algebra_2complexrootspoly_xsqp49eqxp7itxpn7i",
+          "family_id": "sf1-d42abaaffc3cc8a93e234c3fc6698640094bb1208bf08da4d95dc8d4f5c0d012"
+        },
+        {
+          "problem_id": "algebra_2rootsintpoly_am10tap11eqasqpam110",
+          "family_id": "sf1-ecaed71f5c1aa9c37fb0e6307ac18dd5bca3c9761e0c2b74c9e8eef8a32ae66a"
+        },
+        {
+          "problem_id": "algebra_2rootspoly_apatapbeq2asqp2ab",
+          "family_id": "sf1-988c6dfaf16167fd9b14aab4a52e1bb3b75645fb7d31c5b19b6f45a4aba6a1f5"
+        },
+        {
+          "problem_id": "algebra_2varlineareq_xpeeq7_2xpeeq3_eeq11_xeqn4",
+          "family_id": "sf1-8c140cc592d8be22143941332cf4388ad774dca230ef23b63b8409afe5bccc1e"
+        },
+        {
+          "problem_id": "algebra_3rootspoly_amdtamctambeqnasqmbpctapcbtdpasqmbpctapcbta",
+          "family_id": "sf1-90e64c13bbadf2779fd043dc7545cf658216e25413e6446504865e8a099d2905"
+        },
+        {
+          "problem_id": "algebra_amgm_faxinrrp2msqrt2geq2mxm1div2x",
+          "family_id": "sf1-e9ffe3f753d77e594641df2400283471157c8713eb52c81450c80b992d76df81"
+        },
+        {
+          "problem_id": "algebra_amgm_prod1toneq1_sum1tongeqn",
+          "family_id": "sf1-a3f72fb932c8c6b0533424f69e3af6b30c62c0660eacc000fa29f56ab64b0f54"
+        },
+        {
+          "problem_id": "algebra_amgm_sqrtxymulxmyeqxpy_xpygeq4",
+          "family_id": "sf1-abf440288e12ecd9b827f548702f3bee64be97a4dac055c801c20066467d9632"
+        },
+        {
+          "problem_id": "algebra_amgm_sumasqdivbsqgeqsumbdiva",
+          "family_id": "sf1-5427dba992d17495f1def75d1d219fffbd43b67518006c700f11f9fafc239026"
+        },
+        {
+          "problem_id": "algebra_apb4leq8ta4pb4",
+          "family_id": "sf1-376527d2a2f1cecdee3d8d20efff4f3a95889afb472c7c25d467579def5d354c"
+        },
+        {
+          "problem_id": "algebra_binomnegdiscrineq_10alt28asqp1",
+          "family_id": "sf1-a59a563dedb35daa991398e20ee2c57521df98f52fdb6639ec5cd9e5e0ccefb8"
+        },
+        {
+          "problem_id": "algebra_manipexpr_2erprsqpesqeqnrpnesq",
+          "family_id": "sf1-1f66b2eb3f822e2ca8d9448c9f2d1c870b86a9666bc9fc9812aa8497dbd2760c"
+        },
+        {
+          "problem_id": "algebra_manipexpr_apbeq2cceqiacpbceqm2",
+          "family_id": "sf1-96e2c8dfa1e69ad47d671a0e4ae7fcbbb71d3bacabfaeb41f1f36a2b849f7837"
+        },
+        {
+          "problem_id": "algebra_sqineq_2at2pclta2c2p41pc",
+          "family_id": "sf1-8f39f231745a2e7da631b27f0397228cd2aff0a45ad4de75c6cd55b3b6e12541"
+        },
+        {
+          "problem_id": "algebra_sqineq_2unitcircatblt1",
+          "family_id": "sf1-fff1d059e5ba5d0ed4ece1bf3ca8f658b7f96215f8500f4a472cca1e00c2eaf4"
+        },
+        {
+          "problem_id": "algebra_sqineq_36azm9asqle36zsq",
+          "family_id": "sf1-c08f27f9700dd6390a3d7ced4be6e7e4bf2e7f91af7ceea3b64b7e316d859b1b"
+        },
+        {
+          "problem_id": "algebra_sqineq_4bap1lt4bsqpap1sq",
+          "family_id": "sf1-3e565a03ca418aef673f17cde26f8e3bd52370fc9a9e22435ae4fb0d3cb50108"
+        },
+        {
+          "problem_id": "algebra_xmysqpymzsqpzmxsqeqxyz_xpypzp6dvdx3y3z3",
+          "family_id": "sf1-a31f7424a73e0e2a3c4cb9c952f13ec9dcbf8bfacd94adc85e85ce1f755076f9"
+        },
+        {
+          "problem_id": "amc12_2000_p11",
+          "family_id": "sf1-9d4d34aaf9d03aa97ad2c723a930875f90f3b61c0d1f3838853e3dfa2c948cba"
+        },
+        {
+          "problem_id": "amc12_2000_p15",
+          "family_id": "sf1-0a9abedbd33c4ca198b8935237e210bf946ad8bd7073726e544ac7a2186ec8b8"
+        },
+        {
+          "problem_id": "amc12_2000_p5",
+          "family_id": "sf1-dae4a5cf7245e7f968e3b6e975eb8f12010cd6874273a7b16606924d9882702e"
+        },
+        {
+          "problem_id": "amc12_2001_p2",
+          "family_id": "sf1-fe7f04b60ce177c94819f4f4c0a3b610034138d76fa82ac5a00cfad854f06ff6"
+        },
+        {
+          "problem_id": "amc12_2001_p9",
+          "family_id": "sf1-bfed8e57bc2e4f8260e2c4f8e1e21968ad9d09758ac824076cf5dae62a607299"
+        },
+        {
+          "problem_id": "amc12a_2002_p1",
+          "family_id": "sf1-a681c820071cd9dabc51fbe285caa66021f79f732e7e03bbdb57aedd1e10aa08"
+        },
+        {
+          "problem_id": "amc12a_2002_p12",
+          "family_id": "sf1-f9f3c4475cb2549554dbe4e1ebe8d9fc566f613f6bdf7d4f0c44cbdf8bdaa3df"
+        },
+        {
+          "problem_id": "amc12a_2002_p21",
+          "family_id": "sf1-1b745708e7318383a52f7e56c20556bbb75c2f0a7101a9378cb94bb6e83560d9"
+        },
+        {
+          "problem_id": "amc12a_2003_p1",
+          "family_id": "sf1-45a234d516514be15b3822553e9b95287600b59aac25ca7c88ded73f3f619f7b"
+        },
+        {
+          "problem_id": "amc12a_2003_p24",
+          "family_id": "sf1-691f0d2be042c748158de748613999725f2c6f281b9dc165c6cfd32117a68720"
+        },
+        {
+          "problem_id": "amc12a_2003_p25",
+          "family_id": "sf1-c1e2be83c7bcabdc279be94d03488034fb129e268ded8b503e7b89596d0af5a0"
+        },
+        {
+          "problem_id": "amc12a_2008_p15",
+          "family_id": "sf1-c543620d3a8b2489ae6c2caf19aa42fbfcee2c347531660878517bf92d3bd8ef"
+        },
+        {
+          "problem_id": "amc12a_2008_p2",
+          "family_id": "sf1-2eeb0b2a37052e699e5e93b2071c8aec2cff8a729580168db93200b10d0f5bea"
+        },
+        {
+          "problem_id": "amc12a_2008_p4",
+          "family_id": "sf1-b7eec5e02eca0e382ec20ce62584358c7c708a5ec8654ebe8e65a8189304c350"
+        },
+        {
+          "problem_id": "amc12a_2008_p8",
+          "family_id": "sf1-a73f3bd51d29801163c0f63a762dac53c51243bf718ba68b6594807f8a1e6856"
+        },
+        {
+          "problem_id": "amc12a_2009_p15",
+          "family_id": "sf1-7863cf3ace1c86dd4c9c2191b32aba40c22fc4a81e19a251f69180fd6a4165cb"
+        },
+        {
+          "problem_id": "amc12a_2009_p2",
+          "family_id": "sf1-ff167099a471ea5ad1a44ea0be3e86bcd70163257fe171b8d4545486276648e1"
+        },
+        {
+          "problem_id": "amc12a_2009_p25",
+          "family_id": "sf1-5110efc4403388ad9b242f8c17035d115b71ca1f8c5e7d6f52070b5e05658d91"
+        },
+        {
+          "problem_id": "amc12a_2009_p5",
+          "family_id": "sf1-476911f3fad67f0e9917837a687e76c7347387243bffd4fd5c9f636ee5fa4708"
+        },
+        {
+          "problem_id": "amc12a_2009_p9",
+          "family_id": "sf1-b9721c94b7123f0ddc3e99f10f678b9affef35242eb961f97203c00731619584"
+        },
+        {
+          "problem_id": "amc12a_2010_p10",
+          "family_id": "sf1-7487a3fdbcff1d60c15b9289c10273f86d7481e4cdd3ef18cad04abd8f5a23c2"
+        },
+        {
+          "problem_id": "amc12a_2010_p11",
+          "family_id": "sf1-acf2287fd661c145328f41d97d0edf42167e6fc5738abe51112e378f41ce2634"
+        },
+        {
+          "problem_id": "amc12a_2010_p22",
+          "family_id": "sf1-1e4bd3f1400d5593cd223300bdf64a6825e4e5af4149129b67a730acfcdb7b54"
+        },
+        {
+          "problem_id": "amc12a_2011_p18",
+          "family_id": "sf1-2c1fed6b5241e9e5aa0688924afbccaeb580d4afe4daa78b4e80d894c3017f30"
+        },
+        {
+          "problem_id": "amc12a_2013_p7",
+          "family_id": "sf1-d52a29292b28ba0c1c07c7369a2c463e18bc3e59ac0d10fc4717faaac9ca57d3"
+        },
+        {
+          "problem_id": "amc12a_2013_p8",
+          "family_id": "sf1-2478a37f5bfe4944f3533f2237b10458d2e13e423fa04daf867d8ff64580c213"
+        },
+        {
+          "problem_id": "amc12a_2015_p10",
+          "family_id": "sf1-4583345c2c0ca05af02d854a40780253db812b92ddcd18f0a147c9faff831706"
+        },
+        {
+          "problem_id": "amc12a_2016_p2",
+          "family_id": "sf1-422265fe244a067d55140c701f83271065add2cfbd30a31352616cb8a0ee24db"
+        },
+        {
+          "problem_id": "amc12a_2016_p3",
+          "family_id": "sf1-c046f525ae32e86666852c881c8939c085a9ba39215d4fadc2991dafbded94d3"
+        },
+        {
+          "problem_id": "amc12a_2017_p2",
+          "family_id": "sf1-d2dd0717be6b4d10d616de7469c70beb3d46760f8a55e506a1ef6ae755a9cda1"
+        },
+        {
+          "problem_id": "amc12a_2017_p7",
+          "family_id": "sf1-ef049bdb687e39af7cdd9feb51b1be1d326122e7df06f9bbc97a4901fb3ca1f2"
+        },
+        {
+          "problem_id": "amc12a_2019_p21",
+          "family_id": "sf1-f0bb03fbda04d0888ed92960a40094b81c8397c317cd318ca1022438aadab8dc"
+        },
+        {
+          "problem_id": "amc12a_2019_p9",
+          "family_id": "sf1-3ad4007ed03f0ac1a813f6dc48b6705971abc8420ac30ee8c32e5b5e210e2f1c"
+        },
+        {
+          "problem_id": "amc12a_2020_p13",
+          "family_id": "sf1-2a5d8a68e8bf7d52ee4d9801e2ae8fa613bfaa8d37d13a63645a7296686a1f17"
+        },
+        {
+          "problem_id": "amc12a_2020_p21",
+          "family_id": "sf1-c8b20901fd804096d92b9e99ca02db53b62a34cdd42c16cd4cbdfd7a01cff408"
+        },
+        {
+          "problem_id": "amc12a_2021_p7",
+          "family_id": "sf1-4dee76d502720c7a3b7eb3e80be52d92a6dddaf6c904421fde11a19000cc9901"
+        },
+        {
+          "problem_id": "amc12b_2002_p11",
+          "family_id": "sf1-00207030feca4012530a9ef3e84e8ebef271facc18bca6997a1c619ec1ef9df6"
+        },
+        {
+          "problem_id": "amc12b_2002_p3",
+          "family_id": "sf1-f69dfa03cf4171e133418272387514e91a76e00124df6143b9425caaa852b8e0"
+        },
+        {
+          "problem_id": "amc12b_2002_p6",
+          "family_id": "sf1-67473a5448c12a00636efe26772446d36b9ff7c69fbf9597112ffc01988fcfe1"
+        },
+        {
+          "problem_id": "amc12b_2003_p17",
+          "family_id": "sf1-ebc9f3f2c5446951f9d98031419cb869d948fc128472be77490ce1ddf94f8b03"
+        },
+        {
+          "problem_id": "amc12b_2003_p6",
+          "family_id": "sf1-b080911f89f8ef9e58fd7b0659154dbd742a190c5306257ec596f897df8adc38"
+        },
+        {
+          "problem_id": "amc12b_2003_p9",
+          "family_id": "sf1-3c6ba549b5ffec97ae7ceda92287dc74c347dfc6bab0093f4e7a59a52b872429"
+        },
+        {
+          "problem_id": "amc12b_2004_p3",
+          "family_id": "sf1-48a5a50fa9a06d838fad8a98d52fac481625807c54af36476075620313cf067d"
+        },
+        {
+          "problem_id": "amc12b_2020_p5",
+          "family_id": "sf1-25a885c2209ed22f52cb64e1603185c8c3aac788d9d88d6843fdc996d3cff374"
+        },
+        {
+          "problem_id": "amc12b_2021_p21",
+          "family_id": "sf1-8cba4f2383fbfa6eac8b11c14acffee637c1fca8cc89f9ce2b909baf400bd81c"
+        },
+        {
+          "problem_id": "imo_1961_p1",
+          "family_id": "sf1-9e2be4b04835386595e877aa806a31963cebb67bf531bc68bd9b8f1ebbfa02f0"
+        },
+        {
+          "problem_id": "imo_1962_p4",
+          "family_id": "sf1-f239eab95ff29bc65df1e8c740cd897ccae8f3e639a9ca3294dd6af974bedfce"
+        },
+        {
+          "problem_id": "imo_1964_p1_1",
+          "family_id": "sf1-2a289b6159be065c869a7823bdd805513fa706a292631ebb20d7a1cc16545a22"
+        },
+        {
+          "problem_id": "imo_1964_p1_2",
+          "family_id": "sf1-68476956a6a0ed9f2f87781fb3911106a017d883a2b01d5eb9ccbbe4674b7fa5"
+        },
+        {
+          "problem_id": "imo_1965_p1",
+          "family_id": "sf1-7168ae28a239f2076737841727f0973e67592182fd78305ca8160b30eef26bb1"
+        },
+        {
+          "problem_id": "imo_1966_p4",
+          "family_id": "sf1-9d7eb629af51dc54cac925cf3aee76716df086b918593e3ce02c0224b87b3a93"
+        },
+        {
+          "problem_id": "imo_1966_p5",
+          "family_id": "sf1-f776598b6adcd1fba64a53494b9359c61e4f401b78143f9d02f91e725a664e35"
+        },
+        {
+          "problem_id": "imo_1967_p3",
+          "family_id": "sf1-12ec1dbaafe2ab7926ad4d57c647881255ff021fcb7911146aaecddddd04b535"
+        },
+        {
+          "problem_id": "imo_1973_p3",
+          "family_id": "sf1-b6bdf40a0d3ef6d9e8093bd25c9237594b48a73da56da3eeb3538b45ffc6f52f"
+        },
+        {
+          "problem_id": "imo_1974_p5",
+          "family_id": "sf1-ca2b76a67158139ef4e6673fbade8142097ef26abf190745f0aa012600c9150c"
+        },
+        {
+          "problem_id": "imo_1977_p5",
+          "family_id": "sf1-5c4464b499690686c1c4097a803a5f9f7b4ef84c92a9f23b57294f7bd5ad9798"
+        },
+        {
+          "problem_id": "imo_1978_p5",
+          "family_id": "sf1-383d00d49c6d6e332c27fadc3f1bb83fe57e58360d5ac1d475be745a6afa5c6e"
+        },
+        {
+          "problem_id": "imo_1979_p1",
+          "family_id": "sf1-fe95426eb8b991666b57c23230a8ff48821b0cb99a1d2a6b9629df2c71f5f2e5"
+        },
+        {
+          "problem_id": "imo_1984_p2",
+          "family_id": "sf1-5607bc9abcb8f8fc8b769ca2d844c5535aa2fc97339f6734664e9a72570d49e5"
+        },
+        {
+          "problem_id": "imo_1987_p4",
+          "family_id": "sf1-47cb9faa1f39501da34205926f1b67bfb2c13611f9564b5b7d3ec53e9ad96ba7"
+        },
+        {
+          "problem_id": "imo_1987_p6",
+          "family_id": "sf1-16bcfb7ce73edadaec82f9679e2c2d5318dc4244702d65793fdc63cb72e3f24f"
+        },
+        {
+          "problem_id": "imo_1988_p6",
+          "family_id": "sf1-0bc654fe17116c7fc012e5577fc43dab0756193d9f5c1d05f5859e1c6be10b44"
+        },
+        {
+          "problem_id": "imo_1990_p3",
+          "family_id": "sf1-f6d95224d7a90d2d45ce7ac646f5275b18f9cdfa515ecec6f9ef2003ee8562a5"
+        },
+        {
+          "problem_id": "imo_1993_p5",
+          "family_id": "sf1-1a91bcf373352733b7dbb4b099ad8db038f204189520702aa3a0ec51ae24e624"
+        },
+        {
+          "problem_id": "imo_2006_p3",
+          "family_id": "sf1-e30451216afa6b599e36152bfd4e8958fb283732bd5e058a289dabe816d20f4b"
+        },
+        {
+          "problem_id": "induction_divisibility_3div2tooddnp1",
+          "family_id": "sf1-03d30c9177950e84ae33359e428514300b6836f67059e7135f4fa21e2e781f9a"
+        },
+        {
+          "problem_id": "induction_divisibility_3divnto3m2n",
+          "family_id": "sf1-b91bd47918ee64c8c4be8339d5513b1edd0765e904a371552c6fb83b41bd6175"
+        },
+        {
+          "problem_id": "induction_divisibility_9div10tonm1",
+          "family_id": "sf1-a4a94e9fd487f8cc3182d65802d37ffe81f0625288f14140ae88daf74b40bf87"
+        },
+        {
+          "problem_id": "induction_ineq_nsqlefactn",
+          "family_id": "sf1-967ea3c418e2d206e0dd38676dce198b4fa5551a098b071d9cfaf78d4c7b1075"
+        },
+        {
+          "problem_id": "induction_seq_mul2pnp1",
+          "family_id": "sf1-40a50781447bf481b2dc161099ec128772d26c1dd7850db3aa5fb22630e54043"
+        },
+        {
+          "problem_id": "induction_sum2kp1npqsqm1",
+          "family_id": "sf1-7d2984661df2a0df30480ac45b4c450687e78aed2020ab8475eed2a2490f6d96"
+        },
+        {
+          "problem_id": "induction_sum_1oktkp1",
+          "family_id": "sf1-83d07245a4999de01e198e68fcff5d000da8484db6d3d680eb174d64fb707a8e"
+        },
+        {
+          "problem_id": "induction_sum_odd",
+          "family_id": "sf1-83a9f047086adf7dfa48eca06c340be6ad017fc11405eb3d10638f4663c3d27e"
+        },
+        {
+          "problem_id": "mathd_algebra_10",
+          "family_id": "sf1-fca686f66f17277764f9bc9df0487aa7d54467514ffd853ab43c8de004ca421a"
+        },
+        {
+          "problem_id": "mathd_algebra_101",
+          "family_id": "sf1-e535b12ef5c41d47db1efa543c7863f1b2a0703f91d468002a754ebe14ad9e1f"
+        },
+        {
+          "problem_id": "mathd_algebra_104",
+          "family_id": "sf1-69d19c139ec5ba3e6500bb85ffd7d63408b2421a9f39f0a67e0d209f1eb199e7"
+        },
+        {
+          "problem_id": "mathd_algebra_109",
+          "family_id": "sf1-1b67283aef69be3329a715c0b0d2ec7f3ebe48c7a393dc1141b15890d4bd23dc"
+        },
+        {
+          "problem_id": "mathd_algebra_11",
+          "family_id": "sf1-b21fea65edfab1083a3a25c2f0b147c27e5f956c115155dcb578bcdb6ba5e85c"
+        },
+        {
+          "problem_id": "mathd_algebra_110",
+          "family_id": "sf1-c967e657313ee4e9e36098b738e1c33bcafe1362fe049490cc13b0957b089059"
+        },
+        {
+          "problem_id": "mathd_algebra_116",
+          "family_id": "sf1-0213336087e619b8dad70fc0d83cf72a70212d5502a113e4d35e0933205634f2"
+        },
+        {
+          "problem_id": "mathd_algebra_119",
+          "family_id": "sf1-a6f06d3f2dcd01e7d60a2e71bba0651177b2416dfb096ec1437513bdaae1e1ba"
+        },
+        {
+          "problem_id": "mathd_algebra_123",
+          "family_id": "sf1-527ce70bb4b80fe0d6526b217e2776234f1280a66a7f0594619f9db16a94928f"
+        },
+        {
+          "problem_id": "mathd_algebra_126",
+          "family_id": "sf1-868765555a8a6b09a9f6c813050adbd70ec49bbe12ea9ecaa0a2f4ebad299d05"
+        },
+        {
+          "problem_id": "mathd_algebra_13",
+          "family_id": "sf1-6af09b909921e1b7e28c514523a0bb9acdea3edeb1a2c9e71fecae27177e4cfd"
+        },
+        {
+          "problem_id": "mathd_algebra_131",
+          "family_id": "sf1-b3b85115507c65321f42483655f83ea3432fe2a57fbc551cdd9b633b68dcd89a"
+        },
+        {
+          "problem_id": "mathd_algebra_132",
+          "family_id": "sf1-f5934a407afbc1d35cf676359a62e82163d5efc619b430a4027ceb9eda299e80"
+        },
+        {
+          "problem_id": "mathd_algebra_140",
+          "family_id": "sf1-b061e7ec77db846c19dc3462423aae1c412a5fc310e2e958d500d1ca2b2cd895"
+        },
+        {
+          "problem_id": "mathd_algebra_144",
+          "family_id": "sf1-16a2b3324fb544e7852f025c2442f8a94de3cd999c44c27aa7b89ab6525bcb3c"
+        },
+        {
+          "problem_id": "mathd_algebra_149",
+          "family_id": "sf1-273efe2770ce82161c0ee32b4c352605a4dea6053f7c3f008c5b8521bdbbcbf7"
+        },
+        {
+          "problem_id": "mathd_algebra_15",
+          "family_id": "sf1-74e6fd4f9ce7685f17b10a348588a983290f4ae432bf68ff4033d5123ef7c2ea"
+        },
+        {
+          "problem_id": "mathd_algebra_151",
+          "family_id": "sf1-ff4e8a11493d55f9a8de77d213acc05c9b19aca5b79bfaa654bc126233f3d28f"
+        },
+        {
+          "problem_id": "mathd_algebra_159",
+          "family_id": "sf1-90d40fcc129468a2a24b54498667fd8dcdc6572c182a2e2695cf9acc2e73c6f1"
+        },
+        {
+          "problem_id": "mathd_algebra_181",
+          "family_id": "sf1-2b5701c59417f208ce69869ecdf52e28818280328dac606bd0564e67dcc7b198"
+        },
+        {
+          "problem_id": "mathd_algebra_182",
+          "family_id": "sf1-3b051b2c76a66d862c1bad6ac87e6af07e7a1aec874cb399376425a4547f284d"
+        },
+        {
+          "problem_id": "mathd_algebra_185",
+          "family_id": "sf1-f5e8697a2fddc64d17b971f9b7bb94339c2d4648d0d40895de3947693fa60aed"
+        },
+        {
+          "problem_id": "mathd_algebra_190",
+          "family_id": "sf1-68941d72149d55dd6174d4ac31e22c091048171748acd94f58833829e932c3b0"
+        },
+        {
+          "problem_id": "mathd_algebra_192",
+          "family_id": "sf1-037526037ae226ebd1cc159e5328151b0601b42d471d08196f00821fd918fd81"
+        },
+        {
+          "problem_id": "mathd_algebra_206",
+          "family_id": "sf1-f24eba73f4d7225822d3521d50114fc7595e3852ec81305c3d9d0c1bb7e1ddd7"
+        },
+        {
+          "problem_id": "mathd_algebra_214",
+          "family_id": "sf1-4beb2a9bd9734d28bc0c0ef53d65f0aefa0a72a80554ae4477c665034a392bde"
+        },
+        {
+          "problem_id": "mathd_algebra_22",
+          "family_id": "sf1-f989cb22aa0ced4a6af7e358c4bd981d60f2fae57aa287923669c3704a229282"
+        },
+        {
+          "problem_id": "mathd_algebra_224",
+          "family_id": "sf1-8b9f7b85a9c4334f83ba496b67d3ef317cafdf070367855d0fa0d3459f11d72e"
+        },
+        {
+          "problem_id": "mathd_algebra_234",
+          "family_id": "sf1-2447abd9140ecbb05810c99561ea3237a1ca1f290de7b7cb83b6146d60c5093e"
+        },
+        {
+          "problem_id": "mathd_algebra_245",
+          "family_id": "sf1-dc81cfe4f921eb9ff70a05be1e4789a1a6c8c6933f37960c3e9243e5bd69edb8"
+        },
+        {
+          "problem_id": "mathd_algebra_247",
+          "family_id": "sf1-46ece0456aca495753b8cce3d50dd2857ec8aa7377b71faf5d8747aa8351a476"
+        },
+        {
+          "problem_id": "mathd_algebra_251",
+          "family_id": "sf1-0ee96c41c2a57200330a4572ac651e7568f84f2aa07fe9cb1db454d5e4a72201"
+        },
+        {
+          "problem_id": "mathd_algebra_267",
+          "family_id": "sf1-5f7cbfdebf7554177815521ad683a3e052426ffff5d5f5f75fe17609416da491"
+        },
+        {
+          "problem_id": "mathd_algebra_28",
+          "family_id": "sf1-1dd31cb8eca851b154420f0669f9380b80a0a4aca0b3f30765626b954937e9ef"
+        },
+        {
+          "problem_id": "mathd_algebra_282",
+          "family_id": "sf1-2d26ca15c4ba87acab2ad1b51a7cb901dfcfbe5b7ec2fd5d63b9ea952baef04b"
+        },
+        {
+          "problem_id": "mathd_algebra_31",
+          "family_id": "sf1-bc1ab06600c5aeefb63f266d818a0f83aec4a455400db670616e7bb3894e809d"
+        },
+        {
+          "problem_id": "mathd_algebra_323",
+          "family_id": "sf1-cc53d9254fc7494e305ca42fafbbfc8c5313c0eee16116185695a415bf45515b"
+        },
+        {
+          "problem_id": "mathd_algebra_327",
+          "family_id": "sf1-dacee6886099d74ac130811e74d4dd34e73bcc319e59b6e5bd45b525ba633025"
+        },
+        {
+          "problem_id": "mathd_algebra_35",
+          "family_id": "sf1-5825820a4a835b1b6b6a52900490a9da982c9fa4c53986d43d779c4d8a13e292"
+        },
+        {
+          "problem_id": "mathd_algebra_37",
+          "family_id": "sf1-43ddcbfeae4ae24228fdc193455c6d7a272124556efbe536f370745bd02c3205"
+        },
+        {
+          "problem_id": "mathd_algebra_393",
+          "family_id": "sf1-40cbc907a38eac7cbd9c5a18cd971c8b47d768479bbf619b60d3e391331699e5"
+        },
+        {
+          "problem_id": "mathd_algebra_405",
+          "family_id": "sf1-4cdf44ac4b3b9fda8424d99f1be68e76b74e0e8fd16061d6d614ed9fbc2adc3c"
+        },
+        {
+          "problem_id": "mathd_algebra_410",
+          "family_id": "sf1-4fb219964ecb4c4ba3852e1c0629bbeff30ea5dd9f3af740939f83cee0d2bb09"
+        },
+        {
+          "problem_id": "mathd_algebra_421",
+          "family_id": "sf1-f1d3531d6d2a76af1dcaadc3b3fe9d50f423a1cb874abeda133a4a67351fd8f4"
+        },
+        {
+          "problem_id": "mathd_algebra_422",
+          "family_id": "sf1-1cdb51d2ef17e0c4cb1807ed67108bdf20c156c34bafc8099ba626c91fa51b61"
+        },
+        {
+          "problem_id": "mathd_algebra_43",
+          "family_id": "sf1-d19c2efb86aab84627673d05b1bf44dc988962fdff94b9cc86acd9ac09864aad"
+        },
+        {
+          "problem_id": "mathd_algebra_433",
+          "family_id": "sf1-f2f9d3829e9a866363968dbe581400d985edfd2ede250c73d19ca30b3c0e4908"
+        },
+        {
+          "problem_id": "mathd_algebra_437",
+          "family_id": "sf1-7f1f1bfb37ca5f762681ebbd55ac6be00c7191802e697fb27977556f41e6c32e"
+        },
+        {
+          "problem_id": "mathd_algebra_451",
+          "family_id": "sf1-d9d0ef33f8da466d0c3b2d38e4b4a0fbe410cf6af95bbab6b0a856e9e3417663"
+        },
+        {
+          "problem_id": "mathd_algebra_455",
+          "family_id": "sf1-3bab64c4315844ecfd4368ec347401a9476d87ac2d36c86176afac5bed781d39"
+        },
+        {
+          "problem_id": "mathd_algebra_462",
+          "family_id": "sf1-7c6825d930cf1635977f0831067d37485f3917c426decbc28543f1721b1d8012"
+        },
+        {
+          "problem_id": "mathd_algebra_48",
+          "family_id": "sf1-26366d3fd3b264c7c3734077a3d00a777ee99b4964c9209a1dba3c5b4ca4b925"
+        },
+        {
+          "problem_id": "mathd_algebra_480",
+          "family_id": "sf1-75c7b8a89fdf0f0791eecbc5c61428db1b208eb72ae5e87b3f20695097563cc5"
+        },
+        {
+          "problem_id": "mathd_algebra_482",
+          "family_id": "sf1-2d128405f220631f0d4820a5dbd6c68c7ca4ce6b5fb8a05b8c3a5d351776b63d"
+        },
+        {
+          "problem_id": "mathd_algebra_493",
+          "family_id": "sf1-c231023926c118b36e14f79edc34eeaf10271d63f0281f32d8080ed7f172d209"
+        },
+        {
+          "problem_id": "mathd_algebra_509",
+          "family_id": "sf1-60412365ee01ce1af3658e7a4f21c71d5e0680e3392f07f9348c743f2a8c7765"
+        },
+        {
+          "problem_id": "mathd_algebra_51",
+          "family_id": "sf1-f8e2cd7c6ec0f2b6231061779ab78a83c34537bf5b5e07cb9adda1c8da728923"
+        },
+        {
+          "problem_id": "mathd_algebra_510",
+          "family_id": "sf1-3eef8781ca7c845341cb5c19300b7d67b4b961cbc3cd6f4c82f5d1edeb9638ff"
+        },
+        {
+          "problem_id": "mathd_algebra_536",
+          "family_id": "sf1-16ef6d39c2c48e314ae9b256c817fd5b7da6ce69c16e202ca884fb6c542bc63f"
+        },
+        {
+          "problem_id": "mathd_algebra_547",
+          "family_id": "sf1-a54976abe04d79998e0231c859b4b3da3a84a12aa5335846fa4d683bb7c0a28d"
+        },
+        {
+          "problem_id": "mathd_algebra_55",
+          "family_id": "sf1-52d65f3adf1c820e48fd532c187075a69af2a76d76a7ec1db8f16bc52f469393"
+        },
+        {
+          "problem_id": "mathd_algebra_568",
+          "family_id": "sf1-b7d4262532acb6c9298e57dd69603e219140e96ee34f23717ce2ff6acd845f5a"
+        },
+        {
+          "problem_id": "mathd_algebra_59",
+          "family_id": "sf1-0e534af610688eae0df0501d621aa2e912f2bd3e79711b59596b2a06fe3f7f60"
+        },
+        {
+          "problem_id": "mathd_algebra_616",
+          "family_id": "sf1-d237cd60d0a8900fcf857572c853490752d472cf9a60e599e78cb0109b359651"
+        },
+        {
+          "problem_id": "mathd_algebra_67",
+          "family_id": "sf1-b692e1c9e4d091e3d63ddfa270fa022a233833ff21883fc6c218ffac29519d2a"
+        },
+        {
+          "problem_id": "mathd_algebra_69",
+          "family_id": "sf1-fd580a4aa5248bd6f6d4a2f18ff28164c6dd9793474eea3afd5c5b84021aa486"
+        },
+        {
+          "problem_id": "mathd_algebra_73",
+          "family_id": "sf1-4859d2d5f035ec3f46aef8987dd6cc4cda9641acf2b374330cf9a5000785b03f"
+        },
+        {
+          "problem_id": "mathd_algebra_77",
+          "family_id": "sf1-90c1d56124b4b6b5b2f8312752242b70f5cd8f17d4c63affa897817fd1fa2d55"
+        },
+        {
+          "problem_id": "mathd_algebra_89",
+          "family_id": "sf1-eba11e7a231eb69d0479c8dca9adacd31f2817d06399bcc966854b741b584f9f"
+        },
+        {
+          "problem_id": "mathd_algebra_96",
+          "family_id": "sf1-7420c6d599e150596c63a287488c4ba124d292c23b21283e81d9041b3a7957e8"
+        },
+        {
+          "problem_id": "mathd_numbertheory_101",
+          "family_id": "sf1-12f42bceb65c8b94553963fb3d56137184e2ff4a87c31c0ee1da370b388919ba"
+        },
+        {
+          "problem_id": "mathd_numbertheory_102",
+          "family_id": "sf1-11819c42dbef3e0fee8c0a6597a3df60022df56ecbfd2a304bf43e45acc88342"
+        },
+        {
+          "problem_id": "mathd_numbertheory_109",
+          "family_id": "sf1-03de4a503577990ff0720c5017fa824db6d34564db1322058517f10a81f930d6"
+        },
+        {
+          "problem_id": "mathd_numbertheory_110",
+          "family_id": "sf1-e01c53c014c54547303eebd0ed6ce43c23b78a8aa3bacf79442ab358e72176dc"
+        },
+        {
+          "problem_id": "mathd_numbertheory_126",
+          "family_id": "sf1-5c918dc12136e68b1a1f676161b85cc0a0bfd36fe5f1bc5ea17a94b053560fe6"
+        },
+        {
+          "problem_id": "mathd_numbertheory_13",
+          "family_id": "sf1-7ef87fbb2e05bc9e9936251a6d8e5f4d6cdfef45b075e07869f40c961fa3c063"
+        },
+        {
+          "problem_id": "mathd_numbertheory_132",
+          "family_id": "sf1-7e317f2e86d2aacf4b1f552b4d5170b50a8b43c201a508b52069983ec04d11d8"
+        },
+        {
+          "problem_id": "mathd_numbertheory_136",
+          "family_id": "sf1-a3d4264348ab9392166e201f7ed9ca01b5e0da913162450457b828e41c0153a7"
+        },
+        {
+          "problem_id": "mathd_numbertheory_149",
+          "family_id": "sf1-6963a801320f36d9129e75dbd3d83a7f9fa50056d59305e0196f6c8e816b036c"
+        },
+        {
+          "problem_id": "mathd_numbertheory_155",
+          "family_id": "sf1-5f854fbcbb799628f84d62e151dcc73d9c3cdb9b8c70d462344ad5e82d134d72"
+        },
+        {
+          "problem_id": "mathd_numbertheory_156",
+          "family_id": "sf1-168a55628c27a0ecf539e894584fd68088c717d3bbcade80530e5e68d65279a0"
+        },
+        {
+          "problem_id": "mathd_numbertheory_169",
+          "family_id": "sf1-e8bc0dab5a9ee2714f60e0125429c44d91df884442ef20f47df858be76d217fa"
+        },
+        {
+          "problem_id": "mathd_numbertheory_188",
+          "family_id": "sf1-bd51f738dbf010e62bebb821675c21a510602041439e9e0f2fa996f55955f406"
+        },
+        {
+          "problem_id": "mathd_numbertheory_198",
+          "family_id": "sf1-623d8d80703dd0879e4f3c9fe03f5ff2a76b45e9feff1868715f7e93ce532b54"
+        },
+        {
+          "problem_id": "mathd_numbertheory_200",
+          "family_id": "sf1-44512b4defe1065c0791e371c033b820608fdd38637aab35f6b512bea7abbfbd"
+        },
+        {
+          "problem_id": "mathd_numbertheory_202",
+          "family_id": "sf1-d1c8d6cd297a1639bfb83ad93663a0f3a4ccc677dc0c66de0c94c05e9bf759e1"
+        },
+        {
+          "problem_id": "mathd_numbertheory_211",
+          "family_id": "sf1-bd5b79caa796e95ea957d20b37e67b571d62c43768425571b2ce58795cd1850c"
+        },
+        {
+          "problem_id": "mathd_numbertheory_22",
+          "family_id": "sf1-a271cb820613cdf8f18ae935d9ddfdce9c5e7b73646b99e729d81d6841a23cbe"
+        },
+        {
+          "problem_id": "mathd_numbertheory_221",
+          "family_id": "sf1-0059e9b804f9b86a69cff1876f97bbb06056c477b48139873da86a8dae15fdc1"
+        },
+        {
+          "problem_id": "mathd_numbertheory_232",
+          "family_id": "sf1-8d1f268360bdae7f65512d127322dd655b7602ca7ffc6e184dcad0ff25d1b92c"
+        },
+        {
+          "problem_id": "mathd_numbertheory_236",
+          "family_id": "sf1-490b2db42efa1ebf49dcd216daa562f697ee21386cb4c733db9dc1644b33bd19"
+        },
+        {
+          "problem_id": "mathd_numbertheory_24",
+          "family_id": "sf1-d0e31540bb5b2a8051d1e920b8f90d6276c9ddfee6d91c4196f34ff5fbcda495"
+        },
+        {
+          "problem_id": "mathd_numbertheory_252",
+          "family_id": "sf1-0178a950bad184c8329ef801d3aef5df1d0cf5614ba480532e9b33377d09704e"
+        },
+        {
+          "problem_id": "mathd_numbertheory_257",
+          "family_id": "sf1-dc085e76771479c93be417a10840f4d19d69fc467e282128e97ed6218815ae9f"
+        },
+        {
+          "problem_id": "mathd_numbertheory_269",
+          "family_id": "sf1-d65f03e196ace0f1887afafd83eabd1b1cb18d0e67ca6c68df63f218ebd14b8d"
+        },
+        {
+          "problem_id": "mathd_numbertheory_284",
+          "family_id": "sf1-e64b069bf50c1d1ce6bb63ce0d27d2e9486b0aef280a205594ee3c88bd070cd6"
+        },
+        {
+          "problem_id": "mathd_numbertheory_30",
+          "family_id": "sf1-2dd42202d3d0d1fb44f641758b277432dd91d1afb7eb15c41e4a4e8507355510"
+        },
+        {
+          "problem_id": "mathd_numbertheory_301",
+          "family_id": "sf1-b2a295479a360c2550ee9cd3ea5b0f499d6594e04c157dd9fa1de5c60849d7e3"
+        },
+        {
+          "problem_id": "mathd_numbertheory_303",
+          "family_id": "sf1-5b070cf5d9fbeeadfa0f138e06ea1026fc6231378d88b5bf0bca4482ec5cfc99"
+        },
+        {
+          "problem_id": "mathd_numbertheory_32",
+          "family_id": "sf1-f674768712a0a098f2544ad3260f3e5ef75218e3a303246666307001faf49fda"
+        },
+        {
+          "problem_id": "mathd_numbertheory_326",
+          "family_id": "sf1-47929471b10a4adbdaa4f241395e58322047b660e1454c2100fc7241c53c7c49"
+        },
+        {
+          "problem_id": "mathd_numbertheory_33",
+          "family_id": "sf1-b37e02d751382ca51e9013296e56800e1a0b0adc7bc26a2066776f9f76695b0e"
+        },
+        {
+          "problem_id": "mathd_numbertheory_335",
+          "family_id": "sf1-d00b7c70b668462bafd97ee1514f809cbb063d87262bc2d5546223358077320c"
+        },
+        {
+          "problem_id": "mathd_numbertheory_35",
+          "family_id": "sf1-a8bc287f9091656d9bbb716757d9b00672be4981a724559ca344b70c9ec50ce7"
+        },
+        {
+          "problem_id": "mathd_numbertheory_37",
+          "family_id": "sf1-8bb737904fa50017aa837b98b231068afdd5b523979151f5058a86b6d0284ea7"
+        },
+        {
+          "problem_id": "mathd_numbertheory_370",
+          "family_id": "sf1-9af3988e92460b8b5cb332e5bcd90a75fe0f1e94b605a9fed96d63b5d8c37d50"
+        },
+        {
+          "problem_id": "mathd_numbertheory_403",
+          "family_id": "sf1-b02ea62c4ff39403f3323feff768270eb2ec0bcb4f8c8061ce90bb6c17db2b77"
+        },
+        {
+          "problem_id": "mathd_numbertheory_405",
+          "family_id": "sf1-69011e5e27358f097167a9cc6ac9b2ea6054e078945d08bf82396bfaa220ae64"
+        },
+        {
+          "problem_id": "mathd_numbertheory_412",
+          "family_id": "sf1-75dc8dbdd80f62725d0811f520227438329e33508794c67ad6f91bb0524f8d97"
+        },
+        {
+          "problem_id": "mathd_numbertheory_42",
+          "family_id": "sf1-9f4dd853bc5e0cf7c60f58ed65eb3852e2a414f6de5467ace83ea5d4735e96fe"
+        },
+        {
+          "problem_id": "mathd_numbertheory_43",
+          "family_id": "sf1-8a6043028371153faa2905308293f26afb7e9746feb625edd236fb4a8d33eb6b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_45",
+          "family_id": "sf1-096fe3767389416b576c25c70bf037479e2aaa620af8cbbbc4eaf61d7585f06d"
+        },
+        {
+          "problem_id": "mathd_numbertheory_458",
+          "family_id": "sf1-efbf2ae7a5793311e86167a75e9276abd8c53d226e709182b015b8466a1995b8"
+        },
+        {
+          "problem_id": "mathd_numbertheory_461",
+          "family_id": "sf1-3ff9d2c561cef045e6cbca93af9925c6f1f05c2f7de55a63e678b5976f5f7917"
+        },
+        {
+          "problem_id": "mathd_numbertheory_466",
+          "family_id": "sf1-a9bacd88fe2e87ad15ffa9ab6c5fd4d9315419b196a0892048de72747f90345d"
+        },
+        {
+          "problem_id": "mathd_numbertheory_48",
+          "family_id": "sf1-c9b063c749dab61f19769978b80b6e0ba460134867ba05808775c6038c2edc1c"
+        },
+        {
+          "problem_id": "mathd_numbertheory_530",
+          "family_id": "sf1-b030d60c3b2d1790f22dd51daf0a6e0370751198e6dbdc00dbbe3d9a9196d318"
+        },
+        {
+          "problem_id": "mathd_numbertheory_543",
+          "family_id": "sf1-9d816a05e87074d06cf0b80400463239afca071051289bde91fe2b3f28c93d9a"
+        },
+        {
+          "problem_id": "mathd_numbertheory_629",
+          "family_id": "sf1-ccf9049860e843bf90777881fc0769b959ff474e33ba3947d51a01a21132956b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_64",
+          "family_id": "sf1-8e683fa03795d7c814ce042e4c790ebebc2dec3cee648083637e74613aee45c9"
+        },
+        {
+          "problem_id": "mathd_numbertheory_640",
+          "family_id": "sf1-ce8027f2c460566c15cc8d00134b2f1b3ae31b37ec20ce4c3b8477e40ff6957b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_668",
+          "family_id": "sf1-87bf3d4e8c417303464fcb6df56bbdde8fa5f5d85e4d754317ac8c71e41c5d98"
+        },
+        {
+          "problem_id": "mathd_numbertheory_690",
+          "family_id": "sf1-191de85f7ba7e4056aef5d48251cb3b668a4470c6d73ce6e08e4f32e4ddd347b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_709",
+          "family_id": "sf1-097e61b7e23927a1508fb6ad9c014afc26a5f5d36cefac49e94e82fdeb762a6b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_739",
+          "family_id": "sf1-c0f986645e59f6154e003c05717b02afd07e1075cf83f5dde8e7e0852419fb70"
+        },
+        {
+          "problem_id": "mathd_numbertheory_780",
+          "family_id": "sf1-1103b9a317562f9ff2a29d18ab2211eb58579a086aef7e029b0fa360423992fa"
+        },
+        {
+          "problem_id": "mathd_numbertheory_81",
+          "family_id": "sf1-d96ee54bbf916a4c95c24ab0f7c36994066585a468caeb4c267bf0aa1838f8bd"
+        },
+        {
+          "problem_id": "mathd_numbertheory_84",
+          "family_id": "sf1-a9acc7be1d79f74d3b590468a453b27921cbe0963ed2b1dca8acb642fe0b30aa"
+        },
+        {
+          "problem_id": "mathd_numbertheory_92",
+          "family_id": "sf1-24322c36dc5266009645555feca52c3082a4cef54bf55359fda81b624aed3c2b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_961",
+          "family_id": "sf1-6ac5df23205f41ec1445d0604022481960ddc2ad11ba3426257c27fc8013d73a"
+        },
+        {
+          "problem_id": "numbertheory_2dvd4expn",
+          "family_id": "sf1-e9f56bf0b1d1dc16bc849564d6d72e0fb879beab24ae257d32198f5000f9b0d9"
+        },
+        {
+          "problem_id": "numbertheory_aneqprodakp4_anmsqrtanp1eq2",
+          "family_id": "sf1-33d7bebc150f1834949a1142742ff873a36634bcb2c7dfe49eee72789faad6e2"
+        },
+        {
+          "problem_id": "numbertheory_nckeqnm1ckpnm1ckm1",
+          "family_id": "sf1-2e0b60717d870bc56227ed5666c792642c7b408a74c6904b5352f300b0cfff5e"
+        },
+        {
+          "problem_id": "numbertheory_prmdvsneqnsqmodpeq0",
+          "family_id": "sf1-ed20a8c1ec5faffcdc45f819a5c2e6d8343c24e9e666d522ddbdb5c583549179"
+        },
+        {
+          "problem_id": "numbertheory_sqmod3in01d",
+          "family_id": "sf1-5ce06a2d64deb6505ee477f86ccdb773831634ea46d3a847e0ce550675e3fbb0"
+        },
+        {
+          "problem_id": "numbertheory_sqmod4in01d",
+          "family_id": "sf1-87905946f241aa5066cee8382e0676b39c72192ac097ee66761469d5e4efaa9b"
+        },
+        {
+          "problem_id": "numbertheory_sumkmulnckeqnmul2pownm1",
+          "family_id": "sf1-95573b364197888c46bfbbe1f78d76f73721519c98108cb8376347ac71ca121f"
+        },
+        {
+          "problem_id": "numbertheory_xsqpysqintdenomeq",
+          "family_id": "sf1-22b70d6a3a8d57925792ce2c12d5449a95e0345fda8daa4ae927948a20eb51c1"
+        }
+      ],
+      "report_problem_family_map": [
+        {
+          "problem_id": "aime_1983_p1",
+          "family_id": "sf1-9da20ad8e2abf47cf4fa74ae513706079a1d1f6bfd65f89cec8b925e7ee456e2"
+        },
+        {
+          "problem_id": "aime_1983_p2",
+          "family_id": "sf1-708002639ee4f15b6de2f5844d94cd0495e61338e9a0bf10b2e715ab1e39c19c"
+        },
+        {
+          "problem_id": "aime_1983_p3",
+          "family_id": "sf1-c64e71820d69390fb454413514b197194c600d9f631cb155ec9234a5d1ead2ee"
+        },
+        {
+          "problem_id": "aime_1984_p1",
+          "family_id": "sf1-e32f4c7588f5323a3c4af87978accb6288bb3243f7a1e71217cd533eb1279e40"
+        },
+        {
+          "problem_id": "aime_1984_p7",
+          "family_id": "sf1-843fcf86d0b2b41ea5ce8b7fe52267cd5bd1dbfed510b448275f039fe19d8758"
+        },
+        {
+          "problem_id": "aime_1987_p5",
+          "family_id": "sf1-35c6af2862e29a8156ebadfc9b403a36ab89a1f5eefe01ac745ba59ab9b49763"
+        },
+        {
+          "problem_id": "aime_1988_p8",
+          "family_id": "sf1-36fadaf75baee08ba0e502f8ef72e8a90bb161b44feaffd31ff67025f3803b8f"
+        },
+        {
+          "problem_id": "aime_1989_p8",
+          "family_id": "sf1-5c76bc20bc1cd792576b0fff54de466df23ba48949447bbfa012f8d6925310b1"
+        },
+        {
+          "problem_id": "aime_1990_p15",
+          "family_id": "sf1-9ffd792435eb5fee732deebfc8a95e1678e64db1391e298938efd2e828f4b31f"
+        },
+        {
+          "problem_id": "aime_1990_p4",
+          "family_id": "sf1-93cd47362d3b70a110ec9f7e2e9adbcea359ae8a399a3c37ca2aa72757fa5bd0"
+        },
+        {
+          "problem_id": "aime_1991_p9",
+          "family_id": "sf1-9ff0d81769a691cd7312fa4a4009e2f2133eac890c380d345b9667e4fc5e43df"
+        },
+        {
+          "problem_id": "aime_1994_p3",
+          "family_id": "sf1-8e2a27d46404d0ca3f7f8a0da958427a6a3903f341dba9f020f358607de0bd77"
+        },
+        {
+          "problem_id": "aime_1995_p7",
+          "family_id": "sf1-8919de1cf89ddb64666f81d5d9552be6277720d7d91532b38ea7222fd5ae5b9b"
+        },
+        {
+          "problem_id": "aime_1997_p9",
+          "family_id": "sf1-48cfbcfa896afdde46eb451080a1220623fd2af5e259eeeeea83bc7e890ff151"
+        },
+        {
+          "problem_id": "aime_1999_p11",
+          "family_id": "sf1-e93daeb10f57ee6dcb21b378336d1e9b7ab77453886f5c33f4ceab349e2a1e40"
+        },
+        {
+          "problem_id": "algebra_2varlineareq_fp3zeq11_3tfm1m5zeqn68_feqn10_zeq7",
+          "family_id": "sf1-fc1497be03d20ee63413cb3a9ccf2adce3292c32a2dc06d2273d93034221a7ef"
+        },
+        {
+          "problem_id": "algebra_9onxpypzleqsum2onxpy",
+          "family_id": "sf1-db53892d08cdc601bf59aa3b0a4818238fdc9907da8bd8e0c048e6524d8fe0f7"
+        },
+        {
+          "problem_id": "algebra_abpbcpcageq3_sumaonsqrtapbgeq3onsqrt2",
+          "family_id": "sf1-21c06b403f0119c6853ed65917da5e453f660837496b0cdeb0225949eb81e52c"
+        },
+        {
+          "problem_id": "algebra_absapbon1pabsapbleqsumabsaon1pabsa",
+          "family_id": "sf1-d9d2847d55998ab6c2c4a9333e0393898e1df86d455411a4e217d9ac603a40c1"
+        },
+        {
+          "problem_id": "algebra_absxm1pabsxpabsxp1eqxp2_0leqxleq1",
+          "family_id": "sf1-8fb366f37511bea9cce99942ce12f7b5e0cef243825c863b9498c07031471b3a"
+        },
+        {
+          "problem_id": "algebra_amgm_sum1toneqn_prod1tonleq1",
+          "family_id": "sf1-8179ea1cc878960db9d22bc9af79492c91855f2dccdf1a2dac0d08db5d5aea81"
+        },
+        {
+          "problem_id": "algebra_amgm_sumasqdivbgeqsuma",
+          "family_id": "sf1-e1f73f68ab40421d09068f3d21c5bb23cf932276b95a83af0e7b47543be5b48c"
+        },
+        {
+          "problem_id": "algebra_apbmpcneq0_aeq0anbeq0anceq0",
+          "family_id": "sf1-a8a8ed4673bfde2604703b9486d4f19effb515367d232c4bdac82740b88d076e"
+        },
+        {
+          "problem_id": "algebra_apbon2pownleqapownpbpowon2",
+          "family_id": "sf1-53b15ba5d8985fd11c64fdc437aa8be4e4a348b2716f8e43d2eef683a3f43d59"
+        },
+        {
+          "problem_id": "algebra_apbpceq2_abpbcpcaeq1_aleq1on3anbleq1ancleq4on3",
+          "family_id": "sf1-8539d1e3d9dedc91fe3b39e3e525da4e86b22d4de0569e27a8928beb2d2aa1db"
+        },
+        {
+          "problem_id": "algebra_bleqa_apbon2msqrtableqambsqon8b",
+          "family_id": "sf1-834c73b3e770b9433a8ed9570f3e589a483639407b10d03cffe491f2fc8d4a89"
+        },
+        {
+          "problem_id": "algebra_cubrtrp1oncubrtreq3_rcubp1onrcubeq5778",
+          "family_id": "sf1-a61ccc3ac7dd313593adba4ba7b107af1f52a5c7ebe0b9b81996b61431589c5f"
+        },
+        {
+          "problem_id": "algebra_ineq_nto1onlt2m1on",
+          "family_id": "sf1-bdd6edabe98dd7316d950b69b2e660806dbd09aae25dfd7509dbf731b2736a79"
+        },
+        {
+          "problem_id": "algebra_others_exirrpowirrrat",
+          "family_id": "sf1-423f80d951850099e9aefc55acaef81491f4022c4aeca73fbead111e97366229"
+        },
+        {
+          "problem_id": "algebra_sqineq_at2malt1",
+          "family_id": "sf1-4106664efa8dabfe55cc7ed5f918d664d47d8688b8579933fcf2230de4f3416b"
+        },
+        {
+          "problem_id": "algebra_sqineq_unitcircatbpabsamblt1",
+          "family_id": "sf1-dc9ebcc569e08517130ce986803aadf995645a4f8c87434d63bf4d65cac0725c"
+        },
+        {
+          "problem_id": "algebra_sqineq_unitcircatbpamblt1",
+          "family_id": "sf1-72d583e2b1cae50abe041ef8ee01e1fcbc08aa78d656b5a565ab2f948d3e098c"
+        },
+        {
+          "problem_id": "algebra_sum1onsqrt2to1onsqrt10000lt198",
+          "family_id": "sf1-8e4df9b7376da962b95d77d5ba00773ecca4f020d670a3385970a0916c7427c8"
+        },
+        {
+          "problem_id": "amc12_2000_p1",
+          "family_id": "sf1-ca74595215f7f423595979168c82ccc92944571ba5aa48fe1fb668e3028f8d14"
+        },
+        {
+          "problem_id": "amc12_2000_p12",
+          "family_id": "sf1-3f61147a111734ac8db634d91d929a4becd678e389e67c69a97616e5b3285aab"
+        },
+        {
+          "problem_id": "amc12_2000_p20",
+          "family_id": "sf1-209a60c400f7e7490b4810b604cafb9528105fd4285dd85a0f85f717269d47df"
+        },
+        {
+          "problem_id": "amc12_2000_p6",
+          "family_id": "sf1-21f7a7dd4eab2203d3bd5e7fdd3d3ecc6db9c4a88de215daf111e370537ec904"
+        },
+        {
+          "problem_id": "amc12_2001_p21",
+          "family_id": "sf1-9d7b9e3b8a2da6ad06a76d14251efbab95d063d6c06fbdea4f12222bcd3bb47d"
+        },
+        {
+          "problem_id": "amc12_2001_p5",
+          "family_id": "sf1-71a47fada905c59925e55c72774badd4473f26aaa73e97d96c5421b21ded1af8"
+        },
+        {
+          "problem_id": "amc12a_2002_p13",
+          "family_id": "sf1-6c5d0e50b535d935f7f35541bd5d933aacd4a99e03a1bcf535cb91cfcf300be1"
+        },
+        {
+          "problem_id": "amc12a_2002_p6",
+          "family_id": "sf1-2d72fe8f84a8c3f8b3e37fa78db8d20bb2847707b82502b179d79b3178e131af"
+        },
+        {
+          "problem_id": "amc12a_2003_p23",
+          "family_id": "sf1-ee9dbf80c8b624a416f7b82b1a78dfa9719f72e4538cad535502a93c2c8bf8de"
+        },
+        {
+          "problem_id": "amc12a_2003_p5",
+          "family_id": "sf1-2bd65d508664dbeeeff34d27c81e69cf397b6e1ecd82b8113359a32abfdcddcf"
+        },
+        {
+          "problem_id": "amc12a_2008_p25",
+          "family_id": "sf1-208d7fe9272ea746a7f10f2332d0763e00ff30ba97545f563ce92d0a651ca2b9"
+        },
+        {
+          "problem_id": "amc12a_2009_p6",
+          "family_id": "sf1-b6d0cd83464990ab9ba17b939412f1c4ec0d1ac077e63a6862e370078e891503"
+        },
+        {
+          "problem_id": "amc12a_2009_p7",
+          "family_id": "sf1-06755d7dd43cf4582cabd8e8166f1d8f8eb164f99c3d78812f8799585c1abe68"
+        },
+        {
+          "problem_id": "amc12a_2013_p4",
+          "family_id": "sf1-58b02d322b81a59973bbce71377824ef27af797a9ada189d88441fd9d97d1b19"
+        },
+        {
+          "problem_id": "amc12a_2019_p12",
+          "family_id": "sf1-06df4a4b8e6140a0a5a8993573daaff3efb1ff6490697e126e2d1679fbf35a44"
+        },
+        {
+          "problem_id": "amc12a_2020_p10",
+          "family_id": "sf1-5f9f61ba218412d721d314472f8325870d673e806aa44241e2548b8f9a0866cf"
+        },
+        {
+          "problem_id": "amc12a_2020_p15",
+          "family_id": "sf1-f43c4f68b988c440a7d094e4d0920ed88b45bf24da525aff48ac554496b99d0b"
+        },
+        {
+          "problem_id": "amc12a_2020_p25",
+          "family_id": "sf1-dd0c66abea67bd666d30472f6ecb910e313c59f56f0244334febfe628bb81ad0"
+        },
+        {
+          "problem_id": "amc12a_2020_p4",
+          "family_id": "sf1-c48e8ac13369e75d75dee82bb4558e011f9fb3f55b1bbaf99a772bcaf6815db9"
+        },
+        {
+          "problem_id": "amc12a_2020_p7",
+          "family_id": "sf1-3c90e30eee659fa141fdb5ed54065dc720b65ce84c60b8987aa0971e0727ac9d"
+        },
+        {
+          "problem_id": "amc12a_2020_p9",
+          "family_id": "sf1-5dc076e2080bd34512e701eef9064a320824df83d889c38ec8985d9573991529"
+        },
+        {
+          "problem_id": "amc12a_2021_p12",
+          "family_id": "sf1-1951f80cb11f438a8ea32fb822f1ca60d59cd81aad75fb53441aed6e4364c80a"
+        },
+        {
+          "problem_id": "amc12a_2021_p14",
+          "family_id": "sf1-462c287ae978f6adc50d5c6fb7a8571bdbe747459b8b4b04b07004d214aa9a09"
+        },
+        {
+          "problem_id": "amc12a_2021_p18",
+          "family_id": "sf1-4bebb05b5738273c5f045957af9d845a20f5e28903a5d7aea012beadfc972d35"
+        },
+        {
+          "problem_id": "amc12a_2021_p19",
+          "family_id": "sf1-1debec35c78d298776e1711b18abbfe4874706626819030137924972e2880659"
+        },
+        {
+          "problem_id": "amc12a_2021_p22",
+          "family_id": "sf1-93760f40050e974370bce3f24241e9e49bf3c78a99b92bff8c5ad7acffd57c45"
+        },
+        {
+          "problem_id": "amc12a_2021_p25",
+          "family_id": "sf1-70a755ae5b24977a7348a88af81412a0420efa2f36fbf3d16530ca660dfd523d"
+        },
+        {
+          "problem_id": "amc12a_2021_p3",
+          "family_id": "sf1-fc2f6464e14ac9b35945672e15d3168e28f17c6364a22c677fe32a6447120497"
+        },
+        {
+          "problem_id": "amc12a_2021_p8",
+          "family_id": "sf1-b0cf0f2eeff0696d4d621a246d931944c5cf9c97e425a2a12db2abaac7164d77"
+        },
+        {
+          "problem_id": "amc12a_2021_p9",
+          "family_id": "sf1-43b38829f0c3ea0ac8ed6ae3def60fad81e55c5400d80394d254f02f758f6ac0"
+        },
+        {
+          "problem_id": "amc12b_2002_p19",
+          "family_id": "sf1-c1a99e4fb72430cfb019c2d28a065338f187ac83abdbd16720d3829091f69faa"
+        },
+        {
+          "problem_id": "amc12b_2002_p2",
+          "family_id": "sf1-b879f9113210ab0ec72d05a37079826862ffb986a798458ca232a8d79393458b"
+        },
+        {
+          "problem_id": "amc12b_2002_p4",
+          "family_id": "sf1-7d41b9b74e8b5265baa5079ee0a20e1d12ff6ac1311d6ce2e275a1aa944d0eef"
+        },
+        {
+          "problem_id": "amc12b_2002_p7",
+          "family_id": "sf1-24cf54dca5a86a43719a490714f30295d8e15506926ebfdb6dcf7106dfb944a1"
+        },
+        {
+          "problem_id": "amc12b_2020_p13",
+          "family_id": "sf1-d286242ee052c5d6ccd16fa5014f56b3fb92b88f4717ad6cb3f770b6e5eeafd2"
+        },
+        {
+          "problem_id": "amc12b_2020_p2",
+          "family_id": "sf1-97bea50dc22bd195e387e6949eae3b53f87ede6aba472db01ee756c52721e64a"
+        },
+        {
+          "problem_id": "amc12b_2020_p21",
+          "family_id": "sf1-4aaea7a2d031d2f9a226d5ef9f5e53f3cc7883af8a9a28452dfe03995dfcde23"
+        },
+        {
+          "problem_id": "amc12b_2020_p22",
+          "family_id": "sf1-ed2cc0b8249234199fc23ce405fd26cea801e4cda57a883a1e948cbe6bb3dfd0"
+        },
+        {
+          "problem_id": "amc12b_2020_p6",
+          "family_id": "sf1-4c1d1cce50c3e5e21d49e4c861797884d2d6ab141c009da080135524dca45450"
+        },
+        {
+          "problem_id": "amc12b_2021_p1",
+          "family_id": "sf1-83524eca82edb9c0c99633cef8ae94eaecc4a2b9b09d16b1cacc752ab125758e"
+        },
+        {
+          "problem_id": "amc12b_2021_p13",
+          "family_id": "sf1-926a1ec9706edb584f93f30683d78a8790ce3b6c74a08c563881ff2da5be8f19"
+        },
+        {
+          "problem_id": "amc12b_2021_p18",
+          "family_id": "sf1-e16adce04cbb2933b4f405b7ddb9eff9616084dc4df00002b5e600a102b070d8"
+        },
+        {
+          "problem_id": "amc12b_2021_p3",
+          "family_id": "sf1-83514888628198652e2c11e651c9d712c9b1315a7a834418ef394dc652d92516"
+        },
+        {
+          "problem_id": "amc12b_2021_p4",
+          "family_id": "sf1-c266b320c2c67c34250d008e2dad1126bc8752cd6d6553eee42b8bb0c2025678"
+        },
+        {
+          "problem_id": "amc12b_2021_p9",
+          "family_id": "sf1-358ee3b77ea9d986833a8cd31e6b398f3216bea9a6ce4c49f863665d6be7f73b"
+        },
+        {
+          "problem_id": "imo_1959_p1",
+          "family_id": "sf1-2ff44904ea02d77638431f13017c0b05f8516f9edba948d97f07a1b35a5cd903"
+        },
+        {
+          "problem_id": "imo_1960_p2",
+          "family_id": "sf1-30aad18cdc3506db803c1915c6c95bee33feafa5cc6f22f8503a469f69cd90f1"
+        },
+        {
+          "problem_id": "imo_1962_p2",
+          "family_id": "sf1-ccc3900285cb04034320823381f78f84218b5fae434be46fbacf833dd074a2fb"
+        },
+        {
+          "problem_id": "imo_1963_p5",
+          "family_id": "sf1-eddab037c7d46a3178a3d4ee240e35f34a8ce2fd797490f69ea7f0b0fd252d48"
+        },
+        {
+          "problem_id": "imo_1964_p2",
+          "family_id": "sf1-2ebf759fa02e5e1bfcdca5291ab554a50b2d7bd7bc892d1a9f7f5d78b1ebcf5d"
+        },
+        {
+          "problem_id": "imo_1965_p2",
+          "family_id": "sf1-ee805d0823e8d623f64f783d88fe67a4788b85cf91d2c7bdeafef3f992a0651c"
+        },
+        {
+          "problem_id": "imo_1968_p5_1",
+          "family_id": "sf1-e221ae932a077cf8e3b0efe630d2f65c3a39a0d278f030b9abbc75a8cd465c77"
+        },
+        {
+          "problem_id": "imo_1969_p2",
+          "family_id": "sf1-fdd9f0886147df68bfb23350d4b7c4a518f59e65183679cde1348cc56a1ae370"
+        },
+        {
+          "problem_id": "imo_1974_p3",
+          "family_id": "sf1-9337b672d129d73e8818ce36fe3553913c410acc21571f8f2539197fc0194e17"
+        },
+        {
+          "problem_id": "imo_1977_p6",
+          "family_id": "sf1-8d9aab4362d3814a63c8ab1d092aea72e13cfc8c8c40c71f7f960d58b69f8536"
+        },
+        {
+          "problem_id": "imo_1981_p6",
+          "family_id": "sf1-0422a6a846d60af24d7a995033b5f63ba0c5271dced711dde1a5c71919151ad8"
+        },
+        {
+          "problem_id": "imo_1982_p1",
+          "family_id": "sf1-34aa53354009d2490454ba17282cc2908d7bb32598917635879804002bfc649b"
+        },
+        {
+          "problem_id": "imo_1983_p6",
+          "family_id": "sf1-db1208937701255ae1746c013cd8fb125adba522bb91eb30f229a7ea20cdbd49"
+        },
+        {
+          "problem_id": "imo_1984_p6",
+          "family_id": "sf1-150648a2dfbe15c1e1f8c9109a7d06983f4f04cad08d33ebf321df6942fcf542"
+        },
+        {
+          "problem_id": "imo_1985_p6",
+          "family_id": "sf1-0220354a9237e5bfee7903bc682a749c99645d9ebc925e3717b1c30b50c4d831"
+        },
+        {
+          "problem_id": "imo_1992_p1",
+          "family_id": "sf1-50e0f183738237e0ee9588881f1cae79ff119776898fe79a8818c45d449a1711"
+        },
+        {
+          "problem_id": "imo_1997_p5",
+          "family_id": "sf1-477f3836ed723d8acd27c22110264f865b83e08a2b3c7007fdb2ee539cd286d8"
+        },
+        {
+          "problem_id": "imo_2001_p6",
+          "family_id": "sf1-a8b4cfd3a2ea8ede204db553761d46c483be46f01b9195d9b095fd675ed48aaa"
+        },
+        {
+          "problem_id": "imo_2019_p1",
+          "family_id": "sf1-57cdf924b0e01cacb2eae72dfb6da6691859ca2020fedf5fb9bd557176f5bc86"
+        },
+        {
+          "problem_id": "imosl_2007_algebra_p6",
+          "family_id": "sf1-73da7c2e8cc49dd45eb4ab0d552c7c4d01d1e71ea2b98330a9b578e165749ab7"
+        },
+        {
+          "problem_id": "induction_11div10tonmn1ton",
+          "family_id": "sf1-fb2af50bd9d2cb60e4fa596f09b6edb1dd0d537ff63975da73af6e224ba38a22"
+        },
+        {
+          "problem_id": "induction_12dvd4expnp1p20",
+          "family_id": "sf1-1e27357fd741d7fabe1a2b1ed3937985e570a8130a4808928144c08f65ea2f48"
+        },
+        {
+          "problem_id": "induction_1pxpownlt1pnx",
+          "family_id": "sf1-3e66ca8b9f4132c2e4e864a1603d39184f89a358f1b676c39fee073c8fbc40bd"
+        },
+        {
+          "problem_id": "induction_nfactltnexpnm1ngt3",
+          "family_id": "sf1-64f9cb29c84b38846d718b8d83476286e75e1701285e79c5876b0e61a2e2bc2e"
+        },
+        {
+          "problem_id": "induction_pord1p1on2powklt5on2",
+          "family_id": "sf1-a7ebc59c84f26106dcb5810e5b5c58ba0e7bc0cdd750cf93fedabf50485f04bc"
+        },
+        {
+          "problem_id": "induction_pprime_pdvdapowpma",
+          "family_id": "sf1-5f6a5d25f9ceec65ebf9cf7cdb00bef0f6c6fad19cf68b29d488f60692e6a689"
+        },
+        {
+          "problem_id": "induction_prod1p1onk3le3m1onn",
+          "family_id": "sf1-c4917fe6aba18fa67c9e413b2d90f37705bac4f36ba2904a99794a37817086db"
+        },
+        {
+          "problem_id": "induction_sumkexp3eqsumksq",
+          "family_id": "sf1-4d24dd053b8b1a1285614e749701ec2894790fc54081d25578327af74cc18b28"
+        },
+        {
+          "problem_id": "mathd_algebra_107",
+          "family_id": "sf1-b9bb5a7ee5b0e3e633323a9c27e768a2e1a7eb08189c77d773139127e01538fe"
+        },
+        {
+          "problem_id": "mathd_algebra_113",
+          "family_id": "sf1-9f7725edebfbe7fb7f989529ab891f109385bc8dabf9316b6e8b4298b0693737"
+        },
+        {
+          "problem_id": "mathd_algebra_114",
+          "family_id": "sf1-2fdb9251bd2e47be0d4db126e95f9907e54674de913e09e5995d608b4d9e4982"
+        },
+        {
+          "problem_id": "mathd_algebra_125",
+          "family_id": "sf1-51b32f3638eb317f39c6340a51f06f5e0043c50fc4a9630d258a8205a3adc662"
+        },
+        {
+          "problem_id": "mathd_algebra_129",
+          "family_id": "sf1-f01792fa610de47d6c81583501c303a91a1306be8d35bec476ad837c8373c86c"
+        },
+        {
+          "problem_id": "mathd_algebra_137",
+          "family_id": "sf1-9b97d4364e8b86d81bc48c69f3964221f159fabb53ec5d90ce5d395ea13afe07"
+        },
+        {
+          "problem_id": "mathd_algebra_139",
+          "family_id": "sf1-151c807e01d065250f583461b29382f2e83a4355a51281f0a12cc481492187a6"
+        },
+        {
+          "problem_id": "mathd_algebra_141",
+          "family_id": "sf1-cacbd0195728ea1e4399f5459fd1da2f078dec6afa04fc9b546bfbc45cd9ff44"
+        },
+        {
+          "problem_id": "mathd_algebra_142",
+          "family_id": "sf1-606e3b5a458ce2c20f105973f465298c65078dbc128d9401908d006c49531149"
+        },
+        {
+          "problem_id": "mathd_algebra_143",
+          "family_id": "sf1-a39314b83d43278131249f861fa189ebb0de6fd9e5ae3ea8c930361c77bd9b86"
+        },
+        {
+          "problem_id": "mathd_algebra_148",
+          "family_id": "sf1-f7e1b56537caf8515a760112d53f2af85220eb5857e188ba780b580c892e50b5"
+        },
+        {
+          "problem_id": "mathd_algebra_153",
+          "family_id": "sf1-f38d816a5fd441e56fb8228a62a75d12366110fbeaa72707a50c695f4bef27fc"
+        },
+        {
+          "problem_id": "mathd_algebra_156",
+          "family_id": "sf1-c97c8a0c1872f32529a3f0fed9813f7d91fc746d4779c710efd54b585ed3223e"
+        },
+        {
+          "problem_id": "mathd_algebra_158",
+          "family_id": "sf1-7868a3381c4c779d29838f6dcc7b516e81be2d4eee3ddd7844a571a76ad28178"
+        },
+        {
+          "problem_id": "mathd_algebra_160",
+          "family_id": "sf1-59e7d5952186d0258c7d8bc992c69c08929d9b4ecd44b776d672bef7c3318272"
+        },
+        {
+          "problem_id": "mathd_algebra_17",
+          "family_id": "sf1-f0288703543ad01380aa9578b256e82cbd38088eb70651f75c9f6ed6990f42c8"
+        },
+        {
+          "problem_id": "mathd_algebra_170",
+          "family_id": "sf1-d492c66593356372ffbc6a5b4718a738227c29598a8d839586e8c430deac4a58"
+        },
+        {
+          "problem_id": "mathd_algebra_171",
+          "family_id": "sf1-e39f8d08271e94cf40b3b6de4ef1caacaa5cffd4035859102aa87d5149d0f230"
+        },
+        {
+          "problem_id": "mathd_algebra_176",
+          "family_id": "sf1-3124f34b82e9430ee129b5a3ccb198b2e3e564762d84794df4b04c0871af7c00"
+        },
+        {
+          "problem_id": "mathd_algebra_184",
+          "family_id": "sf1-48b5ae45182448f615193a371ebec5e8bb70a7af53d5e30a2dec9eed54cd2ae7"
+        },
+        {
+          "problem_id": "mathd_algebra_188",
+          "family_id": "sf1-c6282a8c9a85178d5a84e9d071ac1f4ff04dda3afd73b944caa612f04102f085"
+        },
+        {
+          "problem_id": "mathd_algebra_196",
+          "family_id": "sf1-448a5f5b2dc1ff19f7e95ea67a445d4fd45652fd2c1b16592266a34b90fa4a8a"
+        },
+        {
+          "problem_id": "mathd_algebra_208",
+          "family_id": "sf1-4375c1690cee87d413b66fc7395ead4e0ef42cd9f8177d2548925b9115760a89"
+        },
+        {
+          "problem_id": "mathd_algebra_209",
+          "family_id": "sf1-44ba2602670cb81402660b6fc1acf3aa57295ca6f134ec3886fdeceae1c180b1"
+        },
+        {
+          "problem_id": "mathd_algebra_215",
+          "family_id": "sf1-ae9829375d4f10feae41ffd70ff03ba63cc7c2864a876f0da853b05405e29f7a"
+        },
+        {
+          "problem_id": "mathd_algebra_24",
+          "family_id": "sf1-e6a2e0e2c9022c5ab40f471d29bd6db34061e68042a027bb5ca2b4877da9bf3d"
+        },
+        {
+          "problem_id": "mathd_algebra_246",
+          "family_id": "sf1-6a0d7ff53a2a44b0087eee518b28c99676c3a0e308224e93d5f7839b11e8b8d5"
+        },
+        {
+          "problem_id": "mathd_algebra_263",
+          "family_id": "sf1-4ec0eca229f70929c6a01836a5326b89609a5e0e520cffde51286540d76730de"
+        },
+        {
+          "problem_id": "mathd_algebra_270",
+          "family_id": "sf1-5f566a9620f1dcec165293b828f1fcaf083f2d33b20f4a287fd88aa9c71252a4"
+        },
+        {
+          "problem_id": "mathd_algebra_275",
+          "family_id": "sf1-af4ffb8d779d8658319c3f776bed0cea1d5d33b3a46f03b71465d51337a771ce"
+        },
+        {
+          "problem_id": "mathd_algebra_276",
+          "family_id": "sf1-85c530f5caf8f3a28fe791b79ae4a888596356c8a8fd8f35339e4a68348cbf99"
+        },
+        {
+          "problem_id": "mathd_algebra_288",
+          "family_id": "sf1-3749d02db83a8812ad363db8a19b774a1432d677792d305e4bd1a23ca9500575"
+        },
+        {
+          "problem_id": "mathd_algebra_289",
+          "family_id": "sf1-4298070b43953e7de0716cdaa1c6e82db6690648b968fdd58301958788764309"
+        },
+        {
+          "problem_id": "mathd_algebra_293",
+          "family_id": "sf1-ac5282ab14fd08c870af07499a717b35bc44b44b97ae743531f431ee9c41bb78"
+        },
+        {
+          "problem_id": "mathd_algebra_296",
+          "family_id": "sf1-07d598ca65ece35ac15c0a5156ffd0f4a29ef3d7988a65e7ee3c1b4cfadd2d8e"
+        },
+        {
+          "problem_id": "mathd_algebra_302",
+          "family_id": "sf1-c6e4280b4fa16fa3298aa5f0d2ecbf0f12f867a1e3aa95eda9f061089f9b28ac"
+        },
+        {
+          "problem_id": "mathd_algebra_304",
+          "family_id": "sf1-b7a0570e5fabdf6a95e273382d9cce080bd3b9ccd7ce62305a8ec6abcff3089a"
+        },
+        {
+          "problem_id": "mathd_algebra_313",
+          "family_id": "sf1-ac684b096583a962c4caed329853dbedb21ebbe391a37f887bce5439771b9d3f"
+        },
+        {
+          "problem_id": "mathd_algebra_314",
+          "family_id": "sf1-318daa44246c96ed0b3fd3ae6f14553e52b8a6206e7ece84d4a1268db47baef7"
+        },
+        {
+          "problem_id": "mathd_algebra_320",
+          "family_id": "sf1-c168a3e529066daa2bc28847b049aec821b49477f1e8450fc38ce5276f2b0e3e"
+        },
+        {
+          "problem_id": "mathd_algebra_329",
+          "family_id": "sf1-f3b9a4b5d729066916bc8dd09be6d44bf16dc4b8b3044ae942cc961d24dfb3b6"
+        },
+        {
+          "problem_id": "mathd_algebra_33",
+          "family_id": "sf1-c4fdb617aeb9786579e11bdb0fe278ebe81351cd8f7fe45c22d4c56fa3ef06cd"
+        },
+        {
+          "problem_id": "mathd_algebra_332",
+          "family_id": "sf1-5fa03384dac15e52cfa9277aa41744ebfa3acf6fbd724b5f4fd60787c0d8fc93"
+        },
+        {
+          "problem_id": "mathd_algebra_338",
+          "family_id": "sf1-1fa3f9713a60790e58a07517370c7c43f99ce182b08a6ca263c634c3102cdd7b"
+        },
+        {
+          "problem_id": "mathd_algebra_342",
+          "family_id": "sf1-f72d1fc771a22a0e0c572950f8dea8369e556c1b72194fe48c4012f94e2b2ce8"
+        },
+        {
+          "problem_id": "mathd_algebra_346",
+          "family_id": "sf1-d48bc14a78da948c999f47067f927f1c67549f48be00455c3f9281de1fe7adff"
+        },
+        {
+          "problem_id": "mathd_algebra_354",
+          "family_id": "sf1-3b95d431cf42750b9dbe2a8aec8c2dee3cbfa6bab257d3a08e85874c80495ea5"
+        },
+        {
+          "problem_id": "mathd_algebra_359",
+          "family_id": "sf1-f37978b3498ec4ecc3d03ee25578f80ded23d1c72c5eba8beafd4fc4955fd13f"
+        },
+        {
+          "problem_id": "mathd_algebra_362",
+          "family_id": "sf1-76dfea8c05bd81004862a66556adf40d1bf819662dd0082ba9577296ed24392d"
+        },
+        {
+          "problem_id": "mathd_algebra_388",
+          "family_id": "sf1-946edc49608da604010eea1548fbf7da2b7c683e017c4a108ca8ab12290d7e4b"
+        },
+        {
+          "problem_id": "mathd_algebra_392",
+          "family_id": "sf1-d017f1f83f438e4bda9c720cbb23efb92dacabf7df48609f2dc318fc6dc0a770"
+        },
+        {
+          "problem_id": "mathd_algebra_398",
+          "family_id": "sf1-7eba51934c81b8a41a13e42837cf2f28c7c2cd37381f8b49a62aaa1fb61baee4"
+        },
+        {
+          "problem_id": "mathd_algebra_400",
+          "family_id": "sf1-1a44882e9ef0d1c867e8d81a06d1944dbf2088a6539b3f58a380b6516042db57"
+        },
+        {
+          "problem_id": "mathd_algebra_412",
+          "family_id": "sf1-3118ec78d3f90b0ab365a032d30019f94d9c69b177288ceadf05c56e4f7425d0"
+        },
+        {
+          "problem_id": "mathd_algebra_419",
+          "family_id": "sf1-388de129b80202732a7821462139f6e66ffc3ebf44f4bcd29210bedc62f4621d"
+        },
+        {
+          "problem_id": "mathd_algebra_427",
+          "family_id": "sf1-2dfd1813a2fbcde4e851e83d02b9649845362c9baafcdb26092758cd1ad4fa7d"
+        },
+        {
+          "problem_id": "mathd_algebra_432",
+          "family_id": "sf1-44ce401abf29569321e7aa255cc244e6b98c5587adaba3fb679a82b1020d8bb2"
+        },
+        {
+          "problem_id": "mathd_algebra_44",
+          "family_id": "sf1-1c1ce2769ccd5ef2b44b5a7bdc5ed64517395b95a751245ca75ec609054033a5"
+        },
+        {
+          "problem_id": "mathd_algebra_440",
+          "family_id": "sf1-3b27be5c304c35911d7dd5f2e0a6badb86d2b69e85a4c727e89d052598891043"
+        },
+        {
+          "problem_id": "mathd_algebra_441",
+          "family_id": "sf1-380698a87bf8c934c9faacdc8ba24681c0c9187082e3331fb8a2243da6689806"
+        },
+        {
+          "problem_id": "mathd_algebra_452",
+          "family_id": "sf1-548b6bd3dcaf134c9b539237bbaeb6fcd150a5ee67f4d80b09262afcf0d05e40"
+        },
+        {
+          "problem_id": "mathd_algebra_459",
+          "family_id": "sf1-ec09734629df027fac2b67de0f06ba4e74d3791e8cb5e0da097af6c417e3d789"
+        },
+        {
+          "problem_id": "mathd_algebra_478",
+          "family_id": "sf1-4bd7686174262e71e9b3636b0cb867367b8a38a4ed455e27ff279012b02397f5"
+        },
+        {
+          "problem_id": "mathd_algebra_484",
+          "family_id": "sf1-33a4bbc595980cec2113d6cdf14995e5770bbdf333be25f2cb4b119c64b1c172"
+        },
+        {
+          "problem_id": "mathd_algebra_487",
+          "family_id": "sf1-165ed589559b9694b7b7e3a369998710e455e1c1851c6683901a3a2df5b37af4"
+        },
+        {
+          "problem_id": "mathd_algebra_513",
+          "family_id": "sf1-2916e147ba9ae704dfc6bbd4987d77ce3f2a515173a65f2a62d4965457544334"
+        },
+        {
+          "problem_id": "mathd_algebra_598",
+          "family_id": "sf1-2985b3931c48e289c2e47065e335cb7d3369b7ae2afb75c02d03fa04fa2d39af"
+        },
+        {
+          "problem_id": "mathd_algebra_756",
+          "family_id": "sf1-41d94e14295d0593506243f8f8dd2e5b9e739ac7aa06bcc70ea6c34f4ef225c4"
+        },
+        {
+          "problem_id": "mathd_algebra_76",
+          "family_id": "sf1-7f9d17bb1e31d1b36035ddb9a961ce4920dec43a2f053cf05c06540e5bb37f13"
+        },
+        {
+          "problem_id": "mathd_algebra_80",
+          "family_id": "sf1-29929a1573ec398a32cafe9e366f99744a770b451393a6510de8825b76c7db76"
+        },
+        {
+          "problem_id": "mathd_numbertheory_100",
+          "family_id": "sf1-6e1850545cd52b49d9ecf589eee034b6fa43e707c62ca029d0e870f176e15113"
+        },
+        {
+          "problem_id": "mathd_numbertheory_1124",
+          "family_id": "sf1-4e9fd0f8b97d3e6f48374a6c900085d06a6633f3ace1d16534865d16f56bc46c"
+        },
+        {
+          "problem_id": "mathd_numbertheory_12",
+          "family_id": "sf1-33b005759bf3e1a3150e35d0da1dadf8c8caa3ee10dc0bc2a35fe2691fe9ebc5"
+        },
+        {
+          "problem_id": "mathd_numbertheory_127",
+          "family_id": "sf1-f923fbcfe3ca19ff3038c42d0056ec1dcd315a84ab529d09e6034cc43305a956"
+        },
+        {
+          "problem_id": "mathd_numbertheory_135",
+          "family_id": "sf1-fcc50f8dc36541143a7f04f064473101ff380f909e2ed4f938511ec77466646b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_150",
+          "family_id": "sf1-7f67fc60ff916cd58af83436752d652fab53f0d73174276b23b73141f5fbf4e0"
+        },
+        {
+          "problem_id": "mathd_numbertheory_175",
+          "family_id": "sf1-7ad28a331dc38eafe4e176458ff5c59a3e9b7e90cadb5b94e504c5e8c0934d0f"
+        },
+        {
+          "problem_id": "mathd_numbertheory_185",
+          "family_id": "sf1-ef76fb870fd5b5f251daeb73671002d294074b96e6fd64a9124c0bb1de4b3871"
+        },
+        {
+          "problem_id": "mathd_numbertheory_207",
+          "family_id": "sf1-50363492f3f549b660760468ae31456151e115a3fb94679f05a9c4cd0c0c60f0"
+        },
+        {
+          "problem_id": "mathd_numbertheory_212",
+          "family_id": "sf1-edda150e3aafa0ecfbc1a8332c32feed7d960d19146400c250facdad0a3eed96"
+        },
+        {
+          "problem_id": "mathd_numbertheory_222",
+          "family_id": "sf1-436fc6adcd1b01e2fc1f1aef89caa71896f03060b41f88c0f191dbd8fc1d814a"
+        },
+        {
+          "problem_id": "mathd_numbertheory_227",
+          "family_id": "sf1-71428766c1bddebb0281343e1519a15b3ccb734f1ba97b8d45d34b41f7500573"
+        },
+        {
+          "problem_id": "mathd_numbertheory_229",
+          "family_id": "sf1-e245e7eb49b8569c1bea418f269fd9ce4ae46f66c8eb73a7151e0d227604d5e6"
+        },
+        {
+          "problem_id": "mathd_numbertheory_233",
+          "family_id": "sf1-2cb20e54796091655340c9c952e418026e7b0bb488160f09ab0fcb00ffaffb75"
+        },
+        {
+          "problem_id": "mathd_numbertheory_234",
+          "family_id": "sf1-bf6ed62480edcf010fb9ea67745283abc78e62498dfc36bd3cc90757c2460762"
+        },
+        {
+          "problem_id": "mathd_numbertheory_235",
+          "family_id": "sf1-b1f36c6e8fe265c7fad07f3a5ff1c77a5a9432d8fff678c72a70d0c651f76e05"
+        },
+        {
+          "problem_id": "mathd_numbertheory_237",
+          "family_id": "sf1-a2dfde46505eda4f7583226f51e4ca841eb9140bcd18d80359ed148ba9a706ea"
+        },
+        {
+          "problem_id": "mathd_numbertheory_239",
+          "family_id": "sf1-7ecef2018d7a85fc948e15964735a969b7686d4a9b39f6905a10dd2c1294470a"
+        },
+        {
+          "problem_id": "mathd_numbertheory_247",
+          "family_id": "sf1-61ea936ea4ca1e96cc2d18d56901a88ae11b6127c910ada8a8f0292493ab4f55"
+        },
+        {
+          "problem_id": "mathd_numbertheory_254",
+          "family_id": "sf1-d53b9afd2d76e4ab6e02fc0a6b766f548a3d2b1b6e10e58d56d38be489e8f9a4"
+        },
+        {
+          "problem_id": "mathd_numbertheory_277",
+          "family_id": "sf1-37b819cdd17fa439133151ebb38324298e259691d0c1ab6defd86df6e990f906"
+        },
+        {
+          "problem_id": "mathd_numbertheory_293",
+          "family_id": "sf1-60c0170ff36164c3fd04525b801b40698dc4bd6b3bfacec74c0adba8b62223ea"
+        },
+        {
+          "problem_id": "mathd_numbertheory_296",
+          "family_id": "sf1-c1325153409db1405ef6ea1f3a0eb955704d4995c110637f0c4b9759fa086967"
+        },
+        {
+          "problem_id": "mathd_numbertheory_299",
+          "family_id": "sf1-1be6322f343da601fdf9118b2a2e36b729003804b8695e63b24ad708ca676e8e"
+        },
+        {
+          "problem_id": "mathd_numbertheory_3",
+          "family_id": "sf1-bc8c9b92110d44509ccb319b33c3cf2085f08974e1992ad8f1c5f7e650a8f6c7"
+        },
+        {
+          "problem_id": "mathd_numbertheory_314",
+          "family_id": "sf1-fcfd92bd4a25f97b929c454c28de5c86ba6860f83f38f8f2f992aa0c04978247"
+        },
+        {
+          "problem_id": "mathd_numbertheory_320",
+          "family_id": "sf1-e505529196817ba2b5db11305a7d4b5b6fda41cebe8fa465caa57d75d4f2cbbd"
+        },
+        {
+          "problem_id": "mathd_numbertheory_321",
+          "family_id": "sf1-d696a69f5915d8efffafc93df0c528557bf95124759a0621e3748695c7f02039"
+        },
+        {
+          "problem_id": "mathd_numbertheory_328",
+          "family_id": "sf1-74b98b22eb37170e2eac8b27dc1a38d27f60a4a758e2f46216be5772000ce89f"
+        },
+        {
+          "problem_id": "mathd_numbertheory_34",
+          "family_id": "sf1-89185d00a56a54253a85327d42730ce40232e7ffcdc362158831d16b162f5753"
+        },
+        {
+          "problem_id": "mathd_numbertheory_341",
+          "family_id": "sf1-11bec5a73c24649dc8e258d9937fe41f7087bb6bcd1fd6934ac7a1935cdd420f"
+        },
+        {
+          "problem_id": "mathd_numbertheory_342",
+          "family_id": "sf1-60b796996d257bf257bc0406e6cac1c9f7b064ed9cb9cb5e8dc6b901b0b8bcf2"
+        },
+        {
+          "problem_id": "mathd_numbertheory_343",
+          "family_id": "sf1-682f0bfa1e65d0f7364ce30973552ea9835a1bd963a5f3e18b8c45be9c96186d"
+        },
+        {
+          "problem_id": "mathd_numbertheory_345",
+          "family_id": "sf1-b3a1fabb3a6df80df850006122dfb9b61c3fd309677eafbef16f40284931ee87"
+        },
+        {
+          "problem_id": "mathd_numbertheory_353",
+          "family_id": "sf1-ec2c0821b35fc564d1303e0c0ae9f26932dc05a2e422cb55856675b5506eb8d9"
+        },
+        {
+          "problem_id": "mathd_numbertheory_427",
+          "family_id": "sf1-a96a939f9a3ebf3ec8593d6472e96c0636a9e1135fbf75fa7c7794e211cbf44a"
+        },
+        {
+          "problem_id": "mathd_numbertheory_430",
+          "family_id": "sf1-6285266b2f14cce95f870a448fe56951ec791c9efe2c715f18e0a02e9233ec13"
+        },
+        {
+          "problem_id": "mathd_numbertheory_435",
+          "family_id": "sf1-a0615ad6cc7cde62db537014bcfe097a079a5485b42408835121956468e8f1b3"
+        },
+        {
+          "problem_id": "mathd_numbertheory_447",
+          "family_id": "sf1-f2be0a0de8837c3aded78c63cb0de290b7a755ea4d351f332c81af918a7d6038"
+        },
+        {
+          "problem_id": "mathd_numbertheory_451",
+          "family_id": "sf1-8827c37fca3f84643a66e12ffa862570bb2f4c5592a5df1351226b54eb7f1bb7"
+        },
+        {
+          "problem_id": "mathd_numbertheory_457",
+          "family_id": "sf1-9aabccc087220f3723e7e22127efef0f4ffc0dc090cad86c7be8047fd33e3678"
+        },
+        {
+          "problem_id": "mathd_numbertheory_483",
+          "family_id": "sf1-0d79294ac9d08bf80484e4f48993962f17e6601bc41df74f25d75bbddb184c32"
+        },
+        {
+          "problem_id": "mathd_numbertheory_495",
+          "family_id": "sf1-7e3e332016c8185935903203f1a359b68103f46e58567dc604a180d774f3e809"
+        },
+        {
+          "problem_id": "mathd_numbertheory_5",
+          "family_id": "sf1-ddebb3ba5c97c2223fb549dc8077a1bc7ecdbd3d2e09fc6f9755453f29647176"
+        },
+        {
+          "problem_id": "mathd_numbertheory_517",
+          "family_id": "sf1-1895ea1b51581a0ceca4475ef23182c8a8b26df9ff455122c871a2aabe8f84b3"
+        },
+        {
+          "problem_id": "mathd_numbertheory_521",
+          "family_id": "sf1-6e600ef9f2c4e59dd81b1b7890ccb73c6bb3e5eeeae8e805e272687546aafe32"
+        },
+        {
+          "problem_id": "mathd_numbertheory_541",
+          "family_id": "sf1-7c39425026d083a41be227dc4fdcf85fba8d1baccc0a5e68d60bf4f39923cc14"
+        },
+        {
+          "problem_id": "mathd_numbertheory_551",
+          "family_id": "sf1-b293d6dd9849a97c54fa04fb546afab6fd23217bae55839f46f8578001661cf1"
+        },
+        {
+          "problem_id": "mathd_numbertheory_552",
+          "family_id": "sf1-186bfe58fa0aa0bfff956ac860a22f22eb8bbb06aecf5e14c3f44775e7dd024b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_559",
+          "family_id": "sf1-5861ffab1d70e5073cb717dc8bc72717784a924fa0a44433319b14b06d7bb890"
+        },
+        {
+          "problem_id": "mathd_numbertheory_582",
+          "family_id": "sf1-674a2b5c88105034474aac67584d615a100a9e87c3c32372a1ac9daed17c7432"
+        },
+        {
+          "problem_id": "mathd_numbertheory_618",
+          "family_id": "sf1-b09e00983c7ba1188e7983aae6199cc1d66cbb399dcfc6f36cc36a1c25e17b33"
+        },
+        {
+          "problem_id": "mathd_numbertheory_66",
+          "family_id": "sf1-6aaa819b941857bd7e23aaff8c11b5a3ea57dc6a5114df8ae47d0e31a952deeb"
+        },
+        {
+          "problem_id": "mathd_numbertheory_711",
+          "family_id": "sf1-be5f0e8b4f2a62d75069523a31b7efddd719203fad338fab14e201a3851c9a5b"
+        },
+        {
+          "problem_id": "mathd_numbertheory_728",
+          "family_id": "sf1-1c18a54191ef2693c161096f38c6b1b5531d37a37ba17a85882938f0ec9a9419"
+        },
+        {
+          "problem_id": "mathd_numbertheory_764",
+          "family_id": "sf1-dd3eca01258f38d9e23d55bd54947299d821af35802b922a7a8ad358e2431f8f"
+        },
+        {
+          "problem_id": "mathd_numbertheory_765",
+          "family_id": "sf1-692c3bd7400ce8c13e9471e9a9286aa37c5e5b026b40813f0150261e2a78fcb8"
+        },
+        {
+          "problem_id": "mathd_numbertheory_769",
+          "family_id": "sf1-ef1e7851f473dac06cbd2632f8d2c1435f7b5c7045ecd99accaaf012a67b53ac"
+        },
+        {
+          "problem_id": "mathd_numbertheory_85",
+          "family_id": "sf1-36ea5990817317e13281fa0671463945b58b468f09ab185b2c9860dc39be983d"
+        },
+        {
+          "problem_id": "mathd_numbertheory_99",
+          "family_id": "sf1-a420c1a96d0b67f68c63b842673b1c82506da58b2f8ec850b8dde0c0458ea51a"
+        },
+        {
+          "problem_id": "numbertheory_2pownm1prime_nprime",
+          "family_id": "sf1-809d914eef5cbb5de0f6d722bb3f6df1f5cc92f3763c5a4767a285fd61ab1592"
+        },
+        {
+          "problem_id": "numbertheory_3pow2pownm1mod2pownp3eq2pownp2",
+          "family_id": "sf1-4c7c16cac6cf249ac24d310bfa84c5ca1db82563ffcfaca658809c230c4cd27e"
+        },
+        {
+          "problem_id": "numbertheory_4x3m7y3neq2003",
+          "family_id": "sf1-bfa8c13710cdb9397ac4e928f158219b051278a46ac9304f944cdfedca5c5b1f"
+        },
+        {
+          "problem_id": "numbertheory_aoddbdiv4asqpbsqmod8eq1",
+          "family_id": "sf1-5b4580927b101b92ac3eaea665e8521150b0d1082668d0f3cda2a265d883b780"
+        },
+        {
+          "problem_id": "numbertheory_exk2powkeqapb2mulbpa2_aeq1",
+          "family_id": "sf1-5f5bc2ffa0e124f6dfa113a57be6621b04087919e528029063f9115eb9068494"
+        },
+        {
+          "problem_id": "numbertheory_fxeq4powxp6powxp9powx_f2powmdvdf2pown",
+          "family_id": "sf1-8ff64ca1280a86893fd9fb35e269a7a5e0badf78d8ef7b1bd06eae16716f70a8"
+        },
+        {
+          "problem_id": "numbertheory_notequiv2i2jasqbsqdiv8",
+          "family_id": "sf1-fa810962fb9a907e0f8dd30526443aaad26ddbf86522f9e91113fbc7882fe7ce"
+        },
+        {
+          "problem_id": "numbertheory_x5neqy2p4",
+          "family_id": "sf1-2ea3a6434ca8dbffeecea314910fc469a87a586846109970e88e7acbedd32b86"
+        }
+      ],
+      "at_most_one_selected_problem_per_family": true,
+      "family_overlap_between_development_and_report": "BLOCKED",
+      "latent_dependence_claim": "NONE_PROBLEM_ID_FAMILIES_ARE_AN_OPERATIONAL_CLUSTERING_RULE_NOT_PROOF_OF_STATISTICAL_INDEPENDENCE"
+    },
+    "power_design": {
+      "role": "PROSPECTIVE_DESIGN_SENSITIVITY_NOT_OBSERVED_EFFECT_ESTIMATE",
+      "report_family_count": 244,
+      "contrasts": 4,
+      "familywise_alpha": 0.05,
+      "conservative_local_alpha": 0.0125,
+      "test": "EXACT_TWO_SIDED_CONDITIONAL_MCNEMAR_BINOMIAL",
+      "target_absolute_paired_success_advantage": 0.27,
+      "discordance_parameterization": "q=p10_plus_p01_p10_minus_p01_equals_0.27",
+      "numeric_search_grid": {
+        "q_min": 0.27,
+        "q_max": 1,
+        "points": 10001,
+        "formula": "q_i=0.27+0.73*i/10000_for_integer_i_0_through_10000"
+      },
+      "minimum_unconditional_power_on_frozen_grid": 0.9598828,
+      "approximate_minimizer_q": 0.994306,
+      "required_power_floor": 0.95,
+      "continuum_minimum_claim": "NONE",
+      "limitation": "POWER_FLOOR_IS_VERIFIED_ON_THE_FROZEN_DISCORDANCE_GRID_AND_DOES_NOT_ESTABLISH_A_CONTINUUM_OR_JOINT_FOUR_CONTRAST_POWER_GUARANTEE",
+      "smaller_effects": "REPORT_AS_UNDERPOWERED_SENSITIVITY_NOT_AS_EVIDENCE_OF_NO_EFFECT"
+    },
+    "paired_design": {
+      "arms": [
+        "ordinary",
+        "portfolio",
+        "product_only",
+        "multi_fidelity",
+        "verified_chain"
+      ],
+      "attempts_per_problem_arm": 16,
+      "required_cells": 1220,
+      "required_model_call_slots": 19520,
+      "one_report_problem_per_operational_family": true,
+      "all_five_arms_required_for_every_report_problem": true,
+      "missing_blocked_or_incomplete_cell": "WHOLE_CONFIRMATORY_COHORT_NOT_EVALUABLE",
+      "no_pairwise_complete_case_deletion": true
+    },
+    "deterministic_schedule": {
+      "report_problem_order": "UNICODE_SORTED_REPORT_PROBLEM_IDS",
+      "arm_order_per_problem": "ROTATE_CANONICAL_ARM_ORDER_LEFT_BY_REPORT_PROBLEM_INDEX_MODULO_5",
+      "canonical_arm_order": [
+        "ordinary",
+        "portfolio",
+        "product_only",
+        "multi_fidelity",
+        "verified_chain"
+      ],
+      "attempt_order_per_arm": "ASCENDING_0_THROUGH_15",
+      "concurrency": "ONE_MODEL_DISPATCH_AND_ONE_VERIFIER_PROCESS_PER_PROBLEM_ARM_CELL_AT_A_TIME",
+      "cross_cell_interleaving": "ROUND_ROBIN_BY_ATTEMPT_THEN_REPORT_PROBLEM_THEN_ROTATED_ARM_POSITION",
+      "scheduling_change_after_manifest": "BLOCKED"
+    },
+    "execution_interface": {
+      "authority_path": "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+      "authority_schema": "supernova.confirmatory-execution-authority.v1",
+      "required_authority_bindings": [
+        "protocol_rules_sha256",
+        "model_provider",
+        "exact_model_version",
+        "generation_settings_sha256",
+        "executor_artifact_sha256",
+        "receipt_schema",
+        "receipt_issuer_id",
+        "receipt_verification_key_sha256",
+        "provider_attested_fresh_empty_context_capability",
+        "preflight_receipt_sha256",
+        "preflight_validation_record_sha256",
+        "scheduling_policy_sha256",
+        "serving_pool_policy_sha256",
+        "signature"
+      ],
+      "admissible_context_modes": [
+        "PROVIDER_ATTESTED_EMPTY_CONTEXT",
+        "HERMETIC_LOCAL_INSTANCE"
+      ],
+      "recurring_chat_or_monitor_without_provider_attestation": "NON_CREDIT_ONLY",
+      "self_asserted_capability_alias_only_identity_or_simulation_issuer": "BLOCKED",
+      "authority_missing_invalid_or_digest_mismatch": "BLOCKED_NO_EXECUTION_AUTHORITY",
+      "rule_mutation_when_binding_authority": "BLOCKED"
+    },
+    "confirmatory_manifest_interface": {
+      "required_schema": "supernova.confirmatory-manifest.v1",
+      "binds": [
+        "protocol_rules_sha256",
+        "execution_authority_sha256",
+        "benchmark_selection_sha256",
+        "family_map_sha256",
+        "cost_policy_sha256",
+        "runtime_sha256",
+        "model_identity_sha256",
+        "schedule_sha256",
+        "all_19520_dispatch_records_sha256"
+      ],
+      "seal_before": "REPORT_BYTES_RELEASE_OR_FIRST_CONFIRMATORY_DISPATCH_WHICHEVER_WOULD_OCCUR_FIRST",
+      "missing_invalid_or_post_dispatch_mutation": "BLOCKED"
+    },
+    "analysis": {
+      "outcome": "BINARY_PROBLEM_SOLVED_BY_AT_LEAST_ONE_ADMISSIBLE_FINAL_KERNEL_PASS_AFTER_ALL_16_ATTEMPTS_AND_COST_EVENTS_COMPLETE",
+      "primary_contrasts": [
+        "verified_chain_vs_ordinary",
+        "verified_chain_vs_portfolio",
+        "verified_chain_vs_product_only",
+        "verified_chain_vs_multi_fidelity"
+      ],
+      "test": "EXACT_TWO_SIDED_MCNEMAR_PER_CONTRAST_ON_THE_244_PAIRED_REPORT_FAMILIES",
+      "zero_discordant_pairs": "EXACT_P_VALUE_1",
+      "multiplicity": "HOLM_STEP_DOWN_FAMILYWISE_ALPHA_0.05_SORT_P_ASCENDING_TIE_BY_CONTROL_NAME_ASCENDING",
+      "superiority_direction": "VERIFIED_CHAIN_SOLVED_COUNT_STRICTLY_GREATER_THAN_CONTROL_SOLVED_COUNT",
+      "pass": "ALL_FOUR_CONTRASTS_HAVE_POSITIVE_PAIRED_DIFFERENCE_AND_HOLM_REJECT_THEIR_NULLS",
+      "fail": "COMPLETE_ADMISSIBLE_COHORT_THAT_DOES_NOT_SATISFY_PASS",
+      "blocked": "ANY_AUTHORITY_IDENTITY_RUNTIME_STATEMENT_FAMILY_MANIFEST_CONTEXT_RECEIPT_COST_OR_SIGNATURE_VIOLATION",
+      "incomplete": "ANY_MISSING_PLANNED_CELL_ATTEMPT_COMPLETION_OR_EVENT_WITHOUT_A_BLOCKING_INTEGRITY_VIOLATION",
+      "decision_priority": [
+        "BLOCKED",
+        "INCOMPLETE",
+        "PASS",
+        "FAIL"
+      ],
+      "no_human_adjudication_or_posthoc_exclusion": true
+    },
+    "reporting": {
+      "required": [
+        "RAW_SOLVE_COUNTS_AND_RATES",
+        "PAIRED_DIFFERENCES",
+        "DISCORDANT_COUNTS_AND_DIRECTIONS",
+        "EXACT_UNADJUSTED_P_VALUES",
+        "HOLM_THRESHOLDS_AND_DECISIONS",
+        "REGISTERED_OBSERVABLE_ALLOCATION_ENVELOPE",
+        "REALIZED_USAGE_VECTORS",
+        "CUMULATIVE_1_2_4_8_16_PREFIX_ROBUSTNESS_FRONTIER",
+        "ALL_BLOCKED_INCOMPLETE_AND_UNOBSERVED_COST_LIMITATIONS"
+      ],
+      "compute_claim": "MATCHED_COMPLETE_OBSERVABLE_ALLOCATION_ENVELOPE_NOT_EQUAL_REALIZED_PROVIDER_OR_PHYSICAL_COMPUTE",
+      "compute_equivalence_reporting": "REPORT_PREFIX_FRONTIER_WITHOUT_SELECTING_A_FAVORABLE_CHECKPOINT",
+      "scientific_claim_beyond_terminal_rule": "FORBIDDEN"
+    }
+  },
+  "sealed_rules_sha256": "8dd1a741fe24079ce60f87bc72c09df017f66a5e41b86704258b939835fbfaba",
+  "execution_opening_gate": {
+    "state": "BLOCKED_NO_EXECUTION_AUTHORITY",
+    "missing_artifact": "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+    "transition": "ONLY_AN_ADMISSIBLE_IMMUTABLE_AUTHORITY_BUNDLE_VALIDATED_AGAINST_THE_SEALED_RULES_DIGEST_CAN_OPEN_CONFIRMATORY_DISPATCH",
+    "non_credit_simulation": "ALLOWED_FOR_ENGINEERING_ONLY_WITH_ISSUER_ID_NON_CREDIT_SIMULATION",
+    "simulation_recurring_chat_or_self_asserted_receipt_for_scientific_credit": "BLOCKED",
+    "held_out_report_dispatch": "BLOCKED"
+  },
+  "mutation_policy": {
+    "sealed_rules_or_digest_change": "NEW_PROTOCOL_VERSION_REQUIRED_AND_ANY_EXISTING_MANIFEST_INVALID",
+    "execution_authority_binding": "MUST_NOT_MUTATE_SEALED_RULES",
+    "unknown_field_missing_binding_or_unresolved_input": "BLOCKED"
+  }
+}
