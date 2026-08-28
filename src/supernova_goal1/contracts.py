@@ -21,6 +21,12 @@ CONTROL_ARMS: tuple[Arm, ...] = (
 )
 
 
+MODEL_USAGE_BASES: frozenset[str] = frozenset(
+    {"provider_tokens", "visible_utf8_bytes"}
+)
+UNFROZEN_MODEL_USAGE_BASIS = "UNFROZEN"
+
+
 class GoalDecision(StrEnum):
     BLOCKED = "BLOCKED"
     INCOMPLETE = "INCOMPLETE"
@@ -79,6 +85,7 @@ class ExperimentSpec:
     phase: str
     required_problem_ids: tuple[str, ...]
     cost_model_frozen: bool
+    model_usage_basis: str
     budget_id: str
     budget_ceiling: CompleteCost
     familywise_alpha: float
@@ -88,6 +95,7 @@ class ExperimentSpec:
         experiment_id = raw.get("experiment_id")
         phase = raw.get("phase")
         budget_id = raw.get("budget_id")
+        model_usage_basis = raw.get("model_usage_basis")
         problem_ids = raw.get("required_problem_ids")
         alpha = raw.get("familywise_alpha")
         if not all(isinstance(value, str) and value for value in (experiment_id, phase, budget_id)):
@@ -100,6 +108,22 @@ class ExperimentSpec:
             raise ValueError("required_problem_ids must be unique")
         if not isinstance(raw.get("cost_model_frozen"), bool):
             raise ValueError("cost_model_frozen must be boolean")
+        allowed_usage_bases = MODEL_USAGE_BASES | {UNFROZEN_MODEL_USAGE_BASIS}
+        if (
+            not isinstance(model_usage_basis, str)
+            or model_usage_basis not in allowed_usage_bases
+        ):
+            raise ValueError(
+                "model_usage_basis must be provider_tokens, visible_utf8_bytes, "
+                "or UNFROZEN"
+            )
+        if (
+            raw["cost_model_frozen"]
+            and model_usage_basis == UNFROZEN_MODEL_USAGE_BASIS
+        ):
+            raise ValueError(
+                "a frozen cost model requires a concrete model_usage_basis"
+            )
         if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not 0 < alpha < 1:
             raise ValueError("familywise_alpha must be between 0 and 1")
         ceiling = raw.get("budget_ceiling")
@@ -110,6 +134,7 @@ class ExperimentSpec:
             phase=phase,
             required_problem_ids=tuple(problem_ids),
             cost_model_frozen=raw["cost_model_frozen"],
+            model_usage_basis=model_usage_basis,
             budget_id=budget_id,
             budget_ceiling=CompleteCost.from_mapping(ceiling, "budget_ceiling"),
             familywise_alpha=float(alpha),
@@ -122,6 +147,7 @@ class OutcomeRecord:
     problem_id: str
     arm: Arm
     budget_id: str
+    model_usage_basis: str
     solved: bool
     verifier_passed: bool
     cost: CompleteCost
@@ -133,6 +159,15 @@ class OutcomeRecord:
             raise ValueError(f"{', '.join(string_fields)} must be non-empty strings")
         if not isinstance(raw.get("solved"), bool) or not isinstance(raw.get("verifier_passed"), bool):
             raise ValueError("solved and verifier_passed must be boolean")
+        model_usage_basis = raw.get("model_usage_basis")
+        if (
+            not isinstance(model_usage_basis, str)
+            or model_usage_basis not in MODEL_USAGE_BASES
+        ):
+            raise ValueError(
+                "outcome model_usage_basis must be provider_tokens or "
+                "visible_utf8_bytes"
+            )
         try:
             arm = Arm(raw.get("arm"))
         except (TypeError, ValueError) as exc:
@@ -145,6 +180,7 @@ class OutcomeRecord:
             problem_id=raw["problem_id"],
             arm=arm,
             budget_id=raw["budget_id"],
+            model_usage_basis=model_usage_basis,
             solved=raw["solved"],
             verifier_passed=raw["verifier_passed"],
             cost=CompleteCost.from_mapping(cost, "cost"),
