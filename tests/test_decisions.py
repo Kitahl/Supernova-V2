@@ -17,7 +17,7 @@ class DecisionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.base_spec = json.loads(
-            (ROOT / "goal1" / "GOAL1.json").read_text(encoding="utf-8")
+            (ROOT / "examples" / "dry_run_goal1.json").read_text(encoding="utf-8")
         )
 
     @staticmethod
