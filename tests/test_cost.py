@@ -567,6 +567,21 @@ class CompleteCostAccountingTests(unittest.TestCase):
             ("input_utf8_bytes", "output_utf8_bytes"),
             report.model_usage_dimension_names,
         )
+        self.assertEqual(
+            (
+                "model_calls",
+                "input_utf8_bytes",
+                "output_utf8_bytes",
+                "verifier_milliseconds",
+                "orchestration_milliseconds",
+            ),
+            report.cost_dimension_names,
+        )
+        violations = report.budget_violations(CompleteCost(1, 0, 0, 0, 0))
+        self.assertEqual(
+            ("input_utf8_bytes", "output_utf8_bytes"),
+            violations[Arm.ORDINARY],
+        )
 
 
 if __name__ == "__main__":
