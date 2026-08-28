@@ -382,48 +382,45 @@ def _pairwise_counts(
     }
 
 
-def _base_result(bundle: EvidenceBridgeBundle) -> dict[str, object]:
+def _safe_attr(value: object, name: str) -> object:
     try:
-        bridge_sha256 = bundle.bridge_sha256
+        return getattr(value, name)
     except Exception:
-        bridge_sha256 = "UNAVAILABLE"
+        return "UNAVAILABLE"
+
+
+def _base_result(bundle: EvidenceBridgeBundle) -> dict[str, object]:
+    bridge_sha256 = _safe_attr(bundle, "bridge_sha256")
+    records = _safe_attr(bundle, "records")
     return {
         "schema": RESULT_SCHEMA,
-        "run_id": getattr(bundle, "run_id", "UNAVAILABLE"),
+        "run_id": _safe_attr(bundle, "run_id"),
         "experiment_id": EXPECTED_EXPERIMENT_ID,
         "bridge_sha256": bridge_sha256,
-        "bridge_authority_receipt_sha256": getattr(
-            bundle, "authority_receipt_sha256", "UNAVAILABLE"
+        "bridge_authority_receipt_sha256": _safe_attr(
+            bundle, "authority_receipt_sha256"
         ),
-        "protocol_rules_sha256": getattr(
-            bundle, "protocol_rules_sha256", "UNAVAILABLE"
+        "protocol_rules_sha256": _safe_attr(bundle, "protocol_rules_sha256"),
+        "confirmatory_manifest_sha256": _safe_attr(
+            bundle, "confirmatory_manifest_sha256"
         ),
-        "confirmatory_manifest_sha256": getattr(
-            bundle, "confirmatory_manifest_sha256", "UNAVAILABLE"
+        "dispatch_manifest_sha256": _safe_attr(
+            bundle, "dispatch_manifest_sha256"
         ),
-        "dispatch_manifest_sha256": getattr(
-            bundle, "dispatch_manifest_sha256", "UNAVAILABLE"
+        "close_sha256": _safe_attr(bundle, "close_sha256"),
+        "completion_set_sha256": _safe_attr(bundle, "completion_set_sha256"),
+        "execution_authority_sha256": _safe_attr(
+            bundle, "execution_authority_sha256"
         ),
-        "close_sha256": getattr(bundle, "close_sha256", "UNAVAILABLE"),
-        "completion_set_sha256": getattr(
-            bundle, "completion_set_sha256", "UNAVAILABLE"
-        ),
-        "execution_authority_sha256": getattr(
-            bundle, "execution_authority_sha256", "UNAVAILABLE"
-        ),
-        "manifest_credit_status": getattr(
-            bundle, "manifest_credit_status", "UNAVAILABLE"
+        "manifest_credit_status": _safe_attr(
+            bundle, "manifest_credit_status"
         ),
         "model_usage_basis": EXPECTED_USAGE_BASIS,
         "required_problem_count": EXPECTED_REPORT_PROBLEMS,
         "required_cell_count": EXPECTED_CELLS,
         "required_attempt_count": EXPECTED_ATTEMPTS,
         "required_model_call_count": EXPECTED_MODEL_CALLS,
-        "received_record_count": (
-            len(bundle.records)
-            if type(getattr(bundle, "records", None)) is tuple
-            else 0
-        ),
+        "received_record_count": len(records) if type(records) is tuple else 0,
         "validated_problem_count": 0,
         "validated_cell_count": 0,
         "validated_attempt_count": 0,
