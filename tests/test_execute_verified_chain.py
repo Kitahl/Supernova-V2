@@ -16,8 +16,18 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactKind,
 )
 from supernova_goal1.contracts import Arm
-from supernova_goal1.dispatch import (\n    CompletionPayload,\n    CompletionRecord,\n    CompletionSigner,\n    DispatchAuthority,\n)
-from supernova_goal1.execution.common import (\n    AttemptResult,\n    AttemptStatus,\n    FrozenProblemRequest,\n    LeanVerifierReceipt,\n)
+from supernova_goal1.dispatch import (
+    CompletionPayload,
+    CompletionRecord,
+    CompletionSigner,
+    DispatchAuthority,
+)
+from supernova_goal1.execution.common import (
+    AttemptResult,
+    AttemptStatus,
+    FrozenProblemRequest,
+    LeanVerifierReceipt,
+)
 from supernova_goal1.execution.verified_chain import (
     AdmittedProduct,
     RetryLink,
@@ -57,7 +67,8 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         self.prompt = b"Prove the exact Lean theorem."
         self.product = b"lemma helper : 1 + 1 = 2 := by norm_num"
         self.product_response = render_verified_product_emission(self.product)
-        self.final_answer = b"by\n  norm_num"
+        self.final_answer = b"by
+  norm_num"
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -100,7 +111,8 @@ class VerifiedChainExecutionTests(unittest.TestCase):
                 status=status,
                 command=("lake", "env", "lean", "proof.lean"),
                 returncode=0,
-                stdout=f"verified {len(candidate)} bytes\n",
+                stdout=f"verified {len(candidate)} bytes
+",
                 stderr="",
                 elapsed_milliseconds=11,
             )
@@ -110,7 +122,8 @@ class VerifiedChainExecutionTests(unittest.TestCase):
                 command=("lake", "env", "lean", "proof.lean"),
                 returncode=1,
                 stdout="",
-                stderr="type error\n",
+                stderr="type error
+",
                 elapsed_milliseconds=7,
             )
         return VerifierResult(
