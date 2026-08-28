@@ -5,6 +5,56 @@ It does **not** freeze `goal1/GOAL1.json.cost_model_frozen`; that flag should re
 false until the experiment owner has frozen the measurement environment and justified
 all comparison assumptions below.
 
+## Scheduled-chat observable policy
+
+ChatGPT scheduled tasks do not expose authoritative provider token telemetry. Goal 1
+therefore supports two explicitly different model-usage bases:
+
+- `provider_tokens`, used only when the provider returns authoritative input/output
+  token counts for every issued attempt; and
+- `visible_utf8_bytes`, the scheduled-chat proxy: the exact byte lengths of the
+  committed UTF-8 request and terminal visible response artifacts.
+
+The two bases are not interchangeable. Every expected model-call event binds its basis,
+and a closed five-arm report requires one basis across all arms. When
+`visible_utf8_bytes` is active, the legacy `CompleteCost.input_tokens` and
+`output_tokens` storage slots contain byte counts for schema compatibility; reports
+must label them through `model_usage_dimension_names` as `input_utf8_bytes` and
+`output_utf8_bytes`. They must never be described as provider tokens.
+
+`CostEvent.scheduled_chat_model_call` accepts exact `bytes`, verifies that both
+artifacts are valid UTF-8, and counts their bytes without normalization. A request or
+response must therefore be captured as an immutable artifact before cost closure.
+Missing, dropped, or uncaptured output is unknown telemetry, not a zero-length response,
+and leaves the arm incomplete. Failed and timed-out attempts still count as model calls;
+their terminal visible result must be captured under the prospectively frozen timeout
+rule.
+
+This policy measures observable scheduled-chat use. It does **not** estimate hidden
+reasoning tokens, accelerator time, energy, provider routing, cached internal state, or
+physical compute. A result obtained with this basis supports only a matched observable-
+budget claim. It must not be promoted as equal physical compute.
+
+Before changing `goal1/GOAL1.json.cost_model_frozen` to true, the experiment owner must
+freeze all of the following in one prospective contract:
+
+1. the exact ChatGPT product/model label and the fifteen existing scheduled-task
+   identities used for experimental attempts;
+2. the canonical request and terminal-response artifact envelopes, including whether
+   system text, tool transcripts, and repository context are included;
+3. the issued-attempt, retry, cancellation, timeout, and missing-output rules;
+4. byte ceilings for both visible directions, selected from a non-credit pilot rather
+   than the confirmatory outcomes;
+5. the Lean verifier command, host class, timeout, and cumulative monotonic timing rule;
+6. the orchestration boundary, host class, and treatment of external tool work;
+7. a pre-dispatch authority that binds every expected event to one arm and prevents
+   post-hoc omission, fabrication, or replay; and
+8. a sensitivity statement that explicitly bounds the scientific interpretation when
+   hidden provider compute is unavailable.
+
+Until those eight fields are frozen and the dispatch authority passes its adversarial
+tests, `cost_model_frozen=false` is correct.
+
 ## Cost vector
 
 Every arm is accounted in the existing five-dimensional `CompleteCost` vector:
