@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "goal1" / "CONFIRMATORY_PRODUCT_CONTROLS.json"
-EXPECTED_GIT_BLOB_SHA1 = "709b092e8e60646aef3301e51339b9101eaec2e0"
+EXPECTED_GIT_BLOB_SHA1 = "25839995ea09d43045bcacdc4b710cec87ee9f1e"
 EXPECTED_RECEIPT_FIELDS = [
     "receipt_schema",
     "issuer_id",
@@ -111,6 +111,17 @@ def validate_contract(contract: object) -> None:
         "EXECUTE_AND_RECONCILE_ALL_16_EVEN_AFTER_A_VERIFIED_PASS"
     ):
         raise ValueError("completion policy changed")
+    if shared["capability_surface"] != {
+        "model_provider_version_reasoning_mode_tools_and_generation_settings": (
+            "MUST_MATCH_ACROSS_ALL_FIVE_ARMS_EXCEPT_THE_FROZEN_MULTI_FIDELITY_VISIBLE_OUTPUT_CAP_AND_BE_BOUND_BY_THE_SHARED_CONFIRMATORY_PROTOCOL"
+        ),
+        "external_tools": "FORBIDDEN",
+        "network_during_model_attempt": "FORBIDDEN",
+        "model_visible_input": (
+            "EXACT_SHARED_PRODUCT_CHAIN_PROMPT_TEMPLATE_PLUS_ONLY_THE_ARM_LOCAL_ADMITTED_PRODUCTS_ALLOWED_BELOW"
+        ),
+    }:
+        raise ValueError("capability surface changed")
     if shared["prompt_base_authority"] != {
         "path": "goal1/CONFIRMATORY_BASELINES.json",
         "git_blob_sha1": "2ab23d89b22dd7c21963da1e3543bf2dc0e39193",
