@@ -173,6 +173,28 @@ The **phase** column identifies when the mitigation must be resolved for the sta
 | T32 | Verifier identity not hermetic | CRITICAL for reproducible proof evidence | Ambient PATH/env/cwd can change the checker behind one command string. Python subprocess: <https://docs.python.org/3/library/subprocess.html>; Lean Elan: <https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Managing-Toolchains-with-Elan/>. | Bind resolved executable/image, toolchain/library, cwd and allowlisted env; fail replay on drift. | Confirmatory for reproducible final evidence; deeper environment stress robustness |
 | T33 | Elapsed ms != resource-normalized non-model compute | HIGH; CRITICAL only for physical-compute claim | Wall time includes queue/sleep and ignores core/accelerator intensity. Python time: <https://docs.python.org/3/library/time.html>; Linux cgroup v2: <https://kernel.org/doc/html/next/admin-guide/cgroup-v2.html>. | Freeze resource allocation; measure CPU/accelerator usage where available; otherwise call it elapsed-time proxy and sensitivity-test. | Proxy definition confirmatory; physical-compute parity robustness |
 | T34 | Cost report not bound to scored scientific cell | CRITICAL | `OutcomeRecord.cost` can be supplied independently of the closed cost telemetry report. W3C Trace Context: <https://www.w3.org/TR/trace-context/>. | Pre-dispatch cell execution ID; propagate through all events/report; evaluator derives/reconciles cost and rejects replay/mismatch. | Confirmatory; pilot should test failure paths |
+| T35 | “Corrected” benchmark source != exhaustive semantic-fidelity certificate | HIGH; CRITICAL for an Olympiad/source-math claim | The locked test is sourced from `AI-MO/minif2f_test`, whose dataset card says it corrected several erroneous formalizations. Ospanov et al. report formal/informal discrepancies in more than half of the original miniF2F problems and release a separately corrected corpus; that paper does **not** establish the same defect rate for Kimina's corrected test. | Freeze the construct. If the endpoint is solve-rate on the exact locked Lean statements, state that narrowly and do not claim source-problem fidelity. If the claim is Olympiad/source-math reasoning, independently audit each locked test statement against its intended informal/source problem or adopt an independently audited corrected corpus and bind that mapping/content. | Confirmatory only when source-math fidelity is part of the primary claim; otherwise Robustness/Interpretation |
+
+### T35 evidence boundary — lock integrity is not semantic certification
+
+**EVIDENCE — repository.** `goal1/BENCHMARK_SOURCES.json` identifies the test source as
+`AI-MO/minif2f_test` and describes it as the corrected test source. The content lock therefore
+establishes exactly which corrected-source bytes are intended for use; it does not itself attest what
+“corrected” covers.
+
+**EVIDENCE — direct sources.** The AI-MO dataset card says that it “corrected several erroneous
+formalizations” and lists concrete improvements, but it does not claim an exhaustive item-by-item
+semantic-fidelity audit: <https://huggingface.co/datasets/AI-MO/minif2f_test>. Ospanov, Farnia and
+Yousefzadeh, *miniF2F-Lean Revisited* (2025), report discrepancies between formal and informal
+statements for more than half of the original miniF2F problems and publish their own corrected
+versions: <https://arxiv.org/abs/2511.03108>.
+
+**INFERENCE.** Those sources do **not** prove that the current Kimina-corrected test retains the same
+error rate; applying that percentage to Supernova's locked bytes would be unsupported. They do prove
+that a source label such as “corrected” is not, by itself, evidence of exhaustive semantic fidelity.
+For a narrow automated-theorem-proving estimand over exact Lean statements, this can be an
+interpretation/robustness boundary. For a claim about solving the intended Olympiad mathematics, it
+becomes a construct-validity condition that must be resolved before confirmation.
 
 ## Interpretation rule
 
