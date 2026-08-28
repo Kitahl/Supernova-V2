@@ -72,6 +72,17 @@ def _normalize_event_kind(kind: CostEventKind | str) -> CostEventKind:
         raise ValueError(f"unknown cost event kind: {kind!r}") from exc
 
 
+def _normalize_arm(arm: Arm | str) -> Arm:
+    if type(arm) is Arm:
+        return arm
+    if type(arm) is not str:
+        raise ValueError(f"unknown arm: {arm!r}")
+    try:
+        return Arm(arm)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"unknown arm: {arm!r}") from exc
+
+
 @dataclass(frozen=True)
 class ExpectedCostEvent:
     """One event that the execution harness expects telemetry for before report closure."""
@@ -252,12 +263,7 @@ class ArmCostTrace:
             ),
         )
 
-        if not isinstance(self.arm, Arm):
-            try:
-                normalized = Arm(self.arm)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"unknown arm: {self.arm!r}") from exc
-            object.__setattr__(self, "arm", normalized)
+        object.__setattr__(self, "arm", _normalize_arm(self.arm))
         if not isinstance(self.accounting_complete, bool):
             raise ValueError("accounting_complete must be boolean")
 
@@ -290,7 +296,7 @@ class ArmCostTrace:
         accounting_complete: bool,
     ) -> "ArmCostTrace":
         return cls(
-            arm=Arm(arm),
+            arm=_normalize_arm(arm),
             events=tuple(events),
             expected_events=tuple(expected_events),
             accounting_complete=accounting_complete,
@@ -436,7 +442,7 @@ class CompleteCostReport:
         return cls(tuple(traces))
 
     def total_for(self, arm: Arm | str) -> CompleteCost:
-        normalized = Arm(arm)
+        normalized = _normalize_arm(arm)
         for trace in self.traces:
             if trace.arm is normalized:
                 return trace.total
