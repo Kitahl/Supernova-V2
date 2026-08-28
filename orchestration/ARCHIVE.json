@@ -8,7 +8,12 @@
       "completion": {
         "pull_request": 21,
         "merge_commit": "9672ddf5dae205ddbfef7cb57b47cb0e6774fa6a"
-      }
+      },
+      "paths": [
+        "goal1/BENCHMARK_SOURCES.json",
+        "scripts/assemble_minif2f_kimina.py",
+        "tests/test_assemble_minif2f_kimina.py"
+      ]
     },
     {
       "id": "G1-102",
@@ -17,7 +22,12 @@
       "completion": {
         "pull_request": 22,
         "merge_commit": "f71c6c77db4b0da56872b3332e790cc474c77d04"
-      }
+      },
+      "paths": [
+        "goal1/BENCHMARK.lock.json",
+        "scripts/import_benchmark.py",
+        "tests/test_import_benchmark.py"
+      ]
     },
     {
       "id": "G1-103",
@@ -26,7 +36,11 @@
       "completion": {
         "pull_request": 24,
         "merge_commit": "d1474fe9b564cd3551ed792f439cca1ad732d6fb"
-      }
+      },
+      "paths": [
+        "runtime/lean/",
+        "tests/test_lean_runtime.py"
+      ]
     },
     {
       "id": "G1-107",
@@ -35,7 +49,12 @@
       "completion": {
         "pull_request": 26,
         "merge_commit": "cc95e0baade7d50958802d038f0385cdf5dc1e91"
-      }
+      },
+      "paths": [
+        "src/supernova_goal1/cost.py",
+        "tests/test_cost.py",
+        "docs/COST_MODEL.md"
+      ]
     }
   ]
 }
