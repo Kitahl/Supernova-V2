@@ -15,10 +15,24 @@ On every wake, a task:
 
 Ticket states:
 
-- `READY`: the assigned task may implement or advance the ticket;
-- `WAITING`: a dependency or project-manager transition is pending;
+- `READY`: every declared dependency is `DONE`, so the assigned task may
+  implement or advance the ticket;
+- `WAITING`: at least one dependency or an explicit project-manager transition
+  is pending;
 - `DONE`: the ticket is merged and its `completion` object binds the pull
   request number and exact merge commit.
+
+Dependencies:
+
+- every ticket carries a `depends_on` list of current ticket IDs;
+- dependencies must exist, must not contain the ticket itself, and must form an
+  acyclic graph;
+- a non-supervisor ticket with an unresolved dependency remains `WAITING`;
+- a non-supervisor ticket with no unresolved dependency is `READY` unless it is
+  already `DONE`;
+- only the project manager changes dependency-derived ticket state, in a reviewed
+  orchestration pull request;
+- dependency completion never changes a scheduler task identity.
 
 Rules:
 
@@ -34,7 +48,12 @@ Rules:
 - before reassigning a completed role, the project manager moves the terminal ticket
   and its exact PR/merge evidence to `ARCHIVE.json`, then assigns a new ticket ID in
   `BOARD.json` and updates only that role's `TASKS.json.ticket_id`;
-- reassignment never changes, creates, or replaces a `scheduler_task_id`.
+- reassignment never changes, creates, or replaces a `scheduler_task_id`;
+- a tranche transition updates `BOARD.json`, `TASKS.json`, `ARCHIVE.json`,
+  this protocol when semantics change, and its orchestration tests in one pull
+  request.
 
 MM06 is review-only, MF06 is integration-test-only, and BIL00 is status-only.
-The project manager merges after independent verification.
+Those supervisor tickets remain `WAITING` until the project manager explicitly
+dispatches their already-satisfied dependency set. The project manager merges
+after independent verification.
