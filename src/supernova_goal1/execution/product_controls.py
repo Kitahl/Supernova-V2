@@ -290,6 +290,46 @@ def _validate_retry(
         raise ValueError("retry_of_attempt must precede the current frozen attempt")
 
 
+def _authenticate_visible_product(
+    authority: DispatchAuthority,
+    manifest: DispatchManifest,
+    product: VisibleProduct,
+) -> None:
+    """Verify one producer record using the dispatch authority's stored request/key."""
+
+    producer = product.producer_completion
+    matches = [
+        entry
+        for entry in manifest.entries
+        if (
+            entry.dispatch_id == producer.dispatch_id
+            and entry.entry_sha256 == producer.entry_sha256
+        )
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "visible product producer completion is absent from the supplied manifest"
+        )
+    entry = matches[0]
+    # DispatchAuthority owns the Lamport-key verification implementation. This
+    # read-only validation intentionally uses the same authority path as close()
+    # without consuming the still-open multi-attempt run.
+    connection = authority._connect()
+    try:
+        stored_requests = authority._requests_from_db(connection)
+        stored_request = stored_requests.get(entry.dispatch_id)
+        if stored_request is None:
+            raise ValueError("visible product producer request is absent from authority")
+        authority._validate_record_for_entry(
+            connection,
+            entry,
+            producer,
+            stored_request,
+        )
+    finally:
+        connection.close()
+
+
 def execute_product_only_step(
     *,
     authority: DispatchAuthority,
@@ -317,20 +357,8 @@ def execute_product_only_step(
     for product in visible_products:
         if product.producer_attempt >= request.attempt:
             raise ValueError("visible products must come from an earlier frozen attempt")
-        producer = product.producer_completion
-        matches = [
-            entry
-            for entry in manifest.entries
-            if (
-                entry.dispatch_id == producer.dispatch_id
-                and entry.entry_sha256 == producer.entry_sha256
-            )
-        ]
-        if len(matches) != 1:
-            raise ValueError(
-                "visible product producer completion is absent from the supplied manifest"
-            )
-        producer_request = producer.payload.request
+        _authenticate_visible_product(authority, manifest, product)
+        producer_request = product.producer_completion.payload.request
         if (
             producer_request.run_id != request.run_id
             or producer_request.problem_id != request.problem_id
