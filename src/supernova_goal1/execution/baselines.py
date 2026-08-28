@@ -29,13 +29,24 @@ from .common import (
 
 @dataclass(frozen=True)
 class ModelAttemptObservation:
-    """Exact visible terminal output returned by one scheduled-chat attempt."""
+    """Visible terminal output bound to one preregistered scheduled-chat dispatch.
 
+    This is evidence for the frozen observable proxy, not provider-token or hidden
+    model-compute telemetry.
+    """
+
+    dispatch_id: str
     response_utf8: bytes
     status: AttemptStatus
     error: str | None = None
 
     def __post_init__(self) -> None:
+        if (
+            type(self.dispatch_id) is not str
+            or len(self.dispatch_id) != 64
+            or any(char not in "0123456789abcdef" for char in self.dispatch_id)
+        ):
+            raise ValueError("dispatch_id must be 64 lowercase hexadecimal characters")
         if type(self.response_utf8) is not bytes:
             raise TypeError("response_utf8 must be exact bytes")
         try:
@@ -138,7 +149,33 @@ class BaselineExecution:
             raise TypeError("completion must be an exact CompletionRecord")
         if type(self.cost_trace) is not ArmCostTrace:
             raise TypeError("cost_trace must be an exact ArmCostTrace")
-        if self.completion.payload.request.arm is not self.cost_trace.arm:
+        matches = [
+            entry
+            for entry in self.manifest.entries
+            if (
+                entry.dispatch_id == self.completion.dispatch_id
+                and entry.entry_sha256 == self.completion.entry_sha256
+            )
+        ]
+        if len(matches) != 1:
+            raise ValueError("completion is not bound to exactly one manifest entry")
+        entry = matches[0]
+        request = self.completion.payload.request
+        if (
+            entry.run_id,
+            entry.problem_id,
+            entry.arm,
+            entry.attempt_index,
+            entry.request_sha256,
+        ) != (
+            request.run_id,
+            request.problem_id,
+            request.arm,
+            request.attempt,
+            request.frozen_request_sha256,
+        ):
+            raise ValueError("completion request does not match its manifest entry")
+        if request.arm is not self.cost_trace.arm:
             raise ValueError("completion and cost trace arms do not match")
         if not self.cost_trace.coverage_complete:
             raise ValueError("baseline execution cost coverage is incomplete")
@@ -167,17 +204,27 @@ def _safe_model_call(
         observation = model_call(dispatch, request_utf8)
     except Exception as exc:
         return ModelAttemptObservation(
+            dispatch_id=dispatch.entry.dispatch_id,
             response_utf8=b"",
             status=AttemptStatus.ERROR,
             error=f"model_call raised {type(exc).__name__}",
         )
     if type(observation) is not ModelAttemptObservation:
         return ModelAttemptObservation(
+            dispatch_id=dispatch.entry.dispatch_id,
             response_utf8=b"",
             status=AttemptStatus.ERROR,
             error="model_call returned a non-ModelAttemptObservation value",
         )
+    if observation.dispatch_id != dispatch.entry.dispatch_id:
+        return ModelAttemptObservation(
+            dispatch_id=dispatch.entry.dispatch_id,
+            response_utf8=b"",
+            status=AttemptStatus.ERROR,
+            error="model_call returned evidence for a different dispatch",
+        )
     return ModelAttemptObservation(
+        dispatch_id=observation.dispatch_id,
         response_utf8=observation.response_utf8,
         status=observation.status,
         error=observation.error,
@@ -260,9 +307,10 @@ def _execute_baseline_attempt(
         request=request,
         completion_verifier_sha256=signer.public_commitment,
     )
+    registered_entry = updated_manifest.entries[-1]
     dispatch = BaselineDispatch(
         request=request,
-        entry=updated_manifest.entries[-1],
+        entry=registered_entry,
         expected_events=expected_events,
     )
     orchestration_ms += _elapsed_milliseconds(started)
@@ -300,16 +348,32 @@ def _execute_baseline_attempt(
             observation.response_utf8,
         )
         started = monotonic_ns()
-        receipt = LeanVerifierReceipt.from_verifier_result(
-            request=request,
-            attempt_result=attempt_result,
-            verifier_result=verifier_result,
-        )
+        try:
+            receipt = LeanVerifierReceipt.from_verifier_result(
+                request=request,
+                attempt_result=attempt_result,
+                verifier_result=verifier_result,
+            )
+        except (TypeError, ValueError) as exc:
+            verifier_result = VerifierResult(
+                status=VerifierStatus.ERROR,
+                command=("verifier-port-error",),
+                returncode=None,
+                stdout="",
+                stderr="",
+                elapsed_milliseconds=0,
+                error=f"invalid verifier result: {type(exc).__name__}",
+            )
+            receipt = LeanVerifierReceipt.from_verifier_result(
+                request=request,
+                attempt_result=attempt_result,
+                verifier_result=verifier_result,
+            )
         orchestration_ms += _elapsed_milliseconds(started)
 
     started = monotonic_ns()
     payload = CompletionPayload(request, attempt_result, receipt)
-    completion = signer.complete(entry=dispatch.entry, payload=payload)
+    completion = signer.complete(entry=registered_entry, payload=payload)
     orchestration_ms += _elapsed_milliseconds(started)
 
     events = (
@@ -371,10 +435,11 @@ def execute_portfolio_attempt(
     model_call: ModelCall,
     verifier_call: VerifierCall,
 ) -> BaselineExecution:
-    """Execute one independent preregistered portfolio attempt.
+    """Execute one preregistered portfolio attempt under the observable proxy.
 
-    Call once per frozen portfolio request. The adapter deliberately accepts no
-    prior candidate or shared model context.
+    Call once per frozen portfolio request. Direct replay of an observation from
+    another dispatch is rejected. The trusted host remains responsible for fresh
+    scheduled-chat state because provider-hidden work is not locally observable.
     """
 
     return _execute_baseline_attempt(
