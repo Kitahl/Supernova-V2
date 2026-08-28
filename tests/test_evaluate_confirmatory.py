@@ -92,7 +92,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             problem_id=problem_id,
             problem_identity=sha("identity:" + problem_id),
             arm=arm,
-            budget_id="goal1-common-envelope-v1",
+            budget_id="goal1-confirmatory-complete-observable-allocation-v1",
             model_usage_basis="visible_utf8_bytes",
             cost=CompleteCost(
                 16,
@@ -259,6 +259,21 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             "BRIDGE_AUTHENTICATION_FAILED", malformed_result["reason"]
         )
         self.assertEqual([], malformed_result["contrasts"])
+
+        non_json_values = list(genuine)
+        non_json_values[genuine._fields.index("run_id")] = object()
+        non_json_bundle = tuple.__new__(
+            EvidenceBridgeBundle, tuple(non_json_values)
+        )
+        non_json_result = evaluate_confirmatory(
+            non_json_bundle, evidence_authority=authority
+        )
+        self.assertEqual("BLOCKED", non_json_result["decision"])
+        self.assertEqual(
+            "BRIDGE_AUTHENTICATION_FAILED", non_json_result["reason"]
+        )
+        self.assertEqual("UNAVAILABLE", non_json_result["run_id"])
+        self.assertEqual([], non_json_result["contrasts"])
 
     def test_private_frozen_statistics_pass_with_unequal_realized_costs(self) -> None:
         result = _evaluate_complete_snapshots(
