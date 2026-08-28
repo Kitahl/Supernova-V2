@@ -79,6 +79,8 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         request_utf8: bytes,
         runtime_sha256: str | None = None,
         budget_sha256: str | None = None,
+        protocol_dispatch_id: str | None = None,
+        confirmatory_manifest_sha256: str | None = None,
     ) -> FrozenProblemRequest:
         artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
             request_utf8,
@@ -101,6 +103,8 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             model_usage_basis="visible_utf8_bytes",
             runtime_sha256=runtime_sha256 or digest("lean-4.33.1"),
             request_artifact=artifact,
+            protocol_dispatch_id=protocol_dispatch_id,
+            confirmatory_manifest_sha256=confirmatory_manifest_sha256,
         )
 
     @staticmethod
@@ -140,6 +144,8 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         manifest=None,
         attempt: int = 0,
         verifier_status: VerifierStatus = VerifierStatus.PASS,
+        protocol_dispatch_id: str | None = None,
+        confirmatory_manifest_sha256: str | None = None,
     ):
         authority = authority or self.authority
         manifest = manifest or authority.current_manifest()
@@ -149,7 +155,12 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             admitted_products=(),
             retry_of=None,
         )
-        request = self.request(attempt=attempt, request_utf8=request_utf8)
+        request = self.request(
+            attempt=attempt,
+            request_utf8=request_utf8,
+            protocol_dispatch_id=protocol_dispatch_id,
+            confirmatory_manifest_sha256=confirmatory_manifest_sha256,
+        )
         seen = {}
 
         def verify(_dispatch, candidate):
@@ -549,6 +560,91 @@ class VerifiedChainExecutionTests(unittest.TestCase):
                 retry_of=retry,
             )
         self.assertEqual(1, len(self.authority.current_manifest().entries))
+
+    def test_bound_adjacent_slots_can_feed_forward_admitted_product(self) -> None:
+        manifest_binding = digest("confirmatory-manifest")
+        first_request, first, _ = self.emit_product(
+            protocol_dispatch_id="dispatch-" + digest("chain-slot-0"),
+            confirmatory_manifest_sha256=manifest_binding,
+        )
+        product = first.admitted_product
+        request_utf8 = render_verified_chain_request(
+            self.prompt,
+            execution_authority=self.execution_authority,
+            admitted_products=(product,),
+            retry_of=None,
+        )
+        request = self.request(
+            attempt=1,
+            request_utf8=request_utf8,
+            protocol_dispatch_id="dispatch-" + digest("chain-slot-1"),
+            confirmatory_manifest_sha256=manifest_binding,
+        )
+        execution = execute_verified_chain_step(
+            authority=self.authority,
+            execution_authority=self.execution_authority,
+            manifest=first.baseline.manifest,
+            request=request,
+            problem_prompt_utf8=self.prompt,
+            admitted_products=(product,),
+            retry_of=None,
+            model_call=lambda dispatch, _payload: VerifiedChainObservation(
+                dispatch.entry.dispatch_id,
+                VerifiedChainObservationKind.ANSWERED,
+                self.final_answer,
+            ),
+            verifier_call=lambda _dispatch, candidate: self.verifier(
+                VerifierStatus.PASS, candidate
+            ),
+        )
+        self.assertNotEqual(
+            first_request.protocol_dispatch_id,
+            request.protocol_dispatch_id,
+        )
+        self.assertTrue(execution.terminal_answer)
+
+    def test_bound_adjacent_slots_can_retry_signed_failure(self) -> None:
+        manifest_binding = digest("confirmatory-manifest")
+        failed_request, failed, _ = self.emit_product(
+            verifier_status=VerifierStatus.FAIL,
+            protocol_dispatch_id="dispatch-" + digest("retry-slot-0"),
+            confirmatory_manifest_sha256=manifest_binding,
+        )
+        retry = RetryLink(failed.baseline.completion)
+        request_utf8 = render_verified_chain_request(
+            self.prompt,
+            execution_authority=self.execution_authority,
+            admitted_products=(),
+            retry_of=retry,
+        )
+        request = self.request(
+            attempt=1,
+            request_utf8=request_utf8,
+            protocol_dispatch_id="dispatch-" + digest("retry-slot-1"),
+            confirmatory_manifest_sha256=manifest_binding,
+        )
+        execution = execute_verified_chain_step(
+            authority=self.authority,
+            execution_authority=self.execution_authority,
+            manifest=failed.baseline.manifest,
+            request=request,
+            problem_prompt_utf8=self.prompt,
+            admitted_products=(),
+            retry_of=retry,
+            model_call=lambda dispatch, _payload: VerifiedChainObservation(
+                dispatch.entry.dispatch_id,
+                VerifiedChainObservationKind.ANSWERED,
+                self.final_answer,
+            ),
+            verifier_call=lambda _dispatch, candidate: self.verifier(
+                VerifierStatus.PASS, candidate
+            ),
+        )
+        self.assertNotEqual(
+            failed_request.protocol_dispatch_id,
+            request.protocol_dispatch_id,
+        )
+        self.assertTrue(execution.terminal_answer)
 
     def test_lean_pass_completion_is_feed_forward_not_retry(self) -> None:
         _request, passed, _seen = self.emit_product()
