@@ -55,6 +55,203 @@
         "tests/test_cost.py",
         "docs/COST_MODEL.md"
       ]
+    },
+    {
+      "id": "G1-116",
+      "owner": "MF01",
+      "objective": "Implement exact content-addressed UTF-8 artifact envelopes for visible scheduled-chat requests and terminal responses, binding byte length, SHA-256, media type, run, problem, arm, and attempt without claiming provider-token or hidden-compute telemetry.",
+      "completion": {
+        "pull_request": 28,
+        "merge_commit": "6b4e37e1f1e9aaac2732537d2256891b724d10c7"
+      },
+      "paths": [
+        "src/supernova_goal1/artifacts.py",
+        "tests/test_artifacts.py"
+      ]
+    },
+    {
+      "id": "G1-117",
+      "owner": "MF02",
+      "objective": "Implement a deterministic no-model benchmark/runtime checker that consumes the frozen benchmark lock, verifies a bounded non-credit sample against the pinned Lean 4.33.1 runtime, and emits machine-readable failures without changing benchmark or runtime pins.",
+      "completion": {
+        "pull_request": 34,
+        "merge_commit": "35b218a13357340611448b9ec8c0d13289b15a94"
+      },
+      "paths": [
+        "scripts/verify_benchmark_runtime.py",
+        "tests/test_verify_benchmark_runtime.py",
+        "docs/BENCHMARK_RUNTIME.md"
+      ]
+    },
+    {
+      "id": "G1-118",
+      "owner": "MF03",
+      "objective": "Define strict common execution value contracts for frozen problem requests, attempt results, and Lean verifier receipts, binding benchmark lock, arm, budget, attempt, artifact identities, and runtime identity without performing model calls.",
+      "completion": {
+        "pull_request": 32,
+        "merge_commit": "708bc56891231928188a2413ebacf3702dd03fae"
+      },
+      "paths": [
+        "src/supernova_goal1/execution/common.py",
+        "tests/test_execution_common.py"
+      ]
+    },
+    {
+      "id": "G1-104",
+      "owner": "MF04",
+      "objective": "Implement real ordinary and portfolio execution adapters that consume one frozen problem request, emit auditable attempts, and register expected cost events before dispatch.",
+      "completion": {
+        "pull_request": 41,
+        "merge_commit": "1f71a6f69dfc90e2c518f39a88a9d80f389c62b6"
+      },
+      "paths": [
+        "src/supernova_goal1/execution/baselines.py",
+        "tests/test_execute_baselines.py"
+      ]
+    },
+    {
+      "id": "G1-105",
+      "owner": "MF05",
+      "objective": "Implement real product-only and multi-fidelity execution adapters with explicit product visibility, retry, and verifier-call boundaries.",
+      "completion": {
+        "pull_request": 43,
+        "merge_commit": "c7957b2164e920379a2298e0131d10c5078d98bb"
+      },
+      "paths": [
+        "src/supernova_goal1/execution/product_controls.py",
+        "tests/test_execute_product_controls.py"
+      ]
+    },
+    {
+      "id": "G1-106",
+      "owner": "MM01",
+      "objective": "Implement the real verified-chain executor so only admitted intermediate products enter later prompts, with every attempt and verifier event preregistered.",
+      "completion": {
+        "pull_request": 45,
+        "merge_commit": "bda03978d51d6b0508f84ccbac7b2beb62d4e736"
+      },
+      "paths": [
+        "src/supernova_goal1/execution/verified_chain.py",
+        "tests/test_execute_verified_chain.py"
+      ]
+    },
+    {
+      "id": "G1-119",
+      "owner": "MM02",
+      "objective": "Bind one explicit model-usage basis into ExperimentSpec and every OutcomeRecord so the evaluator rejects missing or mixed bases and scientific evaluation cannot run while the basis is UNFROZEN; keep cost_model_frozen false.",
+      "completion": {
+        "pull_request": 30,
+        "merge_commit": "f58246539f8f4a6d9b6d757afec63f3bdbc78797"
+      },
+      "paths": [
+        "src/supernova_goal1/contracts.py",
+        "src/supernova_goal1/evaluate.py",
+        "tests/test_evaluate.py",
+        "examples/dry_run_records.json",
+        "goal1/GOAL1.json",
+        "tests/test_adversarial.py",
+        "tests/test_decisions.py"
+      ]
+    },
+    {
+      "id": "G1-108",
+      "owner": "MM03",
+      "objective": "Implement an append-only pre-dispatch manifest and completion join that prevents fabricated, omitted, replayed, or cross-arm execution events.",
+      "completion": {
+        "pull_request": 23,
+        "merge_commit": "639908fd9b39cf2826c27ec34c5aa9e69ab0eb00"
+      },
+      "paths": [
+        "src/supernova_goal1/dispatch.py",
+        "tests/test_dispatch.py"
+      ]
+    },
+    {
+      "id": "G1-109",
+      "owner": "MM04",
+      "objective": "Generate a seeded paired pilot manifest with blinded arm labels, frozen problem identities, attempt quotas, and a separate operator-only reveal map.",
+      "completion": {
+        "pull_request": 39,
+        "merge_commit": "d9db8a918006aa4708a43b0ee6f964b8c3a2dc59"
+      },
+      "paths": [
+        "src/supernova_goal1/run_manifest.py",
+        "tests/test_run_manifest.py"
+      ]
+    },
+    {
+      "id": "G1-110",
+      "owner": "MM05",
+      "objective": "Write a prospective pilot and confirmatory analysis plan: estimand, all four paired contrasts, Holm correction, incomplete-run handling, discordance-based power update, and no scientific PASS from the pilot.",
+      "completion": {
+        "pull_request": 36,
+        "merge_commit": "f9075bbf448888a87137c723293ab9afe3b3ba73"
+      },
+      "paths": [
+        "docs/ANALYSIS_PLAN.md",
+        "tests/test_analysis_plan.py"
+      ]
+    },
+    {
+      "id": "G1-111",
+      "owner": "MM07",
+      "objective": "Add adversarial integration tests for split leakage, hidden product reuse, post-hoc dispatch registration, missing telemetry, unmatched retries, wrong Lean runtime, and partial five-arm cohorts.",
+      "completion": {
+        "pull_request": 47,
+        "merge_commit": "e8648e59c095006aa7c297ec395c0801ff0c46ff"
+      },
+      "paths": [
+        "tests/test_execution_adversarial.py"
+      ]
+    },
+    {
+      "id": "G1-012",
+      "owner": "EXT01",
+      "objective": "Resolve the open construct-validity review on PR #8: phase-rank gates, define the first estimand as the verified-gated package effect unless reject/retry is matched, specify scheduled-chat cost proxies and sensitivity analysis, and keep evidence bindings composable.",
+      "completion": {
+        "pull_request": 8,
+        "merge_commit": "f272b5e5f03ac9e9f375800f1fb815ddfd7dee08"
+      },
+      "paths": [
+        "docs/THREAT_MODEL.md",
+        "docs/PRIOR_ART.md"
+      ]
+    },
+    {
+      "id": "G1-113",
+      "owner": "MM06",
+      "objective": "Review execution-tranche PRs against exact ticket paths, local tests, real CI, benchmark lineage, and unresolved scientific assumptions; never author or merge reviewed code.",
+      "completion": {
+        "pull_request": 49,
+        "merge_commit": "c9ef62234b7ddab89e926503d84a9c2f5134cb90"
+      },
+      "paths": [
+        "reviews/"
+      ]
+    },
+    {
+      "id": "G1-114",
+      "owner": "MF06",
+      "objective": "After benchmark, runtime, dispatch, and five executors land, run one non-credit pilot cohort and report concrete seam failures without changing the frozen inputs.",
+      "completion": {
+        "pull_request": 51,
+        "merge_commit": "a452cfb7c3d3e6f0e4f482bddd19c96a8942fec5"
+      },
+      "paths": [
+        "integration/"
+      ]
+    },
+    {
+      "id": "G1-115",
+      "owner": "BIL00",
+      "objective": "Report merged evidence, open scientific blockers, pilot readiness, and the next executable action; never declare Goal 1 PASS or FAIL without evaluator output.",
+      "completion": {
+        "pull_request": 52,
+        "merge_commit": "d31ab7e46243de3ab50bdae7a274b85382ea938e"
+      },
+      "paths": [
+        "reports/STATUS.md"
+      ]
     }
   ]
 }

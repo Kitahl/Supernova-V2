@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -24,7 +25,6 @@ EXPECTED_ROLES = {
     "MF06",
     "BIL00",
 }
-SUPERVISORS = {"MM06", "MF06", "BIL00"}
 VALID_STATUSES = {"READY", "WAITING", "DONE"}
 EXPECTED_SCHEDULER_IDS = {
     "MF01": "6a8416348c848191b6b4908fea710e9f",
@@ -43,6 +43,48 @@ EXPECTED_SCHEDULER_IDS = {
     "MF06": "6a841697574481918e67222cacb7fcfb",
     "BIL00": "6a8413a9d7648191b06b1e8303dbcf77",
 }
+EXPECTED_ARCHIVED_IDS = {
+    "G1-101",
+    "G1-102",
+    "G1-103",
+    "G1-107",
+    "G1-116",
+    "G1-117",
+    "G1-118",
+    "G1-104",
+    "G1-105",
+    "G1-106",
+    "G1-119",
+    "G1-108",
+    "G1-109",
+    "G1-110",
+    "G1-111",
+    "G1-012",
+    "G1-113",
+    "G1-114",
+    "G1-115",
+}
+
+
+
+def archived_commit_is_reachable(commit: str, runner=subprocess.run) -> bool:
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        return False
+    exists = runner(
+        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if exists.returncode != 0:
+        return False
+    ancestor = runner(
+        ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+    )
+    return ancestor.returncode == 0
 
 
 class OrchestrationTests(unittest.TestCase):
@@ -77,14 +119,62 @@ class OrchestrationTests(unittest.TestCase):
         )
         self.assertEqual(task_ticket_ids, board_ticket_ids)
 
-    def test_worker_states_are_typed_and_supervisors_wait(self) -> None:
+    def test_ticket_shapes_and_dependency_states(self) -> None:
+        by_id = {ticket["id"]: ticket for ticket in self.board["tickets"]}
         by_owner = {ticket["owner"]: ticket for ticket in self.board["tickets"]}
+        self.assertEqual(len(by_id), len(self.board["tickets"]))
+
         for ticket in self.board["tickets"]:
             self.assertIn(ticket["status"], VALID_STATUSES)
-        for role in EXPECTED_ROLES - SUPERVISORS:
-            self.assertIn(by_owner[role]["status"], {"READY", "DONE"})
-        for role in SUPERVISORS:
-            self.assertEqual("WAITING", by_owner[role]["status"])
+            self.assertIsInstance(ticket["paths"], list)
+            self.assertTrue(ticket["paths"])
+            self.assertIsInstance(ticket["acceptance"], list)
+            self.assertTrue(ticket["acceptance"])
+            dependencies = ticket["depends_on"]
+            self.assertIsInstance(dependencies, list)
+            self.assertEqual(len(dependencies), len(set(dependencies)))
+            self.assertNotIn(ticket["id"], dependencies)
+            self.assertTrue(set(dependencies) <= set(by_id))
+
+        for ticket in self.board["tickets"]:
+            unresolved = [
+                dependency
+                for dependency in ticket["depends_on"]
+                if by_id[dependency]["status"] != "DONE"
+            ]
+            if ticket["status"] == "WAITING":
+                self.assertTrue(unresolved)
+            elif ticket["status"] == "READY":
+                self.assertFalse(unresolved)
+
+        self.assertTrue(
+            all(path.startswith("reviews/") for path in by_owner["MM06"]["paths"])
+        )
+        self.assertTrue(
+            all(path.startswith("integration/") for path in by_owner["MF06"]["paths"])
+        )
+        self.assertTrue(
+            all(path.startswith("reports/") for path in by_owner["BIL00"]["paths"])
+        )
+
+    def test_dependency_graph_is_acyclic(self) -> None:
+        by_id = {ticket["id"]: ticket for ticket in self.board["tickets"]}
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(ticket_id: str) -> None:
+            if ticket_id in visiting:
+                self.fail(f"dependency cycle includes {ticket_id}")
+            if ticket_id in visited:
+                return
+            visiting.add(ticket_id)
+            for dependency in by_id[ticket_id]["depends_on"]:
+                visit(dependency)
+            visiting.remove(ticket_id)
+            visited.add(ticket_id)
+
+        for ticket_id in by_id:
+            visit(ticket_id)
 
     def test_current_done_tickets_bind_their_merged_pull_request(self) -> None:
         done = [ticket for ticket in self.board["tickets"] if ticket["status"] == "DONE"]
@@ -98,7 +188,7 @@ class OrchestrationTests(unittest.TestCase):
         archived = self.archive["completed_tickets"]
         archived_ids = [ticket["id"] for ticket in archived]
         current_ids = {ticket["id"] for ticket in self.board["tickets"]}
-        self.assertEqual({"G1-101", "G1-102", "G1-103", "G1-107"}, set(archived_ids))
+        self.assertEqual(EXPECTED_ARCHIVED_IDS, set(archived_ids))
         self.assertEqual(len(archived_ids), len(set(archived_ids)))
         self.assertTrue(current_ids.isdisjoint(archived_ids))
         for ticket in archived:
@@ -110,6 +200,31 @@ class OrchestrationTests(unittest.TestCase):
             self.assertIsInstance(completion["pull_request"], int)
             self.assertGreater(completion["pull_request"], 0)
             self.assertRegex(completion["merge_commit"], re.compile(r"^[0-9a-f]{40}$"))
+
+
+    def test_archive_commits_exist_and_are_reachable(self) -> None:
+        for ticket in self.archive["completed_tickets"]:
+            self.assertTrue(
+                archived_commit_is_reachable(ticket["completion"]["merge_commit"]),
+                ticket["id"],
+            )
+
+    def test_archive_commit_verifier_rejects_nonexistent_and_nonancestor(self) -> None:
+        self.assertFalse(archived_commit_is_reachable("0" * 40))
+
+        responses = iter(
+            [
+                subprocess.CompletedProcess([], 0),
+                subprocess.CompletedProcess([], 1),
+            ]
+        )
+
+        def nonancestor_runner(*_args, **_kwargs):
+            return next(responses)
+
+        self.assertFalse(
+            archived_commit_is_reachable("f" * 40, runner=nonancestor_runner)
+        )
 
 
 if __name__ == "__main__":
