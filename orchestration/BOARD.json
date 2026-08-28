@@ -103,14 +103,14 @@
         "Unregistered products, retries, or cost events are rejected."
       ],
       "completion": {
-        "pull_request": 61,
-        "merge_commit": "0f27b855b2604c294281f6fff7d7b11c1c34026f"
+        "pull_request": 63,
+        "merge_commit": "f433354e2baad88b8931484085e23a3a6abbeb23"
       }
     },
     {
       "id": "G1-125",
       "owner": "MM01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/CONFIRMATORY_VERIFIED_CHAIN.json",
         "tests/test_confirmatory_verified_chain.py"
@@ -121,7 +121,11 @@
         "Only kernel-passing products can enter later prompts.",
         "Every retry and admitted product is authority-bound.",
         "No cross-problem or cross-arm product reuse is permitted."
-      ]
+      ],
+      "completion": {
+        "pull_request": 64,
+        "merge_commit": "4bb86e9a33268c77dda18cbafebed3927162d985"
+      }
     },
     {
       "id": "G1-126",
