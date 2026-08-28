@@ -98,7 +98,6 @@ def _same_frozen_cell(left: FrozenProblemRequest, right: FrozenProblemRequest) -
         and left.budget_sha256 == right.budget_sha256
         and left.model_usage_basis == right.model_usage_basis
         and left.runtime_sha256 == right.runtime_sha256
-        and left.protocol_dispatch_id == right.protocol_dispatch_id
         and (
             left.confirmatory_manifest_sha256
             == right.confirmatory_manifest_sha256
