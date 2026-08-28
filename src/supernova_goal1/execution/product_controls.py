@@ -200,6 +200,8 @@ class ProductControlObservation:
                 raise ValueError(f"{kind.value} observation requires visible response bytes")
             if self.error is not None:
                 raise ValueError(f"{kind.value} observation cannot carry error")
+            if kind is ProductObservationKind.PRODUCT:
+                _parse_product_emission(response)
         elif kind is ProductObservationKind.NO_ANSWER:
             if response:
                 raise ValueError("NO_ANSWER observation must have an empty response")
