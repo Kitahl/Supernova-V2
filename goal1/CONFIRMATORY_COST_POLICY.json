@@ -1,0 +1,338 @@
+{
+  "schema_version": 1,
+  "policy_id": "goal1-confirmatory-complete-observable-allocation-v1",
+  "status": "FROZEN",
+  "estimand": "PAIRED_SUCCESS_UNDER_AN_IDENTICAL_FROZEN_COMPLETE_OBSERVABLE_ALLOCATION_ENVELOPE",
+  "claim_boundary": {
+    "permitted": "VERIFIED_CHAIN_SUPERIORITY_UNDER_A_MATCHED_COMPLETE_OBSERVABLE_ALLOCATION_ENVELOPE",
+    "forbidden": [
+      "EQUAL_REALIZED_COST",
+      "EQUAL_PROVIDER_TOKENS",
+      "EQUAL_HIDDEN_REASONING_COMPUTE",
+      "EQUAL_PHYSICAL_COMPUTE",
+      "EQUAL_PROVIDER_QUEUE_OR_SHARED_SERVING_LOAD"
+    ],
+    "visible_utf8_bytes_are": "MODEL_USAGE_PROXY_NOT_PROVIDER_TOKEN_OR_PHYSICAL_COMPUTE",
+    "realized_usage_is": "TREATMENT_AFFECTED_AUDIT_AND_SENSITIVITY_OUTPUT_NOT_A_MATCHING_OR_EXCLUSION_VARIABLE"
+  },
+  "authorities": {
+    "baselines": {
+      "path": "goal1/CONFIRMATORY_BASELINES.json",
+      "git_blob_sha1": "2ab23d89b22dd7c21963da1e3543bf2dc0e39193"
+    },
+    "product_controls": {
+      "path": "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json",
+      "git_blob_sha1": "ab2b298e29022f931ec141bdba50485b0967ad3f"
+    },
+    "verified_chain": {
+      "path": "goal1/CONFIRMATORY_VERIFIED_CHAIN.json",
+      "git_blob_sha1": "089592344a85509c5a587f2d77d37d3b7c825061"
+    },
+    "runtime": {
+      "path": "goal1/CONFIRMATORY_RUNTIME.json",
+      "git_blob_sha1": "1fa7caeefdf3c01cea5603f4865c2f9eec11a0fb",
+      "runtime_id": "goal1-confirmatory-lean-runtime-v1"
+    },
+    "protocol": {
+      "path": "goal1/CONFIRMATORY_PROTOCOL.json",
+      "required_status": "SEALED",
+      "missing_or_digest_mismatch": "BLOCKED"
+    }
+  },
+  "applicability": {
+    "arms": [
+      "ordinary",
+      "portfolio",
+      "product_only",
+      "multi_fidelity",
+      "verified_chain"
+    ],
+    "unit": "ONE_PROBLEM_ARM_CELL",
+    "paired_unit": "ONE_FROZEN_PROBLEM_FAMILY_REPRESENTATIVE_WITH_ALL_FIVE_COMPLETE_ARM_CELLS",
+    "attempts": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "register_before_first_dispatch": true,
+    "post_dispatch_budget_change": "BLOCKED"
+  },
+  "model_usage_basis": {
+    "primary_observable_unit": "VISIBLE_UTF8_BYTES",
+    "request_measurement": "EXACT_CANONICAL_RENDERED_MODEL_VISIBLE_REQUEST_BYTES_BEFORE_PROVIDER_DISPATCH",
+    "response_measurement": "EXACT_TERMINAL_MODEL_VISIBLE_RESPONSE_BYTES_RETURNED_BY_PROVIDER_OR_TYPED_ZERO_BYTE_TRANSPORT_FAILURE",
+    "byte_count": "LENGTH_OF_EXACT_UTF8_ENCODING_NO_NORMALIZATION_TRIMMING_OR_REGENERATION",
+    "provider_token_count": "RECORDED_IF_AUTHENTICATED_BUT_NEVER_SUBSTITUTED_FOR_PRIMARY_BASIS",
+    "missing_request_or_response_measurement": "BLOCKED"
+  },
+  "common_envelope": {
+    "model_call_slots": 16,
+    "request_capacity_utf8_bytes_by_attempt": [
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072,
+      131072
+    ],
+    "aggregate_request_capacity_utf8_bytes": 2097152,
+    "response_capacity_utf8_bytes_by_attempt": [
+      2048,
+      2048,
+      2048,
+      2048,
+      2048,
+      2048,
+      2048,
+      2048,
+      4096,
+      4096,
+      4096,
+      4096,
+      8192,
+      8192,
+      16384,
+      32768
+    ],
+    "aggregate_response_capacity_utf8_bytes": 98304,
+    "verifier_slots": 16,
+    "verifier_wall_clock_capacity_milliseconds_by_attempt": [
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000
+    ],
+    "aggregate_verifier_wall_clock_capacity_milliseconds": 9600000,
+    "orchestration_slots": 16,
+    "orchestration_wall_clock_capacity_milliseconds_by_attempt": [
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000,
+      600000
+    ],
+    "aggregate_orchestration_wall_clock_capacity_milliseconds": 9600000,
+    "context_isolation_receipt_slots": 16,
+    "predecessor_reconciliation_slots": 16,
+    "predecessor_reconciliation_not_applicable": "EMIT_TYPED_NOT_APPLICABLE_EVENT",
+    "equality_rule": "EVERY_ARM_RECEIVES_THIS_EXACT_REGISTERED_CAPACITY_VECTOR",
+    "unused_capacity": "EXPIRES_WITH_ITS_REGISTERED_SLOT_AND_CANNOT_MOVE_TO_ANOTHER_SLOT_ARM_PROBLEM_OR_RERUN",
+    "residual_budget": "CANNOT_AUTHORIZE_POSTHOC_CALLS_RETRIES_SELECTION_OR_REPAIR"
+  },
+  "request_overflow_policy": {
+    "applies_before_every_dispatch": true,
+    "exact_rendered_request_includes": "FROZEN_PROMPT_SOURCE_AND_ALL_ARM_PERMITTED_INJECTED_PRODUCT_BYTES",
+    "over_per_attempt_or_aggregate_request_capacity": "BLOCKED_CELL_BEFORE_PROVIDER_DISPATCH",
+    "forbidden_recovery": [
+      "TRUNCATE_REQUEST",
+      "DROP_OR_SUMMARIZE_ADMITTED_PRODUCT",
+      "REORDER_ADMITTED_PRODUCTS",
+      "NORMALIZE_OR_REGENERATE_BYTES",
+      "BORROW_CAPACITY_FROM_LATER_SLOT_OR_OTHER_ARM",
+      "ADD_RETRY_OR_REPLACEMENT_ATTEMPT"
+    ],
+    "terminal_effect": "BLOCKED_NOT_UNSOLVED_AND_NEVER_EXCLUDED_FROM_THE_PAIRED_COHORT"
+  },
+  "response_overflow_policy": {
+    "provider_generation_limit": "EXACT_REGISTERED_ATTEMPT_RESPONSE_CAP",
+    "returned_response_over_cap_invalid_utf8_or_truncated_measurement": "BLOCKED",
+    "unused_response_capacity": "NOT_TRANSFERABLE",
+    "product_or_final_parser_failure": "CHARGED_AS_THE_EXACT_RETURNED_BYTES_AND_TYPED_TERMINAL_OUTCOME"
+  },
+  "verifier_and_orchestration_accounting": {
+    "every_attempt_has_exactly_one_verifier_slot": true,
+    "product_candidate_or_final_answer": "ONE_BOUND_PINNED_RUNTIME_VERIFIER_INVOCATION",
+    "no_answer_provider_error_or_noninvocable_response": "ONE_TYPED_NOT_INVOKED_VERIFIER_EVENT_WITH_ZERO_VERIFIER_RUNTIME",
+    "verifier_timeout_or_output_truncation": "BLOCKED_AFTER_CHARGING_OBSERVED_RUNTIME",
+    "every_attempt_has_exactly_one_orchestration_event": true,
+    "wall_clock_source": "HOST_MONOTONIC_CLOCK",
+    "duration_rule": "MAX_ZERO_END_MONOTONIC_NS_MINUS_START_MONOTONIC_NS_CONVERTED_TO_INTEGER_MILLISECONDS_CEILING",
+    "concurrency": "ONE_MODEL_DISPATCH_AND_ONE_VERIFIER_PROCESS_PER_CELL_AT_A_TIME",
+    "scheduling_and_counterbalancing": "MUST_BE_FROZEN_BY_G1_121_BEFORE_DISPATCH",
+    "unknown_negative_missing_or_unbound_duration": "BLOCKED"
+  },
+  "event_ledger": {
+    "schema": "supernova.complete-observable-cost-event.v1",
+    "required_event_kinds": [
+      "MODEL_CALL",
+      "CONTEXT_ISOLATION_RECEIPT",
+      "VERIFIER_SLOT",
+      "ORCHESTRATION",
+      "PREDECESSOR_RECONCILIATION"
+    ],
+    "required_common_bindings": [
+      "policy_sha256",
+      "protocol_sha256",
+      "manifest_sha256",
+      "run_id",
+      "problem_id",
+      "full_problem_sha256",
+      "arm",
+      "attempt_index",
+      "dispatch_sha256",
+      "event_kind",
+      "registered_capacity_sha256",
+      "started_monotonic_ns",
+      "ended_monotonic_ns",
+      "issuer_id",
+      "host_execution_record_sha256",
+      "signature"
+    ],
+    "model_call_bindings": [
+      "request_artifact_sha256",
+      "request_utf8_bytes",
+      "response_artifact_sha256",
+      "response_utf8_bytes",
+      "model_identity_sha256",
+      "generation_settings_sha256",
+      "provider_completion_id_or_typed_absence"
+    ],
+    "verifier_bindings": [
+      "invocation_or_typed_not_invoked",
+      "constructed_source_sha256_or_typed_absence",
+      "runtime_contract_git_blob_sha1",
+      "verifier_result",
+      "verifier_wall_clock_milliseconds"
+    ],
+    "orchestration_bindings": [
+      "orchestration_wall_clock_milliseconds"
+    ],
+    "duplicate_missing_replayed_cross_cell_unregistered_or_bad_signature": "BLOCKED"
+  },
+  "reconciliation": {
+    "requires_all_16_attempts_and_all_5_event_kinds_per_attempt": true,
+    "expected_model_calls": 16,
+    "expected_verifier_slots": 16,
+    "expected_orchestration_slots": 16,
+    "exact_actual_totals": [
+      "model_calls",
+      "request_utf8_bytes",
+      "response_utf8_bytes",
+      "verifier_invocations",
+      "typed_not_invoked_verifier_slots",
+      "verifier_wall_clock_milliseconds",
+      "orchestration_wall_clock_milliseconds"
+    ],
+    "unknown_measurement": "BLOCKED",
+    "capacity_overrun": "BLOCKED",
+    "unregistered_retry_product_promotion_or_cost_event": "BLOCKED",
+    "missing_provider_usage_metadata": "RECORDED_AS_UNAVAILABLE_NOT_ZERO_AND_DOES_NOT_INVALIDATE_THE_PRIMARY_VISIBLE_UTF8_BYTE_BASIS",
+    "early_solved_cell": "MUST_STILL_COMPLETE_AND_RECONCILE_ALL_16_REGISTERED_ATTEMPTS",
+    "terminal_priority": [
+      "BLOCKED",
+      "INCOMPLETE",
+      "COMPLETE"
+    ]
+  },
+  "primary_and_robustness_analysis": {
+    "primary": "FULL_16_CALL_COMMON_ENVELOPE",
+    "cumulative_prefix_checkpoints": [
+      {
+        "completed_attempt_prefix": 1,
+        "cumulative_request_capacity_utf8_bytes": 131072,
+        "cumulative_output_capacity_utf8_bytes": 2048,
+        "cumulative_model_call_slots": 1,
+        "cumulative_verifier_slots": 1,
+        "cumulative_verifier_wall_clock_capacity_milliseconds": 600000,
+        "cumulative_orchestration_wall_clock_capacity_milliseconds": 600000
+      },
+      {
+        "completed_attempt_prefix": 2,
+        "cumulative_request_capacity_utf8_bytes": 262144,
+        "cumulative_output_capacity_utf8_bytes": 4096,
+        "cumulative_model_call_slots": 2,
+        "cumulative_verifier_slots": 2,
+        "cumulative_verifier_wall_clock_capacity_milliseconds": 1200000,
+        "cumulative_orchestration_wall_clock_capacity_milliseconds": 1200000
+      },
+      {
+        "completed_attempt_prefix": 4,
+        "cumulative_request_capacity_utf8_bytes": 524288,
+        "cumulative_output_capacity_utf8_bytes": 8192,
+        "cumulative_model_call_slots": 4,
+        "cumulative_verifier_slots": 4,
+        "cumulative_verifier_wall_clock_capacity_milliseconds": 2400000,
+        "cumulative_orchestration_wall_clock_capacity_milliseconds": 2400000
+      },
+      {
+        "completed_attempt_prefix": 8,
+        "cumulative_request_capacity_utf8_bytes": 1048576,
+        "cumulative_output_capacity_utf8_bytes": 16384,
+        "cumulative_model_call_slots": 8,
+        "cumulative_verifier_slots": 8,
+        "cumulative_verifier_wall_clock_capacity_milliseconds": 4800000,
+        "cumulative_orchestration_wall_clock_capacity_milliseconds": 4800000
+      },
+      {
+        "completed_attempt_prefix": 16,
+        "cumulative_request_capacity_utf8_bytes": 2097152,
+        "cumulative_output_capacity_utf8_bytes": 98304,
+        "cumulative_model_call_slots": 16,
+        "cumulative_verifier_slots": 16,
+        "cumulative_verifier_wall_clock_capacity_milliseconds": 9600000,
+        "cumulative_orchestration_wall_clock_capacity_milliseconds": 9600000
+      }
+    ],
+    "checkpoint_role": "PREREGISTERED_ROBUSTNESS_FRONTIER_NOT_AN_ALTERNATE_POSTHOC_PRIMARY",
+    "matching": "COMPARE_ALL_FIVE_PAIRED_OUTCOMES_AT_THE_SAME_REGISTERED_PREFIX_CAPACITY_VECTOR",
+    "realized_usage_matching_or_pair_exclusion": "FORBIDDEN",
+    "overrun_pair_exclusion": "FORBIDDEN_OVERRUN_BLOCKS_THE_COHORT",
+    "favorable_checkpoint_selection": "FORBIDDEN"
+  },
+  "limitations": {
+    "unobserved": [
+      "HIDDEN_REASONING_TOKENS_OR_STEPS",
+      "PROVIDER_CACHE_EFFECTS",
+      "PROVIDER_QUEUE_DELAY",
+      "SHARED_SERVING_COMPUTE",
+      "HARDWARE_ENERGY"
+    ],
+    "report_requirement": "REPORT_THE_REGISTERED_ENVELOPE_REALIZED_USAGE_VECTOR_AND_ALL_UNOBSERVED_LIMITATIONS_WITHOUT_TRANSLATING_BYTES_TO_TOKENS_OR_PHYSICAL_COMPUTE"
+  }
+}
