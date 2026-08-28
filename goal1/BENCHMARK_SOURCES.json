@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "status": "OUTPUT_LOCKED",
+  "benchmark": {
+    "name": "miniF2F-Lean4-DeepSeek-v1.5-valid+Kimina-corrected-test",
+    "split_policy": "develop_on_validation_report_on_test",
+    "expected_validation_records": 244,
+    "expected_test_records": 244
+  },
+  "sources": {
+    "deepseek_prover_v15": {
+      "repository_url": "https://github.com/deepseek-ai/DeepSeek-Prover-V1.5",
+      "commit": "2c4ba9119eef74d0d611f494261b2c5bae98c69a",
+      "path": "datasets/minif2f.jsonl",
+      "sha256": "d6654c88476ff14db19d57dea25bd955a240525fb52171e460f89d98f83d7dd5",
+      "format": "jsonl",
+      "expected_total_records": 488,
+      "expected_validation_records": 244,
+      "expected_test_records": 244,
+      "validation_split_value": "valid",
+      "test_split_value": "test",
+      "license": "UNSPECIFIED_IN_SOURCE_REPOSITORY",
+      "role": "validation source and test-identity reference",
+      "raw_url": "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-Prover-V1.5/2c4ba9119eef74d0d611f494261b2c5bae98c69a/datasets/minif2f.jsonl"
+    },
+    "kimina_corrected_test": {
+      "repository_url": "https://huggingface.co/datasets/AI-MO/minif2f_test",
+      "commit": "5def318348521dfc34875045a9ecddf729a2b49f",
+      "data_last_changed_commit": "67daf183adb85307b2842554bbe2f2134c2c702c",
+      "path": "data/train-00000-of-00001.parquet",
+      "sha256": "a32985e3d44b5165fbd586f453055cd17de0d081f43d7806cbba3f321346a8c5",
+      "format": "parquet",
+      "expected_records": 244,
+      "license": "Apache-2.0",
+      "role": "corrected test source",
+      "raw_url": "https://huggingface.co/datasets/AI-MO/minif2f_test/resolve/5def318348521dfc34875045a9ecddf729a2b49f/data/train-00000-of-00001.parquet?download=true"
+    }
+  },
+  "assembly": {
+    "output_schema_version": 1,
+    "output_files": {
+      "validation": "validation.jsonl",
+      "test": "test.jsonl"
+    },
+    "order": "problem_id ascending by Unicode code point",
+    "encoding": "UTF-8",
+    "json_sort_keys": true,
+    "json_separators": [
+      ",",
+      ":"
+    ],
+    "terminal_newline": true
+  },
+  "outputs": {
+    "validation": {
+      "records": 244,
+      "sha256": "4da5c1f69143e2633cf7c300d8946eb28d6b88d0f94441147ff4d54ec8c09926",
+      "bytes": 226168
+    },
+    "test": {
+      "records": 244,
+      "sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a",
+      "bytes": 231909
+    }
+  }
+}

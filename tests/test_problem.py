@@ -73,6 +73,15 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             object.__setattr__(problem, "native_id", "43")
 
+    def test_identity_does_not_alias_plain_tuple(self) -> None:
+        problem = BenchmarkProblemIdentity("bench", "v1", "test", "42")
+        raw = ("bench", "v1", "test", "42")
+
+        self.assertNotEqual(problem, raw)
+        self.assertNotEqual(raw, problem)
+        self.assertNotIn(raw, {problem})
+        self.assertIn(problem, {problem})
+
     def test_namedtuple_helpers_preserve_identity_validation(self) -> None:
         with self.assertRaisesRegex(
             ValueError, "native_id must be a non-empty trimmed string"
@@ -100,6 +109,29 @@ class BenchmarkProblemIdentityTests(unittest.TestCase):
         truncated = tuple.__new__(BenchmarkProblemIdentity, ("bench",))
         with self.assertRaisesRegex(ValueError, "exactly four fields"):
             _ = truncated.canonical_id
+
+    def test_low_level_storage_cannot_spoof_equality_or_hashing(self) -> None:
+        class DeceptiveString(str):
+            def __eq__(self, other: object) -> bool:
+                return True
+
+            def __hash__(self) -> int:
+                return 1
+
+        canonical = BenchmarkProblemIdentity("bench", "v1", "test", "p1")
+        spoofed = tuple.__new__(
+            BenchmarkProblemIdentity,
+            tuple(DeceptiveString(value) for value in ("evil", "evil", "evil", "evil")),
+        )
+        self.assertNotEqual(canonical, spoofed)
+        self.assertNotEqual(spoofed, canonical)
+
+        equivalent = tuple.__new__(
+            BenchmarkProblemIdentity,
+            tuple(DeceptiveString(value) for value in ("bench", "v1", "test", "p1")),
+        )
+        self.assertEqual(canonical, equivalent)
+        self.assertEqual(hash(canonical), hash(equivalent))
 
 
 class SplitContractTests(unittest.TestCase):
@@ -208,6 +240,17 @@ class SplitContractTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             object.__setattr__(contract, "problems", ())
 
+    def test_contract_does_not_alias_plain_tuple(self) -> None:
+        contract = SplitContract.from_native_ids(
+            benchmark="bench", version="v1", split="test", native_ids=["p1"]
+        )
+        raw = (contract.benchmark, contract.version, contract.split, contract.problems)
+
+        self.assertNotEqual(contract, raw)
+        self.assertNotEqual(raw, contract)
+        self.assertNotIn(raw, {contract})
+        self.assertIn(contract, {contract})
+
     def test_low_level_reassignment_cannot_mutate_member_identity(self) -> None:
         contract = SplitContract.from_native_ids(
             benchmark="bench", version="v1", split="test", native_ids=["p1"]
@@ -247,6 +290,41 @@ class SplitContractTests(unittest.TestCase):
             ValueError, "native_id must be a non-empty trimmed string"
         ):
             SplitContract("bench", "v1", "test", (malformed_problem,))
+
+    def test_contract_low_level_storage_cannot_spoof_equality_or_hashing(self) -> None:
+        class DeceptiveString(str):
+            def __eq__(self, other: object) -> bool:
+                return True
+
+            def __hash__(self) -> int:
+                return 1
+
+        canonical = SplitContract.from_native_ids(
+            benchmark="bench", version="v1", split="test", native_ids=["p1"]
+        )
+        spoofed = tuple.__new__(
+            SplitContract,
+            (
+                DeceptiveString("evil"),
+                DeceptiveString("v1"),
+                DeceptiveString("test"),
+                canonical.problems,
+            ),
+        )
+        self.assertNotEqual(canonical, spoofed)
+        self.assertNotEqual(spoofed, canonical)
+
+        equivalent = tuple.__new__(
+            SplitContract,
+            (
+                DeceptiveString("bench"),
+                DeceptiveString("v1"),
+                DeceptiveString("test"),
+                canonical.problems,
+            ),
+        )
+        self.assertEqual(canonical, equivalent)
+        self.assertEqual(hash(canonical), hash(equivalent))
 
 
 if __name__ == "__main__":
