@@ -18,8 +18,10 @@ COST_DIMENSIONS: tuple[str, ...] = (
 
 class CostEventKind(StrEnum):
     MODEL_CALL = "model_call"
+    CONTEXT_ISOLATION = "context_isolation"
     VERIFIER = "verifier"
     ORCHESTRATION = "orchestration"
+    PREDECESSOR_RECONCILIATION = "predecessor_reconciliation"
 
 
 class CostRelation(StrEnum):
@@ -134,12 +136,20 @@ class ExpectedCostEvent:
         return cls.model_call(event_id, usage_basis=ModelUsageBasis.VISIBLE_UTF8_BYTES)
 
     @classmethod
+    def context_isolation(cls, event_id: str) -> "ExpectedCostEvent":
+        return cls(event_id, CostEventKind.CONTEXT_ISOLATION)
+
+    @classmethod
     def verifier(cls, event_id: str) -> "ExpectedCostEvent":
         return cls(event_id, CostEventKind.VERIFIER)
 
     @classmethod
     def orchestration(cls, event_id: str) -> "ExpectedCostEvent":
         return cls(event_id, CostEventKind.ORCHESTRATION)
+
+    @classmethod
+    def predecessor_reconciliation(cls, event_id: str) -> "ExpectedCostEvent":
+        return cls(event_id, CostEventKind.PREDECESSOR_RECONCILIATION)
 
 
 @dataclass(frozen=True)
@@ -189,6 +199,12 @@ class CostEvent:
         elif self.kind is CostEventKind.ORCHESTRATION:
             if self.input_tokens not in (None, 0) or self.output_tokens not in (None, 0):
                 raise ValueError("orchestration events cannot carry model token counts")
+        elif (
+            self.input_tokens not in (None, 0)
+            or self.output_tokens not in (None, 0)
+            or self.milliseconds not in (None, 0)
+        ):
+            raise ValueError("receipt events cannot carry cost measurements")
 
     @classmethod
     def model_call(
@@ -230,6 +246,10 @@ class CostEvent:
         )
 
     @classmethod
+    def context_isolation(cls, event_id: str) -> "CostEvent":
+        return cls(event_id=event_id, kind=CostEventKind.CONTEXT_ISOLATION)
+
+    @classmethod
     def verifier(cls, event_id: str, *, milliseconds: int | None) -> "CostEvent":
         return cls(
             event_id=event_id,
@@ -245,6 +265,13 @@ class CostEvent:
             milliseconds=milliseconds,
         )
 
+    @classmethod
+    def predecessor_reconciliation(cls, event_id: str) -> "CostEvent":
+        return cls(
+            event_id=event_id,
+            kind=CostEventKind.PREDECESSOR_RECONCILIATION,
+        )
+
     @property
     def unknown_measurements(self) -> tuple[str, ...]:
         if self.kind is CostEventKind.MODEL_CALL:
@@ -256,7 +283,9 @@ class CostEvent:
             return tuple(unknown)
         if self.kind is CostEventKind.VERIFIER:
             return ("verifier_milliseconds",) if self.milliseconds is None else ()
-        return ("orchestration_milliseconds",) if self.milliseconds is None else ()
+        if self.kind is CostEventKind.ORCHESTRATION:
+            return ("orchestration_milliseconds",) if self.milliseconds is None else ()
+        return ()
 
     @property
     def measurement_complete(self) -> bool:
@@ -279,10 +308,13 @@ class CostEvent:
                 verifier_milliseconds=0,
                 orchestration_milliseconds=0,
             )
-        assert self.milliseconds is not None
         if self.kind is CostEventKind.VERIFIER:
+            assert self.milliseconds is not None
             return CompleteCost(0, 0, 0, self.milliseconds, 0)
-        return CompleteCost(0, 0, 0, 0, self.milliseconds)
+        if self.kind is CostEventKind.ORCHESTRATION:
+            assert self.milliseconds is not None
+            return CompleteCost(0, 0, 0, 0, self.milliseconds)
+        return CompleteCost(0, 0, 0, 0, 0)
 
 
 @dataclass(frozen=True)
