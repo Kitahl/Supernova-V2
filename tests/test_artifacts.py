@@ -95,6 +95,11 @@ class ScheduledChatArtifactEnvelopeTests(unittest.TestCase):
             {"attempt": True},
             {"media_type": "text/plain"},
             {"media_type": "text/plain; charset=latin-1"},
+            {"media_type": "/; charset=utf-8"},
+            {"media_type": "text/; charset=utf-8"},
+            {"media_type": "/plain; charset=utf-8"},
+            {"media_type": "text/plain/extra; charset=utf-8"},
+            {"media_type": "text p/plain; charset=utf-8"},
         ]
         for override in cases:
             kwargs = dict(
