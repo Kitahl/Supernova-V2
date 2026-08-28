@@ -16,7 +16,7 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactKind,
 )
 from supernova_goal1.contracts import Arm
-from supernova_goal1.dispatch import CompletionRecord, DispatchAuthority
+from supernova_goal1.dispatch import CompletionRecord, CompletionSigner, DispatchAuthority
 from supernova_goal1.execution.common import AttemptStatus, FrozenProblemRequest
 from supernova_goal1.execution.verified_chain import (
     AdmittedProduct,
@@ -176,11 +176,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         first_request, first, _seen_first = self.emit_product()
         product = first.admitted_product
         self.assertIsNotNone(product)
-        retry = RetryLink(
-            0,
-            first.baseline.completion.dispatch_id,
-            first_request.frozen_request_sha256,
-        )
+        retry = None
         request_utf8 = render_verified_chain_request(
             self.prompt,
             admitted_products=(product,),
@@ -212,7 +208,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
 
         visible = json.loads(seen["payload"])
         self.assertEqual([product.to_mapping()], visible["admitted_products"])
-        self.assertEqual(retry.to_mapping(), visible["retry_of"])
+        self.assertIsNone(visible["retry_of"])
         self.assertEqual((product.product_id,), execution.visible_product_ids)
         self.assertTrue(execution.terminal_answer)
         self.assertIsNone(execution.admitted_product)
@@ -400,32 +396,93 @@ class VerifiedChainExecutionTests(unittest.TestCase):
                 retry_of=None,
             )
 
-    def test_retry_binds_exact_prior_authority_request(self) -> None:
-        first_request, first, _seen = self.emit_product()
-        product = first.admitted_product
-        forged_retry = RetryLink(
-            0,
-            "0" * 64,
-            first_request.frozen_request_sha256,
+    def test_signed_failed_completion_can_authorize_exact_retry(self) -> None:
+        failed_request, failed, _seen = self.emit_product(
+            verifier_status=VerifierStatus.FAIL
         )
+        retry = RetryLink(failed.baseline.completion)
         request_utf8 = render_verified_chain_request(
             self.prompt,
-            admitted_products=(product,),
-            retry_of=forged_retry,
+            admitted_products=(),
+            retry_of=retry,
         )
         request = self.request(attempt=1, request_utf8=request_utf8)
-        with self.assertRaisesRegex(ValueError, "retry predecessor"):
+        execution = execute_verified_chain_step(
+            authority=self.authority,
+            manifest=failed.baseline.manifest,
+            request=request,
+            problem_prompt_utf8=self.prompt,
+            admitted_products=(),
+            retry_of=retry,
+            model_call=lambda dispatch, _payload: VerifiedChainObservation(
+                dispatch.entry.dispatch_id,
+                VerifiedChainObservationKind.ANSWERED,
+                self.final_answer,
+            ),
+            verifier_call=lambda _dispatch, candidate: self.verifier(
+                VerifierStatus.PASS, candidate
+            ),
+        )
+        self.assertTrue(execution.terminal_answer)
+        self.assertEqual(
+            failed_request.frozen_request_sha256,
+            execution.retry_of.frozen_request_sha256,
+        )
+
+    def test_registered_but_uncompleted_request_cannot_authorize_retry(self) -> None:
+        request_utf8 = render_verified_chain_request(
+            self.prompt,
+            admitted_products=(),
+            retry_of=None,
+        )
+        request = self.request(attempt=0, request_utf8=request_utf8)
+        signer = CompletionSigner.generate()
+        manifest = self.authority.register(
+            self.authority.current_manifest(),
+            request=request,
+            completion_verifier_sha256=signer.public_commitment,
+        )
+        entry = manifest.entries[-1]
+        with self.assertRaisesRegex(TypeError, "CompletionRecord"):
+            RetryLink(entry)
+
+    def test_forged_retry_completion_is_rejected_before_dispatch(self) -> None:
+        _failed_request, failed, _seen = self.emit_product(
+            verifier_status=VerifierStatus.FAIL
+        )
+        record = failed.baseline.completion
+        forged_record = CompletionRecord(
+            record.run_id,
+            record.dispatch_id,
+            record.entry_sha256,
+            record.payload,
+            record.verifier_public_key,
+            "0" * len(record.signature),
+        )
+        retry = RetryLink(forged_record)
+        request_utf8 = render_verified_chain_request(
+            self.prompt,
+            admitted_products=(),
+            retry_of=retry,
+        )
+        request = self.request(attempt=1, request_utf8=request_utf8)
+        with self.assertRaisesRegex(ValueError, "signature verification failed"):
             execute_verified_chain_step(
                 authority=self.authority,
-                manifest=first.baseline.manifest,
+                manifest=failed.baseline.manifest,
                 request=request,
                 problem_prompt_utf8=self.prompt,
-                admitted_products=(product,),
-                retry_of=forged_retry,
+                admitted_products=(),
+                retry_of=retry,
                 model_call=lambda *_: None,
                 verifier_call=lambda *_: None,
             )
         self.assertEqual(1, len(self.authority.current_manifest().entries))
+
+    def test_lean_pass_completion_is_feed_forward_not_retry(self) -> None:
+        _request, passed, _seen = self.emit_product()
+        with self.assertRaisesRegex(ValueError, "feeds forward"):
+            RetryLink(passed.baseline.completion)
 
 
 if __name__ == "__main__":
