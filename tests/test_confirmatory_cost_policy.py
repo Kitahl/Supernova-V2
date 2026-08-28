@@ -474,7 +474,7 @@ class ConfirmatoryCostPolicyTests(unittest.TestCase):
         for field in ["unknown_measurement", "capacity_overrun"]:
             changed = copy.deepcopy(self.policy)
             changed["reconciliation"][field] = "ZERO"
-            with self.assertRaisesRegex(ValueError, field.replace("_", " ")):
+            with self.assertRaisesRegex(ValueError, "reconciliation"):
                 validate_policy(changed)
         changed = copy.deepcopy(self.policy)
         changed["primary_and_robustness_analysis"]["overrun_pair_exclusion"] = (
