@@ -311,6 +311,38 @@ def _result_evidence(result: VerifierResult) -> dict[str, object]:
     }
 
 
+def _validate_verifier_result(result: object) -> VerifierResult:
+    if type(result) is not VerifierResult:
+        raise TypeError("runner must return an exact VerifierResult")
+    if type(result.status) is not VerifierStatus:
+        raise ValueError("verifier status must be an exact VerifierStatus")
+    if (
+        type(result.command) is not tuple
+        or not result.command
+        or not all(type(argument) is str and argument for argument in result.command)
+    ):
+        raise ValueError("verifier command must be a non-empty exact string tuple")
+    if type(result.stdout) is not str or type(result.stderr) is not str:
+        raise ValueError("verifier stdout and stderr must be exact strings")
+    if type(result.elapsed_milliseconds) is not int or result.elapsed_milliseconds < 0:
+        raise ValueError("verifier elapsed_milliseconds must be a non-negative exact integer")
+    if result.status is VerifierStatus.PASS:
+        if result.returncode != 0 or result.error is not None:
+            raise ValueError("PASS verifier result requires returncode=0 and no error")
+    elif result.status is VerifierStatus.FAIL:
+        if (
+            type(result.returncode) is not int
+            or result.returncode == 0
+            or result.error is not None
+        ):
+            raise ValueError("FAIL verifier result requires a nonzero exact returncode and no error")
+    elif result.returncode is not None or type(result.error) is not str or not result.error:
+        raise ValueError(
+            f"{result.status.value} verifier result requires returncode=null and a non-empty error"
+        )
+    return result
+
+
 def _run(
     runner: Runner,
     command: Sequence[str],
@@ -319,9 +351,7 @@ def _run(
     cwd: Path,
 ) -> VerifierResult:
     result = runner(tuple(command), timeout_seconds=timeout_seconds, cwd=cwd)
-    if type(result) is not VerifierResult:
-        raise TypeError("runner must return an exact VerifierResult")
-    return result
+    return _validate_verifier_result(result)
 
 
 def check_benchmark_runtime(
@@ -372,7 +402,7 @@ def check_benchmark_runtime(
                 "evidence": _result_evidence(version_result),
             }
         )
-    elif expected_marker not in version_output:
+    elif not version_output.startswith(expected_marker):
         failures.append(
             {
                 "code": "LEAN_VERSION_MISMATCH",
