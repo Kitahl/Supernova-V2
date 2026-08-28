@@ -273,99 +273,108 @@ def validate_policy(policy: object) -> None:
         raise ValueError("response overflow policy changed")
 
     host = policy["verifier_and_orchestration_accounting"]
-    if host["every_attempt_has_exactly_one_verifier_slot"] is not True:
-        raise ValueError("verifier-slot rule changed")
-    if host["product_candidate_or_final_answer"] != (
-        "ONE_BOUND_PINNED_RUNTIME_VERIFIER_INVOCATION"
-    ):
-        raise ValueError("invoked verifier rule changed")
-    if host["no_answer_provider_error_or_noninvocable_response"] != (
-        "ONE_TYPED_NOT_INVOKED_VERIFIER_EVENT_WITH_ZERO_VERIFIER_RUNTIME"
-    ):
-        raise ValueError("typed verifier event changed")
-    if host["verifier_timeout_or_output_truncation"] != (
-        "BLOCKED_AFTER_CHARGING_OBSERVED_RUNTIME"
-    ):
-        raise ValueError("verifier timeout accounting changed")
-    if host["every_attempt_has_exactly_one_orchestration_event"] is not True:
-        raise ValueError("orchestration event rule changed")
-    if host["wall_clock_source"] != "HOST_MONOTONIC_CLOCK":
-        raise ValueError("clock source changed")
-    if host["concurrency"] != (
-        "ONE_MODEL_DISPATCH_AND_ONE_VERIFIER_PROCESS_PER_CELL_AT_A_TIME"
-    ):
-        raise ValueError("concurrency changed")
-    if host["scheduling_and_counterbalancing"] != (
-        "MUST_BE_FROZEN_BY_G1_121_BEFORE_DISPATCH"
-    ):
-        raise ValueError("scheduling authority changed")
-    if host["unknown_negative_missing_or_unbound_duration"] != "BLOCKED":
-        raise ValueError("unknown duration changed")
+    if host != {
+        "every_attempt_has_exactly_one_verifier_slot": True,
+        "product_candidate_or_final_answer": (
+            "ONE_BOUND_PINNED_RUNTIME_VERIFIER_INVOCATION"
+        ),
+        "no_answer_provider_error_or_noninvocable_response": (
+            "ONE_TYPED_NOT_INVOKED_VERIFIER_EVENT_WITH_ZERO_VERIFIER_RUNTIME"
+        ),
+        "verifier_timeout_or_output_truncation": (
+            "BLOCKED_AFTER_CHARGING_OBSERVED_RUNTIME"
+        ),
+        "every_attempt_has_exactly_one_orchestration_event": True,
+        "wall_clock_source": "HOST_MONOTONIC_CLOCK",
+        "duration_rule": (
+            "MAX_ZERO_END_MONOTONIC_NS_MINUS_START_MONOTONIC_NS_"
+            "CONVERTED_TO_INTEGER_MILLISECONDS_CEILING"
+        ),
+        "concurrency": (
+            "ONE_MODEL_DISPATCH_AND_ONE_VERIFIER_PROCESS_PER_CELL_AT_A_TIME"
+        ),
+        "scheduling_and_counterbalancing": (
+            "MUST_BE_FROZEN_BY_G1_121_BEFORE_DISPATCH"
+        ),
+        "unknown_negative_missing_or_unbound_duration": "BLOCKED",
+    }:
+        raise ValueError("host accounting changed")
 
     ledger = policy["event_ledger"]
-    if ledger["schema"] != "supernova.complete-observable-cost-event.v1":
-        raise ValueError("ledger schema changed")
-    if ledger["required_event_kinds"] != EXPECTED_EVENT_KINDS:
-        raise ValueError("ledger event kinds changed")
-    for field in {
-        "policy_sha256",
-        "protocol_sha256",
-        "manifest_sha256",
-        "run_id",
-        "problem_id",
-        "full_problem_sha256",
-        "arm",
-        "attempt_index",
-        "dispatch_sha256",
-        "event_kind",
-        "registered_capacity_sha256",
-        "host_execution_record_sha256",
-        "signature",
+    if ledger != {
+        "schema": "supernova.complete-observable-cost-event.v1",
+        "required_event_kinds": EXPECTED_EVENT_KINDS,
+        "required_common_bindings": [
+            "policy_sha256",
+            "protocol_sha256",
+            "manifest_sha256",
+            "run_id",
+            "problem_id",
+            "full_problem_sha256",
+            "arm",
+            "attempt_index",
+            "dispatch_sha256",
+            "event_kind",
+            "registered_capacity_sha256",
+            "started_monotonic_ns",
+            "ended_monotonic_ns",
+            "issuer_id",
+            "host_execution_record_sha256",
+            "signature",
+        ],
+        "model_call_bindings": [
+            "request_artifact_sha256",
+            "request_utf8_bytes",
+            "response_artifact_sha256",
+            "response_utf8_bytes",
+            "model_identity_sha256",
+            "generation_settings_sha256",
+            "provider_completion_id_or_typed_absence",
+        ],
+        "verifier_bindings": [
+            "invocation_or_typed_not_invoked",
+            "constructed_source_sha256_or_typed_absence",
+            "runtime_contract_git_blob_sha1",
+            "verifier_result",
+            "verifier_wall_clock_milliseconds",
+        ],
+        "orchestration_bindings": [
+            "orchestration_wall_clock_milliseconds",
+        ],
+        "duplicate_missing_replayed_cross_cell_unregistered_or_bad_signature": (
+            "BLOCKED"
+        ),
     }:
-        if field not in set(ledger["required_common_bindings"]):
-            raise ValueError("ledger common binding removed")
-    for field in {
-        "request_artifact_sha256",
-        "request_utf8_bytes",
-        "response_artifact_sha256",
-        "response_utf8_bytes",
-        "model_identity_sha256",
-        "generation_settings_sha256",
-    }:
-        if field not in set(ledger["model_call_bindings"]):
-            raise ValueError("model-call binding removed")
-    if ledger["duplicate_missing_replayed_cross_cell_unregistered_or_bad_signature"] != (
-        "BLOCKED"
-    ):
-        raise ValueError("ledger fail-closure changed")
+        raise ValueError("event ledger changed")
 
     reconciliation = policy["reconciliation"]
-    if reconciliation["requires_all_16_attempts_and_all_5_event_kinds_per_attempt"] is not True:
-        raise ValueError("complete reconciliation changed")
-    if reconciliation["expected_model_calls"] != 16:
-        raise ValueError("expected model calls changed")
-    if reconciliation["expected_verifier_slots"] != 16:
-        raise ValueError("expected verifier slots changed")
-    if reconciliation["expected_orchestration_slots"] != 16:
-        raise ValueError("expected orchestration slots changed")
-    if reconciliation["unknown_measurement"] != "BLOCKED":
-        raise ValueError("unknown measurement changed")
-    if reconciliation["capacity_overrun"] != "BLOCKED":
-        raise ValueError("capacity overrun changed")
-    if reconciliation["unregistered_retry_product_promotion_or_cost_event"] != (
-        "BLOCKED"
-    ):
-        raise ValueError("unregistered event changed")
-    if reconciliation["missing_provider_usage_metadata"] != (
-        "RECORDED_AS_UNAVAILABLE_NOT_ZERO_AND_DOES_NOT_INVALIDATE_THE_PRIMARY_VISIBLE_UTF8_BYTE_BASIS"
-    ):
-        raise ValueError("provider metadata handling changed")
-    if reconciliation["early_solved_cell"] != (
-        "MUST_STILL_COMPLETE_AND_RECONCILE_ALL_16_REGISTERED_ATTEMPTS"
-    ):
-        raise ValueError("early-solved handling changed")
-    if reconciliation["terminal_priority"] != ["BLOCKED", "INCOMPLETE", "COMPLETE"]:
-        raise ValueError("reconciliation priority changed")
+    if reconciliation != {
+        "requires_all_16_attempts_and_all_5_event_kinds_per_attempt": True,
+        "expected_model_calls": 16,
+        "expected_verifier_slots": 16,
+        "expected_orchestration_slots": 16,
+        "exact_actual_totals": [
+            "model_calls",
+            "request_utf8_bytes",
+            "response_utf8_bytes",
+            "verifier_invocations",
+            "typed_not_invoked_verifier_slots",
+            "verifier_wall_clock_milliseconds",
+            "orchestration_wall_clock_milliseconds",
+        ],
+        "unknown_measurement": "BLOCKED",
+        "capacity_overrun": "BLOCKED",
+        "unregistered_retry_product_promotion_or_cost_event": "BLOCKED",
+        "missing_provider_usage_metadata": (
+            "RECORDED_AS_UNAVAILABLE_NOT_ZERO_AND_DOES_NOT_INVALIDATE_"
+            "THE_PRIMARY_VISIBLE_UTF8_BYTE_BASIS"
+        ),
+        "early_solved_cell": (
+            "MUST_STILL_COMPLETE_AND_RECONCILE_ALL_16_REGISTERED_ATTEMPTS"
+        ),
+        "terminal_priority": ["BLOCKED", "INCOMPLETE", "COMPLETE"],
+    }:
+        raise ValueError("reconciliation changed")
 
     analysis = policy["primary_and_robustness_analysis"]
     if analysis != {
@@ -449,6 +458,18 @@ class ConfirmatoryCostPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "request overrun"):
             validate_policy(changed)
 
+    def test_host_duration_and_realized_totals_are_closed(self) -> None:
+        changed = copy.deepcopy(self.policy)
+        changed["verifier_and_orchestration_accounting"]["duration_rule"] = (
+            "CALLER_SUPPLIED"
+        )
+        with self.assertRaisesRegex(ValueError, "host accounting"):
+            validate_policy(changed)
+        changed = copy.deepcopy(self.policy)
+        changed["reconciliation"]["exact_actual_totals"] = []
+        with self.assertRaisesRegex(ValueError, "reconciliation"):
+            validate_policy(changed)
+
     def test_unknown_overrun_or_missing_event_never_becomes_zero_or_excluded(self) -> None:
         for field in ["unknown_measurement", "capacity_overrun"]:
             changed = copy.deepcopy(self.policy)
@@ -462,6 +483,18 @@ class ConfirmatoryCostPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "analysis cost matching"):
             validate_policy(changed)
 
+    def test_verifier_and_orchestration_ledger_bindings_are_required(self) -> None:
+        for section, field in [
+            ("required_common_bindings", "started_monotonic_ns"),
+            ("verifier_bindings", "runtime_contract_git_blob_sha1"),
+            ("verifier_bindings", "verifier_wall_clock_milliseconds"),
+            ("orchestration_bindings", "orchestration_wall_clock_milliseconds"),
+        ]:
+            changed = copy.deepcopy(self.policy)
+            changed["event_ledger"][section].remove(field)
+            with self.assertRaisesRegex(ValueError, "event ledger"):
+                validate_policy(changed)
+
     def test_ledger_cannot_lose_identity_or_usage_bindings(self) -> None:
         for field in [
             "full_problem_sha256",
@@ -472,13 +505,13 @@ class ConfirmatoryCostPolicyTests(unittest.TestCase):
         ]:
             changed = copy.deepcopy(self.policy)
             changed["event_ledger"]["required_common_bindings"].remove(field)
-            with self.assertRaisesRegex(ValueError, "ledger common binding"):
+            with self.assertRaisesRegex(ValueError, "event ledger"):
                 validate_policy(changed)
         changed = copy.deepcopy(self.policy)
         changed["event_ledger"]["model_call_bindings"].remove(
             "request_utf8_bytes"
         )
-        with self.assertRaisesRegex(ValueError, "model-call binding"):
+        with self.assertRaisesRegex(ValueError, "event ledger"):
             validate_policy(changed)
 
     def test_unused_or_residual_capacity_cannot_move(self) -> None:
