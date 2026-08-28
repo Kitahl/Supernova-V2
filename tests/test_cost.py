@@ -139,6 +139,43 @@ class CompleteCostAccountingTests(unittest.TestCase):
         )
         self.assertIs(event.kind, CostEventKind.MODEL_CALL)
 
+    def test_hostile_string_subclasses_cannot_spoof_arm_identity(self) -> None:
+        class EvilArm(str):
+            def __eq__(self, other: object) -> bool:
+                return True
+
+            def __hash__(self) -> int:
+                return hash(Arm.ORDINARY.value)
+
+        hostile = EvilArm("not-a-real-arm")
+        event = CostEvent.model_call("call-1", input_tokens=1, output_tokens=1)
+        expected = ExpectedCostEvent.model_call("call-1")
+
+        with self.assertRaisesRegex(ValueError, "unknown arm"):
+            ArmCostTrace.from_events(
+                hostile,
+                (event,),
+                expected_events=(expected,),
+                accounting_complete=True,
+            )
+        with self.assertRaisesRegex(ValueError, "unknown arm"):
+            ArmCostTrace(
+                hostile,
+                (event,),
+                (expected,),
+                True,
+            )
+        with self.assertRaisesRegex(ValueError, "unknown arm"):
+            self._zero_report().total_for(hostile)
+
+        trace = ArmCostTrace.from_events(
+            "ordinary",
+            (event,),
+            expected_events=(expected,),
+            accounting_complete=True,
+        )
+        self.assertIs(trace.arm, Arm.ORDINARY)
+
     def test_event_shapes_prevent_cross_category_double_counting(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot carry model token counts"):
             CostEvent(

@@ -63,6 +63,15 @@ normalize to a legitimate accounting category. Rejecting it makes category assig
 plain-value decision. This is an in-process parsing invariant, not evidence that the
 external execution harness produced trustworthy telemetry.
 
+Arm identity uses the same exact-value normalization boundary. `ArmCostTrace` construction,
+`ArmCostTrace.from_events`, and `CompleteCostReport.total_for` accept either an exact `Arm`
+member or an exact built-in `str` naming one of the five declared arms. A `str` subclass is
+rejected before `Arm(...)` enum lookup. Otherwise a hostile string subclass can override
+`__eq__`/`__hash__` and make an invalid printable value participate in enum value lookup as
+if it named a legitimate arm, corrupting which treatment a trace or lookup is attributed
+to. This closes an in-process classification alias only; it does not prove that an external
+runtime attached the correct arm label to the telemetry it supplied.
+
 The final bullet is a Goal-1 execution invariant, not a generic claim that every future
 cost-accounting application must call a model. If a later protocol deliberately permits a
 zero-model-call arm, that must be represented prospectively with a different execution
