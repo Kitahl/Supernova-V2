@@ -23,7 +23,7 @@ EXPECTED_EXPERIMENT_ID = "goal1-confirmatory-v1"
 EXPECTED_PROTOCOL_RULES_SHA256 = (
     "f1e650bc1f33d083c92f4df2a314bef79f8f646fa23431e39a2ebb83b28212e9"
 )
-EXPECTED_BUDGET_ID = "goal1-common-envelope-v1"
+EXPECTED_BUDGET_ID = "goal1-confirmatory-complete-observable-allocation-v1"
 EXPECTED_USAGE_BASIS = "visible_utf8_bytes"
 FAMILYWISE_ALPHA = 0.05
 FROZEN_CONTROLS = (
