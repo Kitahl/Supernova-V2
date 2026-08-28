@@ -507,12 +507,17 @@ class VerifiedChainStepExecution:
 def render_verified_chain_request(
     problem_prompt_utf8: bytes,
     *,
+    execution_authority: VerifiedChainExecutionAuthority,
     admitted_products: tuple[AdmittedProduct, ...],
     retry_of: RetryLink | None,
 ) -> bytes:
     """Freeze the complete and exclusive verified-chain visibility boundary."""
 
     prompt = _utf8(problem_prompt_utf8, "problem_prompt_utf8")
+    if type(execution_authority) is not VerifiedChainExecutionAuthority:
+        raise TypeError(
+            "execution_authority must be an exact VerifiedChainExecutionAuthority"
+        )
     if type(admitted_products) is not tuple or not all(
         type(product) is AdmittedProduct for product in admitted_products
     ):
@@ -534,22 +539,71 @@ def render_verified_chain_request(
         if retry_of is None
         else RetryLink(retry_of.predecessor_completion)
     )
+    admitted_mappings = []
+    for product in snapshots:
+        mapping = product.to_mapping()
+        mapping["execution_evidence_id"] = (
+            execution_authority.verify_admitted_product(product)
+        )
+        admitted_mappings.append(mapping)
+    retry_mapping = None
+    if retry is not None:
+        retry_mapping = retry.to_mapping()
+        retry_mapping["execution_evidence_id"] = (
+            execution_authority.verify_retry(retry)
+        )
     return _canonical_bytes(
         {
-            "admitted_products": [product.to_mapping() for product in snapshots],
+            "admitted_products": admitted_mappings,
             "problem_prompt_utf8": prompt.decode("utf-8"),
-            "retry_of": None if retry is None else retry.to_mapping(),
+            "retry_of": retry_mapping,
             "schema": "supernova.verified-chain-visible-request.v1",
         }
     )
 
 
+def _authenticate_admitted_product(
+    authority: DispatchAuthority,
+    manifest: DispatchManifest,
+    product: AdmittedProduct,
+) -> FrozenProblemRequest:
+    producer = product.producer_completion
+    matches = [
+        entry
+        for entry in manifest.entries
+        if (
+            entry.dispatch_id == producer.dispatch_id
+            and entry.entry_sha256 == producer.entry_sha256
+        )
+    ]
+    if len(matches) != 1:
+        raise ValueError("admitted product producer is absent from supplied manifest")
+    entry = matches[0]
+    connection = authority._connect()
+    try:
+        requests = authority._requests_from_db(connection)
+        stored_request = requests.get(entry.dispatch_id)
+        if stored_request is None:
+            raise ValueError("admitted product producer is absent from authority")
+        authority._validate_record_for_entry(
+            connection,
+            entry,
+            producer,
+            stored_request,
+        )
+        return FrozenProblemRequest.from_mapping(stored_request.to_mapping())
+    finally:
+        connection.close()
+
+
 def _authenticate_retry(
     authority: DispatchAuthority,
+    execution_authority: VerifiedChainExecutionAuthority,
     manifest: DispatchManifest,
     current: FrozenProblemRequest,
     retry_of: RetryLink,
 ) -> None:
+    execution_authority.verify_retry(retry_of)
     predecessor_completion = retry_of.predecessor_completion
     predecessor_request = predecessor_completion.payload.request
     if retry_of.attempt >= current.attempt:
@@ -598,6 +652,7 @@ def _authenticate_retry(
 def execute_verified_chain_step(
     *,
     authority: DispatchAuthority,
+    execution_authority: VerifiedChainExecutionAuthority,
     manifest: DispatchManifest,
     request: FrozenProblemRequest,
     problem_prompt_utf8: bytes,
@@ -610,6 +665,10 @@ def execute_verified_chain_step(
 
     if type(authority) is not DispatchAuthority:
         raise TypeError("authority must be an exact DispatchAuthority")
+    if type(execution_authority) is not VerifiedChainExecutionAuthority:
+        raise TypeError(
+            "execution_authority must be an exact VerifiedChainExecutionAuthority"
+        )
     if type(manifest) is not DispatchManifest:
         raise TypeError("manifest must be an exact DispatchManifest")
     if type(request) is not FrozenProblemRequest:
@@ -626,6 +685,7 @@ def execute_verified_chain_step(
 
     canonical_request = render_verified_chain_request(
         problem_prompt_utf8,
+        execution_authority=execution_authority,
         admitted_products=admitted_products,
         retry_of=retry_of,
     )
@@ -643,12 +703,19 @@ def execute_verified_chain_step(
         producer_dispatches.add(product.producer_completion.dispatch_id)
         if product.producer_attempt >= request.attempt:
             raise ValueError("admitted products must come from an earlier frozen attempt")
+        execution_authority.verify_admitted_product(product)
         producer_request = _authenticate_admitted_product(authority, manifest, product)
         if not _same_frozen_cell(producer_request, request):
             raise ValueError("admitted product producer is outside the current frozen cell")
 
     if retry_of is not None:
-        _authenticate_retry(authority, manifest, request, retry_of)
+        _authenticate_retry(
+            authority,
+            execution_authority,
+            manifest,
+            request,
+            retry_of,
+        )
 
     captured: list[VerifiedChainObservation] = []
 
@@ -713,6 +780,10 @@ def execute_verified_chain_step(
         ):
             terminal_answer = True
 
+    execution_authority._record_execution(
+        baseline.completion,
+        product_admitted=admitted_product is not None,
+    )
     return VerifiedChainStepExecution(
         baseline,
         tuple(product.product_id for product in admitted_products),
@@ -725,6 +796,7 @@ def execute_verified_chain_step(
 __all__ = [
     "AdmittedProduct",
     "RetryLink",
+    "VerifiedChainExecutionAuthority",
     "VerifiedChainObservation",
     "VerifiedChainObservationKind",
     "VerifiedChainStepExecution",
