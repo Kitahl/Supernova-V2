@@ -489,6 +489,10 @@ def validate_contract(contract: object) -> None:
         raise ValueError("orchestration cost changed")
     if cost["multi_fidelity_verifier_calls"] != 16:
         raise ValueError("multi-fidelity verifier cost changed")
+    if cost["product_only_verifier_event"] != (
+        "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_FOR_EVERY_PRODUCT_CANDIDATE_OR_FINAL_ANSWER_AND_ONE_TYPED_NOT_INVOKED_SLOT_FOR_NO_ANSWER_OR_ERROR"
+    ):
+        raise ValueError("product-only verifier cost changed")
     if cost["unregistered_retry_product_promotion_or_cost_event"] != "BLOCKED":
         raise ValueError("unregistered event handling changed")
     if cost["multi_fidelity_aggregate_output_cap_must_be_the_common_arm_output_cap"] is not True:
@@ -673,6 +677,14 @@ class ConfirmatoryProductControlContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual("BLOCKED", isolation["missing_or_self_asserted_receipt"])
+
+    def test_product_only_verifier_cost_cannot_be_removed(self) -> None:
+        changed = copy.deepcopy(self.contract)
+        changed["cost_event_contract"]["product_only_verifier_event"] = (
+            "NO_LEAN_INVOCATION"
+        )
+        with self.assertRaisesRegex(ValueError, "product-only verifier cost"):
+            validate_contract(changed)
 
     def test_unregistered_cost_or_retry_cannot_be_free(self) -> None:
         changed = copy.deepcopy(self.contract)
