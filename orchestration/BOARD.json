@@ -99,12 +99,16 @@
     {
       "id": "G1-108",
       "owner": "MM03",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/dispatch.py",
         "tests/test_dispatch.py"
       ],
-      "objective": "Implement an append-only pre-dispatch manifest and completion join that prevents fabricated, omitted, replayed, or cross-arm execution events."
+      "objective": "Implement an append-only pre-dispatch manifest and completion join that prevents fabricated, omitted, replayed, or cross-arm execution events.",
+      "completion": {
+        "pull_request": 23,
+        "merge_commit": "639908fd9b39cf2826c27ec34c5aa9e69ab0eb00"
+      }
     },
     {
       "id": "G1-109",
