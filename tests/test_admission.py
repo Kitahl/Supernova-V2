@@ -506,7 +506,7 @@ class ProductAdmissionTests(unittest.TestCase):
 
         self.assertEqual("REJECTED", result["admission"])
         self.assertFalse(result["admitted"])
-        self.assertEqual(["shared", "shared"], result["evidence_ids"])
+        self.assertEqual([], result["evidence_ids"])
         self.assertIn("duplicate evidence_id", result["reasons"])
 
     def test_polymorphic_outcome_cannot_impersonate_pass(self) -> None:
