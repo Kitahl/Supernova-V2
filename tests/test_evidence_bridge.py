@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+from dataclasses import replace
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -66,6 +68,14 @@ class EvidenceBridgeTests(unittest.TestCase):
         cls.native_problem_id = cls.manifest_bundle.operator_plan["entries"][0][
             "problem_id"
         ]
+        cls.fixture_operator_plan = json.loads(
+            json.dumps(cls.manifest_bundle.operator_plan)
+        )
+        cls.fixture_operator_plan["entries"] = [
+            entry
+            for entry in cls.fixture_operator_plan["entries"]
+            if entry["problem_id"] == cls.native_problem_id
+        ]
         cls._tmp = tempfile.TemporaryDirectory()
         (
             cls.authority,
@@ -109,6 +119,9 @@ class EvidenceBridgeTests(unittest.TestCase):
             issuer_id="test-host",
             execution_authority_sha256=sha("non-credit-test-authority"),
             secret=b"e" * 32,
+            protocol=cls.protocol,
+            public_manifest=cls.manifest_bundle.public_manifest,
+            operator_plan=cls.manifest_bundle.operator_plan,
         )
         problem = BenchmarkProblemIdentity(
             "miniF2F-Lean4-Kimina-composite",
@@ -219,11 +232,13 @@ class EvidenceBridgeTests(unittest.TestCase):
                 if record_all:
                     ledger._record_completion(
                         completion,
-                        context_isolation_receipt_sha256=sha(
-                            f"context:{completion.dispatch_id}"
+                        context_isolation_receipt=(
+                            ledger._issue_context_isolation_receipt(completion)
                         ),
-                        predecessor_reconciliation_sha256=sha(
-                            f"predecessor:{completion.dispatch_id}"
+                        predecessor_reconciliation_receipt=(
+                            ledger._issue_predecessor_reconciliation_receipt(
+                                completion
+                            )
                         ),
                         orchestration_milliseconds=1,
                     )
@@ -234,9 +249,15 @@ class EvidenceBridgeTests(unittest.TestCase):
                         ExpectedCostEvent.scheduled_chat_model_call(
                             f"{prefix}:model"
                         ),
+                        ExpectedCostEvent.context_isolation(
+                            f"{prefix}:context_isolation"
+                        ),
                         ExpectedCostEvent.verifier(f"{prefix}:verifier"),
                         ExpectedCostEvent.orchestration(
                             f"{prefix}:orchestration"
+                        ),
+                        ExpectedCostEvent.predecessor_reconciliation(
+                            f"{prefix}:predecessor_reconciliation"
                         ),
                     )
                 )
@@ -247,11 +268,17 @@ class EvidenceBridgeTests(unittest.TestCase):
                             request_utf8=request_bytes,
                             response_utf8=response_bytes,
                         ),
+                        CostEvent.context_isolation(
+                            f"{prefix}:context_isolation"
+                        ),
                         CostEvent.verifier(
                             f"{prefix}:verifier", milliseconds=verifier_ms
                         ),
                         CostEvent.orchestration(
                             f"{prefix}:orchestration", milliseconds=1
+                        ),
+                        CostEvent.predecessor_reconciliation(
+                            f"{prefix}:predecessor_reconciliation"
                         ),
                     )
                 )
@@ -275,13 +302,17 @@ class EvidenceBridgeTests(unittest.TestCase):
             "closed_join": self.closed,
             "protocol": self.protocol,
             "public_manifest": self.manifest_bundle.public_manifest,
-            "operator_plan": self.manifest_bundle.operator_plan,
+            "operator_plan": self.fixture_operator_plan,
             "cost_reports_by_problem": {
                 self.native_problem_id: self.report
             },
         }
         arguments.update(overrides)
-        return bridge_closed_evidence(**arguments)
+        with patch(
+            "supernova_goal1.evidence_bridge.validate_draft_bundle",
+            return_value=None,
+        ):
+            return bridge_closed_evidence(**arguments)
 
     def test_bridge_derives_outcomes_and_binds_all_five_evidence_classes(self) -> None:
         bundle = self._bridge()
@@ -319,21 +350,55 @@ class EvidenceBridgeTests(unittest.TestCase):
         bad_protocol = json.loads(json.dumps(self.protocol))
         bad_protocol["sealed_rules"]["paired_design"]["attempts_per_problem_arm"] = 1
         with self.assertRaises(ValueError):
-            self._bridge(protocol=bad_protocol)
+            bridge_closed_evidence(
+                dispatch_authority=self.authority,
+                execution_ledger=self.ledger,
+                closed_join=self.closed,
+                protocol=bad_protocol,
+                public_manifest=self.manifest_bundle.public_manifest,
+                operator_plan=self.manifest_bundle.operator_plan,
+                cost_reports_by_problem={self.native_problem_id: self.report},
+            )
         bad_manifest = json.loads(
             json.dumps(self.manifest_bundle.public_manifest)
         )
         bad_manifest["protocol_id"] = "caller-relabel"
         with self.assertRaises(ValueError):
-            self._bridge(public_manifest=bad_manifest)
+            bridge_closed_evidence(
+                dispatch_authority=self.authority,
+                execution_ledger=self.ledger,
+                closed_join=self.closed,
+                protocol=self.protocol,
+                public_manifest=bad_manifest,
+                operator_plan=self.manifest_bundle.operator_plan,
+                cost_reports_by_problem={self.native_problem_id: self.report},
+            )
+
+    def test_real_validated_manifest_rejects_partial_closed_join(self) -> None:
+        with self.assertRaisesRegex(ValueError, "do not exactly cover"):
+            bridge_closed_evidence(
+                dispatch_authority=self.authority,
+                execution_ledger=self.ledger,
+                closed_join=self.closed,
+                protocol=self.protocol,
+                public_manifest=self.manifest_bundle.public_manifest,
+                operator_plan=self.manifest_bundle.operator_plan,
+                cost_reports_by_problem={self.native_problem_id: self.report},
+            )
 
     def test_replayed_execution_receipt_is_rejected(self) -> None:
         completion = self.completions[0]
         with self.assertRaisesRegex(ValueError, "replay rejected"):
             self.ledger._record_completion(
                 completion,
-                context_isolation_receipt_sha256=sha("context"),
-                predecessor_reconciliation_sha256=sha("predecessor"),
+                context_isolation_receipt=(
+                    self.ledger._issue_context_isolation_receipt(completion)
+                ),
+                predecessor_reconciliation_receipt=(
+                    self.ledger._issue_predecessor_reconciliation_receipt(
+                        completion
+                    )
+                ),
                 orchestration_milliseconds=1,
             )
 
@@ -365,7 +430,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                 attempts=(0,),
                 record_all=True,
             )
-            with self.assertRaisesRegex(ValueError, "partial or replayed"):
+            with self.assertRaisesRegex(ValueError, "do not exactly cover"):
                 self._bridge(
                     dispatch_authority=authority,
                     execution_ledger=ledger,
@@ -389,13 +454,19 @@ class EvidenceBridgeTests(unittest.TestCase):
                         usage_basis=event.model_usage_basis,
                     )
                 )
+            elif event.kind.value == "context_isolation":
+                zeroed.append(CostEvent.context_isolation(event.event_id))
             elif event.kind.value == "verifier":
                 zeroed.append(
                     CostEvent.verifier(event.event_id, milliseconds=0)
                 )
-            else:
+            elif event.kind.value == "orchestration":
                 zeroed.append(
                     CostEvent.orchestration(event.event_id, milliseconds=0)
+                )
+            else:
+                zeroed.append(
+                    CostEvent.predecessor_reconciliation(event.event_id)
                 )
         traces[traces.index(ordinary)] = ArmCostTrace.from_events(
             Arm.ORDINARY,
@@ -444,14 +515,34 @@ class EvidenceBridgeTests(unittest.TestCase):
                 issuer_id="test-host",
                 execution_authority_sha256=sha("non-credit-test-authority"),
                 secret=b"e" * 32,
+                protocol=self.protocol,
+                public_manifest=self.manifest_bundle.public_manifest,
+                operator_plan=self.manifest_bundle.operator_plan,
             )
-            with self.assertRaisesRegex(
-                ValueError, "context_isolation_receipt_sha256"
-            ):
+            completion = self.completions[0]
+            with self.assertRaisesRegex(TypeError, "ContextIsolationReceipt"):
                 ledger._record_completion(
-                    self.completions[0],
-                    context_isolation_receipt_sha256="missing",
-                    predecessor_reconciliation_sha256=sha("predecessor"),
+                    completion,
+                    context_isolation_receipt="missing",
+                    predecessor_reconciliation_receipt=(
+                        ledger._issue_predecessor_reconciliation_receipt(
+                            completion
+                        )
+                    ),
+                    orchestration_milliseconds=1,
+                )
+
+            valid = ledger._issue_context_isolation_receipt(completion)
+            forged = replace(valid, signature=sha("forged-context"))
+            with self.assertRaisesRegex(ValueError, "not authenticated"):
+                ledger._record_completion(
+                    completion,
+                    context_isolation_receipt=forged,
+                    predecessor_reconciliation_receipt=(
+                        ledger._issue_predecessor_reconciliation_receipt(
+                            completion
+                        )
+                    ),
                     orchestration_milliseconds=1,
                 )
         finally:
@@ -480,11 +571,41 @@ class EvidenceBridgeTests(unittest.TestCase):
                 issuer_id="test-host",
                 execution_authority_sha256=sha("non-credit-test-authority"),
                 secret=b"e" * 32,
+                protocol=self.protocol,
+                public_manifest=self.manifest_bundle.public_manifest,
+                operator_plan=self.manifest_bundle.operator_plan,
             )
             with self.assertRaisesRegex(ValueError, "different run_id"):
                 self._bridge(execution_ledger=other)
         finally:
             tmp.cleanup()
+
+
+    def test_predecessor_receipt_is_bound_to_frozen_graph(self) -> None:
+        completion = next(
+            value
+            for value in self.completions
+            if value.payload.request.arm is Arm.VERIFIED_CHAIN
+            and value.payload.request.attempt == 1
+        )
+        receipt = self.ledger._issue_predecessor_reconciliation_receipt(
+            completion
+        )
+        forged = replace(
+            receipt,
+            protocol_dispatch_id=(
+                self.fixture_operator_plan["entries"][0]["dispatch_id"]
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "frozen predecessor graph"):
+            self.ledger._record_completion(
+                completion,
+                context_isolation_receipt=(
+                    self.ledger._issue_context_isolation_receipt(completion)
+                ),
+                predecessor_reconciliation_receipt=forged,
+                orchestration_milliseconds=1,
+            )
 
 
 if __name__ == "__main__":
