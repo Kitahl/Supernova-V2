@@ -153,11 +153,15 @@
     {
       "id": "G1-111",
       "owner": "MM07",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "tests/test_execution_adversarial.py"
       ],
-      "objective": "Add adversarial integration tests for split leakage, hidden product reuse, post-hoc dispatch registration, missing telemetry, unmatched retries, wrong Lean runtime, and partial five-arm cohorts."
+      "objective": "Add adversarial integration tests for split leakage, hidden product reuse, post-hoc dispatch registration, missing telemetry, unmatched retries, wrong Lean runtime, and partial five-arm cohorts.",
+      "completion": {
+        "pull_request": 47,
+        "merge_commit": "e8648e59c095006aa7c297ec395c0801ff0c46ff"
+      }
     },
     {
       "id": "G1-012",
