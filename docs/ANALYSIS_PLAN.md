@@ -1,14 +1,18 @@
 # Goal 1 prospective analysis plan
 
 Ticket: `G1-110`  
-Analysis contract: `goal1-confirmatory-primary-v1`
+Analysis contract: `goal1-confirmatory-primary-v1`  
+Status: **SUPERSEDED_NON_AUTHORITY** by the sealed rules in
+`goal1/CONFIRMATORY_PROTOCOL.json`. This file is retained as a historical
+prospective design record and cannot open dispatch or create scientific credit.
 
 ## Scope and non-claims
 
-This is a prospective contract for the first confirmatory test of Goal 1. It does
-not make the current repository confirmatory-ready. The active experiment is
-still a dry run, its complete-cost model is not frozen, and its model-usage basis
-is `UNFROZEN`. Dry-run and pilot results have zero scientific credit.
+This was the prospective precursor for the first confirmatory test of Goal 1.
+The active authority is now `goal1/GOAL1.json`, and the exclusive scientific
+rules are the content-bound `goal1/CONFIRMATORY_PROTOCOL.json`. Confirmatory
+execution remains blocked because no admissible execution-authority bundle or
+sealed manifest exists. Dry-run and pilot results have zero scientific credit.
 
 The primary estimand is the package effect of verified-gated search and
 consumption. It includes the verified-chain arm's frozen decomposition,

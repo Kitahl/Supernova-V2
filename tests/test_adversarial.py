@@ -17,7 +17,7 @@ from supernova_goal1.evaluate import evaluate_experiment
 class AdversarialEvaluationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.spec = json.loads((ROOT / "goal1" / "GOAL1.json").read_text(encoding="utf-8"))
+        cls.spec = json.loads((ROOT / "examples" / "dry_run_goal1.json").read_text(encoding="utf-8"))
         cls.records = json.loads(
             (ROOT / "examples" / "dry_run_records.json").read_text(encoding="utf-8")
         )

@@ -1,43 +1,42 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "authority_id": "goal1-active-authority-v2",
   "goal": "FINITE_VERIFIED_MATHEMATICAL_SUPERNOVA",
   "hypothesis": "Within one problem, a chain of independently verified intermediate products solves more problems than ordinary, portfolio, product-only, and multi-fidelity controls under the same frozen complete-cost budget.",
-  "experiment_id": "goal1-bootstrap-dry-run",
-  "phase": "DRY_RUN",
-  "benchmark": {
-    "name": "UNSELECTED",
-    "version": "UNPINNED",
-    "split": "UNLOCKED"
+  "active_experiment": {
+    "experiment_id": "goal1-confirmatory-v1",
+    "phase": "CONFIRMATORY_PREEXECUTION",
+    "protocol_path": "goal1/CONFIRMATORY_PROTOCOL.json",
+    "protocol_rules_sha256": "f1e650bc1f33d083c92f4df2a314bef79f8f646fa23431e39a2ebb83b28212e9",
+    "protocol_rules_status": "SEALED",
+    "benchmark_frozen": true,
+    "complete_cost_policy_frozen": true,
+    "execution_authority_path": "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+    "confirmatory_execution_status": "BLOCKED_NO_EXECUTION_AUTHORITY",
+    "manifest_schema": "supernova.confirmatory-manifest.v1",
+    "held_out_dispatch": "BLOCKED"
   },
-  "required_problem_ids": [
-    "dry-001",
-    "dry-002"
-  ],
-  "arms": [
-    "ordinary",
-    "portfolio",
-    "product_only",
-    "multi_fidelity",
-    "verified_chain"
-  ],
-  "budget_id": "dry-budget-v1",
-  "cost_model_frozen": false,
-  "budget_ceiling": {
-    "model_calls": 16,
-    "input_tokens": 200000,
-    "output_tokens": 100000,
-    "verifier_milliseconds": 600000,
-    "orchestration_milliseconds": 600000
+  "authority_hierarchy": {
+    "this_file": "ROOT_GOAL_AUTHORITY_INDEX",
+    "confirmatory_protocol": "EXCLUSIVE_SCIENTIFIC_RULES_FOR_GOAL1_CONFIRMATORY_V1",
+    "execution_authority": "MUST_BIND_THE_CANONICAL_SHA256_OF_THIS_FILE_AND_THE_PROTOCOL_RULES_SHA256",
+    "manifest": "MUST_BIND_THIS_AUTHORITY_THE_PROTOCOL_RULES_AND_THE_EXECUTION_AUTHORITY_BEFORE_DISPATCH",
+    "legacy_dry_run": "NON_CREDIT_EXAMPLE_ONLY"
   },
-  "familywise_alpha": 0.05,
-  "scientific_pass_requires": [
-    "a pinned benchmark and split",
-    "a frozen complete-cost model",
-    "one explicit model-usage basis shared by the experiment and every outcome",
-    "all five paired outcomes for every required problem",
-    "kernel verification for every solved outcome",
-    "verified_chain superiority over each control",
-    "Holm-corrected exact paired tests below familywise alpha"
+  "scientific_credit": "NONE_UNTIL_AN_ADMISSIBLE_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_SEALED_AND_ONE_COMPLETE_COHORT_IS_EVALUATED",
+  "terminal_decisions": [
+    "PASS",
+    "FAIL",
+    "BLOCKED",
+    "INCOMPLETE"
   ],
-  "model_usage_basis": "UNFROZEN"
+  "goal2_gate": {
+    "requires_valid_goal1_pass": true,
+    "current_state": "BLOCKED_PENDING_VALID_GOAL1_PASS"
+  },
+  "legacy_dry_run": {
+    "spec_path": "examples/dry_run_goal1.json",
+    "records_path": "examples/dry_run_records.json",
+    "classification": "NON_CREDIT_EXAMPLE"
+  }
 }

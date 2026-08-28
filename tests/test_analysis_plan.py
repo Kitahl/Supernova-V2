@@ -55,6 +55,11 @@ class AnalysisPlanTests(unittest.TestCase):
         cls.goal = json.loads(
             (ROOT / "goal1" / "GOAL1.json").read_text(encoding="utf-8")
         )
+        cls.protocol = json.loads(
+            (ROOT / "goal1" / "CONFIRMATORY_PROTOCOL.json").read_text(
+                encoding="utf-8"
+            )
+        )
 
     def test_contract_has_one_versioned_closed_topology(self) -> None:
         self.assertEqual(EXPECTED_TOP_LEVEL_KEYS, set(self.contract))
@@ -68,7 +73,8 @@ class AnalysisPlanTests(unittest.TestCase):
         self.assertEqual(Arm.VERIFIED_CHAIN.value, self.contract["candidate_arm"])
         self.assertEqual(expected_controls, self.contract["control_arms"])
         self.assertEqual(
-            [*expected_controls, Arm.VERIFIED_CHAIN.value], self.goal["arms"]
+            [*expected_controls, Arm.VERIFIED_CHAIN.value],
+            self.protocol["sealed_rules"]["paired_design"]["arms"],
         )
         sampling = self.contract["sampling"]
         self.assertEqual("problem", sampling["unit"])
@@ -109,7 +115,10 @@ class AnalysisPlanTests(unittest.TestCase):
             "FOR_EVERY_CONTROL: W_c>L_c AND holm_rejects_null_c",
             primary["pass_rule"],
         )
-        self.assertEqual(0.05, self.goal["familywise_alpha"])
+        self.assertEqual(
+            0.05,
+            self.protocol["sealed_rules"]["power_design"]["familywise_alpha"],
+        )
 
     def test_incomplete_cells_and_post_terminal_reruns_cannot_be_analyzed(self) -> None:
         incomplete = self.contract["incomplete_runs"]
@@ -210,7 +219,7 @@ class AnalysisPlanTests(unittest.TestCase):
         }
         self.assertEqual(expected_gates, set(self.contract["provenance_gates"]))
 
-    def test_document_forbids_overclaiming_and_current_run_remains_non_credit(self) -> None:
+    def test_document_forbids_overclaiming_and_is_superseded_non_authority(self) -> None:
         expected_forbidden = {
             "pilot_establishes_goal1_superiority",
             "pure_verification_gating_effect",
@@ -220,9 +229,14 @@ class AnalysisPlanTests(unittest.TestCase):
             "incomplete_cohort_supports_primary_inference",
         }
         self.assertEqual(expected_forbidden, set(self.contract["forbidden_claims"]))
-        self.assertEqual("DRY_RUN", self.goal["phase"])
-        self.assertIs(False, self.goal["cost_model_frozen"])
-        self.assertEqual("UNFROZEN", self.goal["model_usage_basis"])
+        active = self.goal["active_experiment"]
+        self.assertEqual("CONFIRMATORY_PREEXECUTION", active["phase"])
+        self.assertEqual("SEALED", active["protocol_rules_status"])
+        self.assertEqual(
+            "BLOCKED_NO_EXECUTION_AUTHORITY",
+            active["confirmatory_execution_status"],
+        )
+        self.assertIn("SUPERSEDED_NON_AUTHORITY", self.document)
         self.assertIn("do not certify", self.document)
         self.assertIn("zero scientific credit", self.document)
 
