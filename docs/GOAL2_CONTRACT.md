@@ -15,8 +15,11 @@ the contract authority. This document cannot open the gate or adjudicate a resul
 - `I0` with `M0` is the frozen control improver and its isolated memory.
 - `I1` with `M1` is the treatment improver and its isolated memory.
 
-Component IDs, artifact digests, runtime/schema digests, memory namespaces, arm
-lineage records, and selected descendant digests must be authority-bound. Aliasing,
+The frozen source manifest binds F, I0, and M0 before dispatch. Post-run signed
+lineage binds both IDs and exact artifact digests for I0, M0, I1, and M1, plus the
+selected descendants. Component IDs, artifact digests, runtime/schema digests,
+memory namespaces, arm lineage records, and selected descendant digests must be
+authority-bound. Aliasing,
 mixing lineages, reusing `M0` as `M1`, or substituting a descendant blocks the run.
 The control and treatment descendants must differ from the pristine parent and from
 one another.
@@ -39,7 +42,14 @@ Opening requires all of the following:
    target, sampling unit, clustering rule, and analysis-plan digest.
 
 A missing, malformed, forged, cross-run, or substituted field returns `BLOCKED`.
-No Goal 2 execution ticket may open while the gate is blocked.
+The pre-dispatch gate uses only evidence available before execution: the authenticated
+Goal 1 PASS, frozen contract artifacts, distinct authority commitments, and the
+content-addressed F/I0/M0 source manifest. It does not require post-run descendants
+or outcomes. No Goal 2 execution ticket may open while this gate is blocked.
+
+A separate post-run evidence-admission gate validates generated I1/M1 artifacts,
+lineage, cost ledgers, selections, and held-out evaluation. Opening pre-dispatch does
+not imply that post-run evidence is admissible.
 
 ## Matched complete R&D cost
 
@@ -66,8 +76,8 @@ extra, malformed, replaced, or over-budget evidence blocks scientific credit.
 Each arm registers its candidate set and uses the same frozen selection rule.
 Authenticated selection ledgers seal exactly one descendant per arm. The fresh
 held-out evaluation manifest is content-addressed, disjoint from all R&D and
-meta-improvement data, and released only after both selection seals. The evaluator
-is independent and applies the same items, runtime, verifier, scoring, and analysis
+meta-improvement data, and released only after both selection seals. The evaluator has a separately frozen authority key commitment, distinct from the
+R&D authority. It applies the same items, runtime, verifier, scoring, and analysis
 to the control descendant, treatment descendant, and untouched solver.
 
 The executable contract test consumes and authenticates the lineage, cost, selection,
