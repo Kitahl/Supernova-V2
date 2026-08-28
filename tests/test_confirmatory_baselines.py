@@ -127,6 +127,26 @@ def validate_contract(contract: object) -> None:
         "over_limit_or_invalid_utf8": "BLOCKED",
     }:
         raise ValueError("response contract changed")
+    if common["result_rule"] != {
+        "solved": "AT_LEAST_ONE_OF_16_ATTEMPTS_HAS_AN_ADMISSIBLE_FINAL_KERNEL_PASS",
+        "selected_attempt": (
+            "LOWEST_ATTEMPT_INDEX_WITH_AN_ADMISSIBLE_FINAL_KERNEL_PASS_AFTER_ALL_16_COMPLETE"
+        ),
+        "no_passing_attempt": (
+            "UNSOLVED_ONLY_WHEN_ALL_16_CELLS_AND_COST_EVENTS_ARE_COMPLETE_OTHERWISE_INCOMPLETE"
+        ),
+        "human_selection_or_posthoc_rerun": "FORBIDDEN",
+    }:
+        raise ValueError("result rule changed")
+    if common["capability_surface"] != {
+        "model_provider_version_reasoning_mode_tools_and_generation_settings": (
+            "MUST_MATCH_ACROSS_ALL_FIVE_ARMS_AND_BE_BOUND_BY_THE_SHARED_CONFIRMATORY_PROTOCOL"
+        ),
+        "external_tools": "FORBIDDEN",
+        "network_during_model_attempt": "FORBIDDEN",
+        "model_visible_input": "EXACT_COMMON_TEMPLATE_PLUS_EXACT_ARM_DELTA_ONLY",
+    }:
+        raise ValueError("capability surface changed")
     if common["prompt_rendering"] != {
         "encoding": "UTF-8",
         "unicode_normalization": "NONE",
@@ -152,6 +172,18 @@ def validate_contract(contract: object) -> None:
         raise ValueError("fresh-context scope changed")
     if isolation["allowed_predecessor_contexts"] != []:
         raise ValueError("baseline predecessor context is forbidden")
+    if isolation["forbidden_context"] != [
+        "PRIOR_PROBLEM",
+        "PRIOR_ARM",
+        "PRIOR_ATTEMPT",
+        "SAVED_MEMORY",
+        "CUSTOM_INSTRUCTIONS",
+        "FILES",
+        "APPS",
+        "TOOLS",
+        "EXTERNAL_NETWORK",
+    ]:
+        raise ValueError("forbidden context changed")
     if isolation["admissible_receipt_modes"] != [
         "PROVIDER_ATTESTED_EMPTY_CONTEXT",
         "HERMETIC_LOCAL_INSTANCE",
@@ -175,6 +207,14 @@ def validate_contract(contract: object) -> None:
         raise ValueError("arm set changed")
     ordinary = arms["ordinary"]
     portfolio = arms["portfolio"]
+    if ordinary["attempt_relationship"] != (
+        "16_IDENTICALLY_RENDERED_INDEPENDENT_DIRECT_ATTEMPTS"
+    ):
+        raise ValueError("ordinary attempt relationship changed")
+    if portfolio["attempt_relationship"] != (
+        "16_INDEPENDENT_PREDECLARED_STRATEGY_ATTEMPTS"
+    ):
+        raise ValueError("portfolio attempt relationship changed")
     if ordinary["strategy_schedule"] != ["direct"] * 16:
         raise ValueError("ordinary strategy schedule changed")
     if portfolio["strategy_schedule"] != EXPECTED_STRATEGIES:
@@ -256,6 +296,29 @@ class ConfirmatoryBaselineContractTests(unittest.TestCase):
         changed = copy.deepcopy(self.contract)
         changed["arms"]["portfolio"]["strategy_schedule"][0] = "posthoc_strategy"
         with self.assertRaisesRegex(ValueError, "portfolio strategy"):
+            validate_contract(changed)
+
+    def test_result_capability_context_and_relationship_changes_are_rejected(self) -> None:
+        changed = copy.deepcopy(self.contract)
+        changed["common"]["result_rule"]["selected_attempt"] = "HIGHEST_PASS"
+        with self.assertRaisesRegex(ValueError, "result rule"):
+            validate_contract(changed)
+
+        changed = copy.deepcopy(self.contract)
+        changed["common"]["capability_surface"]["external_tools"] = "ALLOWED"
+        with self.assertRaisesRegex(ValueError, "capability surface"):
+            validate_contract(changed)
+
+        changed = copy.deepcopy(self.contract)
+        changed["common"]["context_isolation_declaration"][
+            "forbidden_context"
+        ].remove("PRIOR_PROBLEM")
+        with self.assertRaisesRegex(ValueError, "forbidden context"):
+            validate_contract(changed)
+
+        changed = copy.deepcopy(self.contract)
+        changed["arms"]["ordinary"]["attempt_relationship"] = "ADAPTIVE"
+        with self.assertRaisesRegex(ValueError, "ordinary attempt relationship"):
             validate_contract(changed)
 
     def test_unregistered_retry_or_cost_event_is_rejected(self) -> None:
