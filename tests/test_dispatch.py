@@ -5,13 +5,16 @@ import hashlib
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import supernova_goal1.dispatch as dispatch_module
 from supernova_goal1.artifacts import ScheduledChatArtifactEnvelope, ScheduledChatArtifactKind
 from supernova_goal1.contracts import Arm
 from supernova_goal1.dispatch import (
@@ -323,6 +326,61 @@ class DispatchTests(unittest.TestCase):
     def test_signer_is_one_shot(self) -> None:
         with self.assertRaisesRegex(ValueError, "one-shot"):
             self.s1.complete(entry=self.m1.entries[-1], payload=self.p1)
+
+    def test_signer_is_atomically_one_shot_under_concurrency(self) -> None:
+        db = str(Path(self.tmp.name, "concurrent.sqlite").resolve())
+        authority = DispatchAuthority(db, "run-concurrent")
+        request = self.request(run_id="run-concurrent", native_id="problem-concurrent")
+        signer = CompletionSigner.generate()
+        manifest = authority.register(
+            authority.current_manifest(),
+            request=request,
+            completion_verifier_sha256=signer.public_commitment,
+        )
+        entry = manifest.entries[-1]
+        payloads = (
+            self.typed_payload(request, verifier_status=VerifierStatus.PASS),
+            self.typed_payload(request, verifier_status=VerifierStatus.FAIL),
+        )
+        gate = threading.Barrier(2)
+        original_revalidate_entry = dispatch_module._revalidate_entry
+
+        def synchronized_revalidate_entry(value: object) -> DispatchEntry:
+            canonical = original_revalidate_entry(value)
+            gate.wait(timeout=5)
+            return canonical
+
+        outcomes: list[object] = []
+        outcomes_lock = threading.Lock()
+
+        def worker(payload: CompletionPayload) -> None:
+            try:
+                outcome: object = signer.complete(entry=entry, payload=payload)
+            except BaseException as exc:
+                outcome = exc
+            with outcomes_lock:
+                outcomes.append(outcome)
+
+        with patch.object(
+            dispatch_module,
+            "_revalidate_entry",
+            side_effect=synchronized_revalidate_entry,
+        ):
+            threads = [threading.Thread(target=worker, args=(payload,)) for payload in payloads]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=10)
+
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        successes = [outcome for outcome in outcomes if not isinstance(outcome, BaseException)]
+        errors = [outcome for outcome in outcomes if isinstance(outcome, BaseException)]
+        self.assertEqual(1, len(successes))
+        self.assertEqual(1, len(errors))
+        self.assertIsInstance(errors[0], ValueError)
+        self.assertIn("one-shot", str(errors[0]))
+        closed = authority.close(manifest, (successes[0],))
+        self.assertEqual(1, len(closed.joined))
 
     def test_forged_public_join_requires_authority_verification(self) -> None:
         real = join_completions(self.authority, self.m2, (self.c1, self.c2))
