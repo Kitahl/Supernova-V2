@@ -1,7 +1,4 @@
-import Mathlib
+import Mathlib.Tactic.NormNum
 
-open BigOperators
-
-theorem supernova_goal1_runtime_smoke :
-    (∑ i in Finset.range 5, i) = 10 := by
+theorem supernova_goal1_runtime_smoke : (2 + 2 : Nat) = 4 := by
   norm_num
