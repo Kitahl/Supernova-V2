@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -340,6 +341,44 @@ class BenchmarkRuntimeCheckerTests(unittest.TestCase):
                     benchmark_root_sha256="1" * 64,
                     sample_size=value,
                 )
+
+    def test_inputs_are_revalidated_after_lean_finishes(self) -> None:
+        mutations = ("runtime", "benchmark", "lock")
+        for mutation in mutations:
+            temporary, benchmark, lock_path, runtime, _ = self._fixture()
+            self.addCleanup(temporary.cleanup)
+            base = FakeRunner()
+            mutated = False
+
+            def runner(command, *, timeout_seconds, cwd):
+                nonlocal mutated
+                result = base(command, timeout_seconds=timeout_seconds, cwd=cwd)
+                if command[-1] != "--version" and not mutated:
+                    mutated = True
+                    if mutation == "runtime":
+                        (runtime / "lean-toolchain").write_text(
+                            "leanprover/lean4:v4.33.0\n", encoding="utf-8"
+                        )
+                    elif mutation == "benchmark":
+                        (benchmark / "validation.jsonl").write_bytes(b"changed\n")
+                    else:
+                        lock_path.write_bytes(lock_path.read_bytes() + b" ")
+                return result
+
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                CHECKER.check_benchmark_runtime(
+                    benchmark_root=benchmark,
+                    lock_path=lock_path,
+                    runtime_root=runtime,
+                    sample_size=1,
+                    runner=runner,
+                )
+
+    def test_path_indirection_is_rejected_before_resolution(self) -> None:
+        candidate = Path("indirect-input")
+        with mock.patch.object(Path, "is_symlink", return_value=True):
+            with self.assertRaisesRegex(ValueError, "must not be a symlink"):
+                CHECKER._resolve_input_path(candidate, "candidate")
 
     def test_root_and_lock_indirection_are_rejected(self) -> None:
         temporary, benchmark, lock_path, runtime, _ = self._fixture()
