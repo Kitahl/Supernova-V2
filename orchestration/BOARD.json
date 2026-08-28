@@ -74,7 +74,9 @@
         "src/supernova_goal1/evaluate.py",
         "tests/test_evaluate.py",
         "examples/dry_run_records.json",
-        "goal1/GOAL1.json"
+        "goal1/GOAL1.json",
+        "tests/test_adversarial.py",
+        "tests/test_decisions.py"
       ],
       "objective": "Bind one explicit model-usage basis into ExperimentSpec and every OutcomeRecord so the evaluator rejects missing or mixed bases and scientific evaluation cannot run while the basis is UNFROZEN; keep cost_model_frozen false."
     },
