@@ -214,6 +214,18 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         self.assertEqual("BRIDGE_AUTHENTICATION_FAILED", result["reason"])
         self.assertEqual([], result["contrasts"])
 
+        malformed_values = list(genuine)
+        malformed_values[genuine._fields.index("authority_receipt")] = None
+        malformed = tuple.__new__(EvidenceBridgeBundle, tuple(malformed_values))
+        malformed_result = evaluate_confirmatory(
+            malformed, evidence_authority=authority
+        )
+        self.assertEqual("BLOCKED", malformed_result["decision"])
+        self.assertEqual(
+            "BRIDGE_AUTHENTICATION_FAILED", malformed_result["reason"]
+        )
+        self.assertEqual([], malformed_result["contrasts"])
+
     def test_complete_superiority_passes_with_unequal_realized_costs(self) -> None:
         authority = self.authority()
         bundle = self.bundle(
