@@ -549,6 +549,17 @@ class CompleteCostReport:
             return "input_tokens", "output_tokens"
         return "input_utf8_bytes", "output_utf8_bytes"
 
+    @property
+    def cost_dimension_names(self) -> tuple[str, ...]:
+        input_name, output_name = self.model_usage_dimension_names
+        return (
+            "model_calls",
+            input_name,
+            output_name,
+            "verifier_milliseconds",
+            "orchestration_milliseconds",
+        )
+
     @classmethod
     def from_traces(cls, traces: Iterable[ArmCostTrace]) -> "CompleteCostReport":
         return cls(tuple(traces))
@@ -571,7 +582,7 @@ class CompleteCostReport:
             exceeded = tuple(
                 dimension
                 for dimension, used, allowed in zip(
-                    COST_DIMENSIONS,
+                    self.cost_dimension_names,
                     actual.as_tuple(),
                     allowed_tuple,
                     strict=True,
