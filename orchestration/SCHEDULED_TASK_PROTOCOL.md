@@ -29,8 +29,12 @@ Rules:
 - tasks never store credentials or private task metadata in the repository;
 - retries are idempotent: continue the existing ticket PR rather than creating a
   duplicate;
-- a `DONE` ticket is never reopened in place; the project manager assigns a
-  new ticket ID when that worker has new work.
+- a `DONE` ticket is never reopened in place;
+- `BOARD.json` contains exactly one current ticket per exact scheduled-task role;
+- before reassigning a completed role, the project manager moves the terminal ticket
+  and its exact PR/merge evidence to `ARCHIVE.json`, then assigns a new ticket ID in
+  `BOARD.json` and updates only that role's `TASKS.json.ticket_id`;
+- reassignment never changes, creates, or replaces a `scheduler_task_id`.
 
 MM06 is review-only, MF06 is integration-test-only, and BIL00 is status-only.
 The project manager merges after independent verification.
