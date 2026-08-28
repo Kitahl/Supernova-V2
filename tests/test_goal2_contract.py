@@ -11,44 +11,85 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "goal2" / "GOAL2.json"
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 FIXTURE_KEY = b"goal2-contract-test-key-not-a-production-secret"
+DIMENSIONS = {
+    "model_calls",
+    "input_utf8_bytes",
+    "output_utf8_bytes",
+    "verifier_milliseconds",
+    "orchestration_milliseconds",
+}
 
 
 def canonical_bytes(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def sha256_text(value):
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def sign_payload(payload, key=FIXTURE_KEY):
-    return hmac.new(key, canonical_bytes(payload), hashlib.sha256).hexdigest()
+def digest(label):
+    return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
 def valid_sha256(value):
     return isinstance(value, str) and HEX64.fullmatch(value) is not None
 
 
+def signed(schema, payload, key=FIXTURE_KEY):
+    return {
+        "schema": schema,
+        "key_id": "goal2-test-authority",
+        "payload": payload,
+        "signature": hmac.new(
+            key, canonical_bytes(payload), hashlib.sha256
+        ).hexdigest(),
+    }
+
+
+def verify_signed(record, schema, key):
+    if not isinstance(record, dict) or record.get("schema") != schema:
+        return None
+    if record.get("key_id") != "goal2-test-authority":
+        return None
+    payload = record.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    expected = hmac.new(key, canonical_bytes(payload), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(record.get("signature", ""), expected):
+        return None
+    return payload
+
+
 def frozen_fixture(contract):
     frozen = copy.deepcopy(contract)
     frozen["phase"] = "FROZEN"
     gate = frozen["opening_gate"]
-    gate["authority_key_id"] = "goal1-final-authority-test"
+    gate["authority_key_id"] = "goal2-test-authority"
     gate["authority_key_sha256"] = hashlib.sha256(FIXTURE_KEY).hexdigest()
 
     cost = frozen["complete_r_and_d_cost"]
-    cost["budget_id"] = "g2-test-budget-v1"
-    cost["budget_manifest_sha256"] = sha256_text("budget-manifest")
+    cost["budget_id"] = "g2-budget-v1"
+    cost["budget_manifest_sha256"] = digest("budget-manifest")
+    cost["budget_ceiling_by_dimension"] = {
+        "model_calls": 4,
+        "input_utf8_bytes": 4000,
+        "output_utf8_bytes": 2000,
+        "verifier_milliseconds": 400,
+        "orchestration_milliseconds": 400,
+    }
     cost["expected_event_ids_by_arm"] = {
-        "control": ["control-improve", "control-select"],
-        "treatment": ["treatment-improve", "treatment-select"],
+        "control": ["c-improve", "c-select"],
+        "treatment": ["t-improve", "t-select"],
     }
 
-    frozen["selection_and_sealing"]["selection_rule_sha256"] = sha256_text(
-        "selection-rule"
+    selection = frozen["selection_and_sealing"]
+    selection["selection_rule_sha256"] = digest("selection-rule")
+    selection["candidate_set_manifest_sha256_by_arm"] = {
+        "control": digest("control-candidates"),
+        "treatment": digest("treatment-candidates"),
+    }
+
+    frozen["fresh_evaluation"]["evaluation_manifest_sha256"] = digest(
+        "fresh-evaluation"
     )
-    effect = frozen["effect_target"]
-    effect.update(
+    frozen["effect_target"].update(
         {
             "metric_id": "paired-kernel-verified-success-rate",
             "direction": "higher",
@@ -56,97 +97,419 @@ def frozen_fixture(contract):
             "untouched_margin": 0.05,
             "sampling_unit": "held-out-problem",
             "clustering_rule": "none",
-            "analysis_plan_sha256": sha256_text("analysis-plan"),
+            "analysis_plan_sha256": digest("analysis-plan"),
         }
     )
     return frozen
 
 
-def goal1_payload():
-    return {
+def complete_bundle(contract):
+    run_id = "goal2-run-001"
+    goal1 = {
         "run_id": "goal1-confirmatory-run-001",
         "decision": "PASS",
-        "goal1_final_report_sha256": sha256_text("final-report"),
-        "goal1_protocol_sha256": sha256_text("protocol"),
-        "goal1_cohort_sha256": sha256_text("cohort"),
-        "goal1_evidence_bridge_sha256": sha256_text("bridge"),
-        "goal1_evaluator_sha256": sha256_text("evaluator"),
+        "goal1_final_report_sha256": digest("goal1-report"),
+        "goal1_protocol_sha256": digest("goal1-protocol"),
+        "goal1_cohort_sha256": digest("goal1-cohort"),
+        "goal1_evidence_bridge_sha256": digest("goal1-bridge"),
+        "goal1_evaluator_sha256": digest("goal1-evaluator"),
+    }
+    components = {
+        role: {
+            "component_id": role + "-id",
+            "artifact_sha256": digest(role + "-artifact"),
+            "runtime_or_schema_sha256": digest(role + "-runtime"),
+        }
+        for role in contract["components"]["required_roles"]
+    }
+    parent = components["solver_F"]["artifact_sha256"]
+    control_descendant = digest("control-descendant")
+    treatment_descendant = digest("treatment-descendant")
+
+    freeze = {
+        "contract_id": contract["contract_id"],
+        "budget_id": contract["complete_r_and_d_cost"]["budget_id"],
+        "budget_manifest_sha256": contract["complete_r_and_d_cost"][
+            "budget_manifest_sha256"
+        ],
+        "budget_ceiling_by_dimension": contract["complete_r_and_d_cost"][
+            "budget_ceiling_by_dimension"
+        ],
+        "expected_event_ids_by_arm": contract["complete_r_and_d_cost"][
+            "expected_event_ids_by_arm"
+        ],
+        "selection_rule_sha256": contract["selection_and_sealing"][
+            "selection_rule_sha256"
+        ],
+        "candidate_set_manifest_sha256_by_arm": contract[
+            "selection_and_sealing"
+        ]["candidate_set_manifest_sha256_by_arm"],
+        "evaluation_manifest_sha256": contract["fresh_evaluation"][
+            "evaluation_manifest_sha256"
+        ],
+        "analysis_plan_sha256": contract["effect_target"]["analysis_plan_sha256"],
     }
 
+    lineage = {
+        "control": signed(
+            contract["components"]["arm_lineage_schema"],
+            {
+                "run_id": run_id,
+                "arm": "control",
+                "parent_solver_sha256": parent,
+                "improver_id": components["improver_I0"]["component_id"],
+                "memory_id": components["memory_M0"]["component_id"],
+                "descendant_sha256": control_descendant,
+            },
+        ),
+        "treatment": signed(
+            contract["components"]["arm_lineage_schema"],
+            {
+                "run_id": run_id,
+                "arm": "treatment",
+                "parent_solver_sha256": parent,
+                "starting_improver_id": components["improver_I0"]["component_id"],
+                "starting_memory_id": components["memory_M0"]["component_id"],
+                "improved_improver_id": components["improver_I1"]["component_id"],
+                "improved_memory_id": components["memory_M1"]["component_id"],
+                "descendant_sha256": treatment_descendant,
+            },
+        ),
+    }
 
-def goal1_receipt(payload=None):
-    payload = goal1_payload() if payload is None else payload
+    def cost_ledger(arm):
+        expected = contract["complete_r_and_d_cost"]["expected_event_ids_by_arm"][arm]
+        observed = [
+            {
+                "event_id": event_id,
+                "usage": {
+                    "model_calls": 1,
+                    "input_utf8_bytes": 100,
+                    "output_utf8_bytes": 50,
+                    "verifier_milliseconds": 10,
+                    "orchestration_milliseconds": 10,
+                },
+            }
+            for event_id in expected
+        ]
+        return signed(
+            contract["complete_r_and_d_cost"]["cost_ledger_schema"],
+            {
+                "run_id": run_id,
+                "arm": arm,
+                "budget_id": contract["complete_r_and_d_cost"]["budget_id"],
+                "budget_manifest_sha256": contract["complete_r_and_d_cost"][
+                    "budget_manifest_sha256"
+                ],
+                "expected_event_ids": expected,
+                "observed_events": observed,
+            },
+        )
+
+    selection = {
+        "control": signed(
+            contract["selection_and_sealing"]["selection_ledger_schema"],
+            {
+                "run_id": run_id,
+                "arm": "control",
+                "candidate_set_manifest_sha256": contract[
+                    "selection_and_sealing"
+                ]["candidate_set_manifest_sha256_by_arm"]["control"],
+                "selection_rule_sha256": contract["selection_and_sealing"][
+                    "selection_rule_sha256"
+                ],
+                "selected_descendant_sha256": control_descendant,
+                "seal_sequence": 10,
+            },
+        ),
+        "treatment": signed(
+            contract["selection_and_sealing"]["selection_ledger_schema"],
+            {
+                "run_id": run_id,
+                "arm": "treatment",
+                "candidate_set_manifest_sha256": contract[
+                    "selection_and_sealing"
+                ]["candidate_set_manifest_sha256_by_arm"]["treatment"],
+                "selection_rule_sha256": contract["selection_and_sealing"][
+                    "selection_rule_sha256"
+                ],
+                "selected_descendant_sha256": treatment_descendant,
+                "seal_sequence": 11,
+            },
+        ),
+    }
+
+    evaluation = signed(
+        contract["fresh_evaluation"]["evaluation_receipt_schema"],
+        {
+            "run_id": run_id,
+            "evaluation_manifest_sha256": contract["fresh_evaluation"][
+                "evaluation_manifest_sha256"
+            ],
+            "release_sequence": 12,
+            "evaluation_item_ids": ["heldout-1", "heldout-2"],
+            "r_and_d_item_ids": ["diag-1", "select-1"],
+            "evaluation_authority_id": "independent-evaluator",
+            "same_protocol_for_all_arms": True,
+            "untouched_solver_outcome_present": True,
+        },
+    )
+
     return {
-        "schema": "supernova.goal1.final-pass-receipt.v1",
-        "key_id": "goal1-final-authority-test",
-        "payload": payload,
-        "signature": sign_payload(payload),
+        "run_id": run_id,
+        "goal1_receipt": signed(
+            contract["opening_gate"]["goal1_receipt_schema"], goal1
+        ),
+        "frozen_artifact_receipt": signed(
+            contract["opening_gate"]["frozen_artifact_receipt_schema"], freeze
+        ),
+        "components": components,
+        "lineage": lineage,
+        "cost_ledgers": {
+            "control": cost_ledger("control"),
+            "treatment": cost_ledger("treatment"),
+        },
+        "selection_ledgers": selection,
+        "evaluation_release": evaluation,
     }
 
 
-def execution_gate(contract, receipt, authority_key):
-    """Minimal executable opening check for the contract-only artifact."""
-    if contract.get("phase") != contract["opening_gate"]["required_contract_phase"]:
+def execution_gate(contract, bundle, authority_key):
+    gate = contract.get("opening_gate", {})
+    if contract.get("phase") != gate.get("required_contract_phase"):
+        return "BLOCKED"
+    if hashlib.sha256(authority_key).hexdigest() != gate.get(
+        "authority_key_sha256"
+    ):
         return "BLOCKED"
 
-    gate = contract["opening_gate"]
-    if receipt.get("schema") != gate["goal1_receipt_schema"]:
+    goal1 = verify_signed(
+        bundle.get("goal1_receipt"), gate.get("goal1_receipt_schema"), authority_key
+    )
+    if goal1 is None or goal1.get("decision") != gate.get("required_goal1_decision"):
         return "BLOCKED"
-    if receipt.get("key_id") != gate["authority_key_id"]:
+    required = gate.get("required_goal1_payload_fields", [])
+    if any(field not in goal1 for field in required):
         return "BLOCKED"
-    if hashlib.sha256(authority_key).hexdigest() != gate["authority_key_sha256"]:
+    if not isinstance(goal1.get("run_id"), str) or not goal1["run_id"]:
         return "BLOCKED"
-
-    payload = receipt.get("payload")
-    if not isinstance(payload, dict):
-        return "BLOCKED"
-    required = gate["required_goal1_payload_fields"]
-    if any(field not in payload for field in required):
-        return "BLOCKED"
-    if payload.get("decision") != gate["required_goal1_decision"]:
-        return "BLOCKED"
-    if not isinstance(payload.get("run_id"), str) or not payload["run_id"]:
-        return "BLOCKED"
-    for field in required:
-        if field.endswith("_sha256") and not valid_sha256(payload.get(field)):
-            return "BLOCKED"
-
-    supplied = receipt.get("signature", "")
-    if not hmac.compare_digest(supplied, sign_payload(payload, authority_key)):
+    if any(
+        not valid_sha256(goal1.get(field))
+        for field in required
+        if field.endswith("_sha256")
+    ):
         return "BLOCKED"
 
+    freeze = verify_signed(
+        bundle.get("frozen_artifact_receipt"),
+        gate.get("frozen_artifact_receipt_schema"),
+        authority_key,
+    )
+    if freeze is None:
+        return "BLOCKED"
     cost = contract["complete_r_and_d_cost"]
-    if (
-        cost.get("budget_id") == "MUST_BE_FROZEN_BEFORE_OPEN"
-        or not valid_sha256(cost.get("budget_manifest_sha256"))
-        or not isinstance(cost.get("expected_event_ids_by_arm"), dict)
-        or set(cost["expected_event_ids_by_arm"]) != {"control", "treatment"}
+    selection_contract = contract["selection_and_sealing"]
+    fresh_contract = contract["fresh_evaluation"]
+    effect = contract["effect_target"]
+    expected_freeze = {
+        "contract_id": contract["contract_id"],
+        "budget_id": cost["budget_id"],
+        "budget_manifest_sha256": cost["budget_manifest_sha256"],
+        "budget_ceiling_by_dimension": cost["budget_ceiling_by_dimension"],
+        "expected_event_ids_by_arm": cost["expected_event_ids_by_arm"],
+        "selection_rule_sha256": selection_contract["selection_rule_sha256"],
+        "candidate_set_manifest_sha256_by_arm": selection_contract[
+            "candidate_set_manifest_sha256_by_arm"
+        ],
+        "evaluation_manifest_sha256": fresh_contract["evaluation_manifest_sha256"],
+        "analysis_plan_sha256": effect["analysis_plan_sha256"],
+    }
+    if freeze != expected_freeze:
+        return "BLOCKED"
+    if not all(
+        valid_sha256(value)
+        for value in (
+            cost.get("budget_manifest_sha256"),
+            selection_contract.get("selection_rule_sha256"),
+            fresh_contract.get("evaluation_manifest_sha256"),
+            effect.get("analysis_plan_sha256"),
+        )
     ):
         return "BLOCKED"
-    for events in cost["expected_event_ids_by_arm"].values():
-        if not isinstance(events, list) or not events or len(events) != len(set(events)):
+
+    expected_by_arm = cost.get("expected_event_ids_by_arm")
+    ceilings = cost.get("budget_ceiling_by_dimension")
+    if not isinstance(expected_by_arm, dict) or set(expected_by_arm) != {
+        "control",
+        "treatment",
+    }:
+        return "BLOCKED"
+    all_ids = expected_by_arm["control"] + expected_by_arm["treatment"]
+    if not all_ids or len(all_ids) != len(set(all_ids)):
+        return "BLOCKED"
+    if not isinstance(ceilings, dict) or set(ceilings) != DIMENSIONS:
+        return "BLOCKED"
+    if any(not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in ceilings.values()):
+        return "BLOCKED"
+
+    components = bundle.get("components")
+    required_roles = contract["components"]["required_roles"]
+    if not isinstance(components, dict) or set(components) != set(required_roles):
+        return "BLOCKED"
+    identities = []
+    artifacts = []
+    for role in required_roles:
+        component = components[role]
+        if set(component) != set(contract["components"]["required_identity_fields"]):
+            return "BLOCKED"
+        identities.append(component["component_id"])
+        artifacts.append(component["artifact_sha256"])
+        if not valid_sha256(component["artifact_sha256"]):
+            return "BLOCKED"
+        if not valid_sha256(component["runtime_or_schema_sha256"]):
+            return "BLOCKED"
+    if len(identities) != len(set(identities)) or len(artifacts) != len(set(artifacts)):
+        return "BLOCKED"
+
+    run_id = bundle.get("run_id")
+    lineage_payloads = {}
+    for arm in ("control", "treatment"):
+        payload = verify_signed(
+            bundle.get("lineage", {}).get(arm),
+            contract["components"]["arm_lineage_schema"],
+            authority_key,
+        )
+        if payload is None or payload.get("run_id") != run_id or payload.get("arm") != arm:
+            return "BLOCKED"
+        if payload.get("parent_solver_sha256") != components["solver_F"]["artifact_sha256"]:
+            return "BLOCKED"
+        lineage_payloads[arm] = payload
+    if (
+        lineage_payloads["control"].get("improver_id")
+        != components["improver_I0"]["component_id"]
+        or lineage_payloads["control"].get("memory_id")
+        != components["memory_M0"]["component_id"]
+        or lineage_payloads["treatment"].get("starting_improver_id")
+        != components["improver_I0"]["component_id"]
+        or lineage_payloads["treatment"].get("starting_memory_id")
+        != components["memory_M0"]["component_id"]
+        or lineage_payloads["treatment"].get("improved_improver_id")
+        != components["improver_I1"]["component_id"]
+        or lineage_payloads["treatment"].get("improved_memory_id")
+        != components["memory_M1"]["component_id"]
+    ):
+        return "BLOCKED"
+    descendants = [
+        lineage_payloads["control"].get("descendant_sha256"),
+        lineage_payloads["treatment"].get("descendant_sha256"),
+    ]
+    if not all(valid_sha256(value) for value in descendants):
+        return "BLOCKED"
+    if len(set(descendants + [components["solver_F"]["artifact_sha256"]])) != 3:
+        return "BLOCKED"
+
+    for arm in ("control", "treatment"):
+        ledger = verify_signed(
+            bundle.get("cost_ledgers", {}).get(arm),
+            cost["cost_ledger_schema"],
+            authority_key,
+        )
+        if ledger is None or ledger.get("run_id") != run_id or ledger.get("arm") != arm:
+            return "BLOCKED"
+        if (
+            ledger.get("budget_id") != cost["budget_id"]
+            or ledger.get("budget_manifest_sha256") != cost["budget_manifest_sha256"]
+            or ledger.get("expected_event_ids") != expected_by_arm[arm]
+        ):
+            return "BLOCKED"
+        observed = ledger.get("observed_events")
+        if not isinstance(observed, list):
+            return "BLOCKED"
+        observed_ids = [event.get("event_id") for event in observed]
+        if sorted(observed_ids) != sorted(expected_by_arm[arm]):
+            return "BLOCKED"
+        totals = {dimension: 0 for dimension in DIMENSIONS}
+        for event in observed:
+            usage = event.get("usage")
+            if not isinstance(usage, dict) or set(usage) != DIMENSIONS:
+                return "BLOCKED"
+            if any(
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+                for value in usage.values()
+            ):
+                return "BLOCKED"
+            for dimension in DIMENSIONS:
+                totals[dimension] += usage[dimension]
+        if any(totals[d] > ceilings[d] for d in DIMENSIONS):
             return "BLOCKED"
 
-    if not valid_sha256(
-        contract["selection_and_sealing"].get("selection_rule_sha256")
+    seals = {}
+    for arm in ("control", "treatment"):
+        ledger = verify_signed(
+            bundle.get("selection_ledgers", {}).get(arm),
+            selection_contract["selection_ledger_schema"],
+            authority_key,
+        )
+        if ledger is None or ledger.get("run_id") != run_id or ledger.get("arm") != arm:
+            return "BLOCKED"
+        if (
+            ledger.get("candidate_set_manifest_sha256")
+            != selection_contract["candidate_set_manifest_sha256_by_arm"][arm]
+            or ledger.get("selection_rule_sha256")
+            != selection_contract["selection_rule_sha256"]
+            or ledger.get("selected_descendant_sha256")
+            != lineage_payloads[arm]["descendant_sha256"]
+        ):
+            return "BLOCKED"
+        seal = ledger.get("seal_sequence")
+        if not isinstance(seal, int) or isinstance(seal, bool) or seal < 0:
+            return "BLOCKED"
+        seals[arm] = seal
+
+    release = verify_signed(
+        bundle.get("evaluation_release"),
+        fresh_contract["evaluation_receipt_schema"],
+        authority_key,
+    )
+    if release is None or release.get("run_id") != run_id:
+        return "BLOCKED"
+    if release.get("evaluation_manifest_sha256") != fresh_contract[
+        "evaluation_manifest_sha256"
+    ]:
+        return "BLOCKED"
+    sequence = release.get("release_sequence")
+    if not isinstance(sequence, int) or isinstance(sequence, bool):
+        return "BLOCKED"
+    if sequence <= max(seals.values()):
+        return "BLOCKED"
+    evaluation_items = release.get("evaluation_item_ids")
+    rd_items = release.get("r_and_d_item_ids")
+    if not isinstance(evaluation_items, list) or not evaluation_items:
+        return "BLOCKED"
+    if not isinstance(rd_items, list) or set(evaluation_items) & set(rd_items):
+        return "BLOCKED"
+    if (
+        release.get("evaluation_authority_id") in identities
+        or release.get("same_protocol_for_all_arms") is not True
+        or release.get("untouched_solver_outcome_present") is not True
     ):
         return "BLOCKED"
 
-    effect = contract["effect_target"]
     if effect.get("direction") not in {"higher", "lower"}:
         return "BLOCKED"
-    if not isinstance(effect.get("control_margin"), (int, float)):
+    if any(
+        not isinstance(effect.get(field), (int, float))
+        or isinstance(effect.get(field), bool)
+        or effect[field] < 0
+        for field in ("control_margin", "untouched_margin")
+    ):
         return "BLOCKED"
-    if not isinstance(effect.get("untouched_margin"), (int, float)):
-        return "BLOCKED"
-    if effect["control_margin"] < 0 or effect["untouched_margin"] < 0:
-        return "BLOCKED"
-    for field in ("metric_id", "sampling_unit", "clustering_rule"):
-        if not isinstance(effect.get(field), str) or not effect[field]:
-            return "BLOCKED"
-        if "MUST_BE_" in effect[field]:
-            return "BLOCKED"
-    if not valid_sha256(effect.get("analysis_plan_sha256")):
+    if any(
+        not isinstance(effect.get(field), str)
+        or not effect[field]
+        or "MUST_BE_" in effect[field]
+        for field in ("metric_id", "sampling_unit", "clustering_rule")
+    ):
         return "BLOCKED"
 
     return gate["open_state"]
@@ -156,40 +519,96 @@ class Goal2ContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        cls.frozen = frozen_fixture(cls.contract)
+
+    def assert_blocked(self, contract=None, bundle=None):
+        contract = self.frozen if contract is None else contract
+        bundle = complete_bundle(contract) if bundle is None else bundle
+        self.assertEqual(execution_gate(contract, bundle, FIXTURE_KEY), "BLOCKED")
 
     def test_checked_in_contract_is_definition_only_and_blocked(self):
         self.assertEqual(self.contract["phase"], "CONTRACT_ONLY")
+        self.assert_blocked(
+            contract=self.contract, bundle=complete_bundle(self.frozen)
+        )
+
+    def test_complete_authenticated_fixture_opens(self):
         self.assertEqual(
-            execution_gate(self.contract, goal1_receipt(), FIXTURE_KEY), "BLOCKED"
+            execution_gate(
+                self.frozen, complete_bundle(self.frozen), FIXTURE_KEY
+            ),
+            "OPEN",
         )
-        self.assertFalse(
-            self.contract["decision_rules"]["BLOCKED"]["scientific_credit"]
+
+    def test_forged_goal1_or_freeze_receipt_is_blocked(self):
+        bundle = complete_bundle(self.frozen)
+        bundle["goal1_receipt"]["signature"] = "0" * 64
+        self.assert_blocked(bundle=bundle)
+        bundle = complete_bundle(self.frozen)
+        bundle["frozen_artifact_receipt"]["payload"][
+            "selection_rule_sha256"
+        ] = digest("substituted-rule")
+        self.assert_blocked(bundle=bundle)
+
+    def test_aliased_components_or_lineage_is_blocked(self):
+        bundle = complete_bundle(self.frozen)
+        bundle["components"]["memory_M1"]["component_id"] = bundle["components"][
+            "memory_M0"
+        ]["component_id"]
+        self.assert_blocked(bundle=bundle)
+        bundle = complete_bundle(self.frozen)
+        bundle["lineage"]["treatment"]["payload"]["starting_memory_id"] = "other"
+        bundle["lineage"]["treatment"] = signed(
+            self.frozen["components"]["arm_lineage_schema"],
+            bundle["lineage"]["treatment"]["payload"],
         )
+        self.assert_blocked(bundle=bundle)
 
-    def test_valid_synthetic_frozen_fixture_can_open(self):
-        frozen = frozen_fixture(self.contract)
-        self.assertEqual(execution_gate(frozen, goal1_receipt(), FIXTURE_KEY), "OPEN")
+    def test_cross_arm_or_incomplete_cost_events_are_blocked(self):
+        contract = copy.deepcopy(self.frozen)
+        contract["complete_r_and_d_cost"]["expected_event_ids_by_arm"][
+            "treatment"
+        ] = list(
+            contract["complete_r_and_d_cost"]["expected_event_ids_by_arm"]["control"]
+        )
+        bundle = complete_bundle(contract)
+        self.assert_blocked(contract=contract, bundle=bundle)
 
-    def test_plain_pass_claim_or_forged_receipt_cannot_open(self):
-        frozen = frozen_fixture(self.contract)
-        self.assertEqual(execution_gate(frozen, {"decision": "PASS"}, FIXTURE_KEY), "BLOCKED")
-        forged = goal1_receipt()
-        forged["signature"] = "0" * 64
-        self.assertEqual(execution_gate(frozen, forged, FIXTURE_KEY), "BLOCKED")
+        bundle = complete_bundle(self.frozen)
+        payload = bundle["cost_ledgers"]["control"]["payload"]
+        payload["observed_events"].pop()
+        bundle["cost_ledgers"]["control"] = signed(
+            self.frozen["complete_r_and_d_cost"]["cost_ledger_schema"], payload
+        )
+        self.assert_blocked(bundle=bundle)
 
-    def test_missing_or_substituted_goal1_evidence_cannot_open(self):
-        frozen = frozen_fixture(self.contract)
-        missing_payload = goal1_payload()
-        del missing_payload["goal1_cohort_sha256"]
-        missing = goal1_receipt(missing_payload)
-        self.assertEqual(execution_gate(frozen, missing, FIXTURE_KEY), "BLOCKED")
+    def test_early_evaluation_release_or_leakage_is_blocked(self):
+        bundle = complete_bundle(self.frozen)
+        payload = bundle["evaluation_release"]["payload"]
+        payload["release_sequence"] = 11
+        bundle["evaluation_release"] = signed(
+            self.frozen["fresh_evaluation"]["evaluation_receipt_schema"], payload
+        )
+        self.assert_blocked(bundle=bundle)
 
-        substituted = goal1_receipt()
-        substituted["payload"]["run_id"] = "another-run"
-        self.assertEqual(execution_gate(frozen, substituted, FIXTURE_KEY), "BLOCKED")
+        bundle = complete_bundle(self.frozen)
+        payload = bundle["evaluation_release"]["payload"]
+        payload["r_and_d_item_ids"].append("heldout-1")
+        bundle["evaluation_release"] = signed(
+            self.frozen["fresh_evaluation"]["evaluation_receipt_schema"], payload
+        )
+        self.assert_blocked(bundle=bundle)
 
-    def test_effect_target_is_frozen_not_caller_supplied(self):
-        frozen = frozen_fixture(self.contract)
+    def test_selected_descendant_substitution_is_blocked(self):
+        bundle = complete_bundle(self.frozen)
+        payload = bundle["selection_ledgers"]["treatment"]["payload"]
+        payload["selected_descendant_sha256"] = digest("substitute")
+        bundle["selection_ledgers"]["treatment"] = signed(
+            self.frozen["selection_and_sealing"]["selection_ledger_schema"], payload
+        )
+        self.assert_blocked(bundle=bundle)
+
+    def test_caller_cannot_supply_or_remove_effect_target(self):
         for field in (
             "metric_id",
             "direction",
@@ -199,53 +618,19 @@ class Goal2ContractTests(unittest.TestCase):
             "clustering_rule",
             "analysis_plan_sha256",
         ):
-            broken = copy.deepcopy(frozen)
-            broken["effect_target"][field] = "MUST_BE_FROZEN_BEFORE_OPEN"
-            self.assertEqual(
-                execution_gate(broken, goal1_receipt(), FIXTURE_KEY),
-                "BLOCKED",
-                field,
+            contract = copy.deepcopy(self.frozen)
+            contract["effect_target"][field] = "MUST_BE_FROZEN_BEFORE_OPEN"
+            self.assert_blocked(
+                contract=contract, bundle=complete_bundle(contract)
             )
-
-    def test_complete_cost_basis_and_exact_event_ledgers_are_required(self):
-        cost = self.contract["complete_r_and_d_cost"]
-        self.assertEqual(cost["model_usage_basis"], "visible_utf8_bytes")
-        self.assertEqual(
-            cost["required_dimensions"],
-            [
-                "model_calls",
-                "input_utf8_bytes",
-                "output_utf8_bytes",
-                "verifier_milliseconds",
-                "orchestration_milliseconds",
-            ],
-        )
-        frozen = frozen_fixture(self.contract)
-        broken = copy.deepcopy(frozen)
-        broken["complete_r_and_d_cost"]["expected_event_ids_by_arm"]["control"] = []
-        self.assertEqual(execution_gate(broken, goal1_receipt(), FIXTURE_KEY), "BLOCKED")
-
-    def test_component_and_lineage_separation_is_mandatory(self):
-        components = self.contract["components"]
-        self.assertTrue(components["component_ids_must_be_distinct"])
-        self.assertTrue(components["component_artifact_sha256_values_must_be_distinct"])
-        self.assertTrue(components["pristine_solver_parent_must_match_both_arms"])
-        self.assertTrue(components["control_must_use_exact_I0_and_M0"])
-        self.assertTrue(components["treatment_I1_and_M1_ids_and_artifacts_must_be_new_and_distinct"])
-        self.assertEqual(components["arm_lineage_authentication"], "HMAC-SHA256")
-
-    def test_selection_must_seal_before_fresh_release(self):
-        selection = self.contract["selection_and_sealing"]
-        fresh = self.contract["fresh_evaluation"]
-        self.assertTrue(selection["post_release_candidate_rule_ledger_or_descendant_substitution_forbidden"])
-        self.assertTrue(fresh["evaluation_release_sequence_must_exceed_both_selection_ledger_seal_sequences"])
-        self.assertTrue(fresh["evaluation_items_must_be_disjoint_from_all_r_and_d_and_meta_improvement_data"])
-        self.assertTrue(fresh["untouched_solver_outcome_required"])
 
     def test_terminal_states_are_exhaustive_and_credit_safe(self):
         rules = self.contract["decision_rules"]
         self.assertEqual(set(rules), {"BLOCKED", "INCOMPLETE", "PASS", "FAIL"})
-        self.assertEqual(self.contract["decision_priority"], ["BLOCKED", "INCOMPLETE", "PASS", "FAIL"])
+        self.assertEqual(
+            self.contract["decision_priority"],
+            ["BLOCKED", "INCOMPLETE", "PASS", "FAIL"],
+        )
         self.assertFalse(rules["BLOCKED"]["scientific_credit"])
         self.assertFalse(rules["INCOMPLETE"]["scientific_credit"])
         self.assertTrue(rules["PASS"]["scientific_credit"])
