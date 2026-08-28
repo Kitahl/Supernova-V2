@@ -97,9 +97,15 @@ def frozen_fixture(contract):
         "verifier_milliseconds": 400,
         "orchestration_milliseconds": 400,
     }
-    cost["expected_event_ids_by_arm"] = {
-        "control": ["c-improve", "c-select"],
-        "treatment": ["t-improve", "t-select"],
+    cost["expected_event_records_by_arm"] = {
+        "control": [
+            {"event_id": "c-improve", "event_kind": "scheduled_chat"},
+            {"event_id": "c-select", "event_kind": "deterministic_selection"},
+        ],
+        "treatment": [
+            {"event_id": "t-improve", "event_kind": "scheduled_chat"},
+            {"event_id": "t-select", "event_kind": "deterministic_selection"},
+        ],
     }
 
     selection = frozen["selection_and_sealing"]
@@ -155,8 +161,8 @@ def complete_bundle(contract):
         "budget_ceiling_by_dimension": contract["complete_r_and_d_cost"][
             "budget_ceiling_by_dimension"
         ],
-        "expected_event_ids_by_arm": contract["complete_r_and_d_cost"][
-            "expected_event_ids_by_arm"
+        "expected_event_records_by_arm": contract["complete_r_and_d_cost"][
+            "expected_event_records_by_arm"
         ],
         "selection_rule_sha256": contract["selection_and_sealing"][
             "selection_rule_sha256"
@@ -207,20 +213,51 @@ def complete_bundle(contract):
     }
 
     def cost_ledger(arm):
-        expected = contract["complete_r_and_d_cost"]["expected_event_ids_by_arm"][arm]
-        observed = [
-            {
-                "event_id": event_id,
-                "usage": {
-                    "model_calls": 1,
-                    "input_utf8_bytes": 100,
-                    "output_utf8_bytes": 50,
-                    "verifier_milliseconds": 10,
-                    "orchestration_milliseconds": 10,
-                },
-            }
-            for event_id in expected
-        ]
+        expected = contract["complete_r_and_d_cost"]["expected_event_records_by_arm"][arm]
+        observed = []
+        for expected_event in expected:
+            if expected_event["event_kind"] == "scheduled_chat":
+                observed.append(
+                    {
+                        "event_id": expected_event["event_id"],
+                        "event_kind": "scheduled_chat",
+                        "request_artifact_sha256": digest(
+                            expected_event["event_id"] + "-request"
+                        ),
+                        "terminal_response_artifact_sha256": digest(
+                            expected_event["event_id"] + "-response"
+                        ),
+                        "request_utf8_bytes": 100,
+                        "terminal_response_utf8_bytes": 50,
+                        "usage": {
+                            "model_calls": 1,
+                            "input_utf8_bytes": 100,
+                            "output_utf8_bytes": 50,
+                            "verifier_milliseconds": 10,
+                            "orchestration_milliseconds": 10,
+                        },
+                    }
+                )
+            else:
+                observed.append(
+                    {
+                        "event_id": expected_event["event_id"],
+                        "event_kind": "deterministic_selection",
+                        "command_artifact_sha256": digest(
+                            expected_event["event_id"] + "-command"
+                        ),
+                        "result_artifact_sha256": digest(
+                            expected_event["event_id"] + "-result"
+                        ),
+                        "usage": {
+                            "model_calls": 0,
+                            "input_utf8_bytes": 0,
+                            "output_utf8_bytes": 0,
+                            "verifier_milliseconds": 0,
+                            "orchestration_milliseconds": 10,
+                        },
+                    }
+                )
         return signed(
             contract["complete_r_and_d_cost"]["cost_ledger_schema"],
             {
@@ -230,7 +267,7 @@ def complete_bundle(contract):
                 "budget_manifest_sha256": contract["complete_r_and_d_cost"][
                     "budget_manifest_sha256"
                 ],
-                "expected_event_ids": expected,
+                "expected_event_records": expected,
                 "observed_events": observed,
             },
         )
@@ -346,7 +383,7 @@ def pre_dispatch_admission(contract, bundle, authority_key):
         "budget_id": cost["budget_id"],
         "budget_manifest_sha256": cost["budget_manifest_sha256"],
         "budget_ceiling_by_dimension": cost["budget_ceiling_by_dimension"],
-        "expected_event_ids_by_arm": cost["expected_event_ids_by_arm"],
+        "expected_event_records_by_arm": cost["expected_event_records_by_arm"],
         "selection_rule_sha256": selection["selection_rule_sha256"],
         "candidate_set_manifest_sha256_by_arm": selection[
             "candidate_set_manifest_sha256_by_arm"
@@ -421,7 +458,7 @@ def evidence_admission(contract, bundle, authority_key, evaluator_key):
         "budget_id": cost["budget_id"],
         "budget_manifest_sha256": cost["budget_manifest_sha256"],
         "budget_ceiling_by_dimension": cost["budget_ceiling_by_dimension"],
-        "expected_event_ids_by_arm": cost["expected_event_ids_by_arm"],
+        "expected_event_records_by_arm": cost["expected_event_records_by_arm"],
         "selection_rule_sha256": selection_contract["selection_rule_sha256"],
         "candidate_set_manifest_sha256_by_arm": selection_contract[
             "candidate_set_manifest_sha256_by_arm"
@@ -445,15 +482,25 @@ def evidence_admission(contract, bundle, authority_key, evaluator_key):
     ):
         return "BLOCKED"
 
-    expected_by_arm = cost.get("expected_event_ids_by_arm")
+    expected_by_arm = cost.get("expected_event_records_by_arm")
     ceilings = cost.get("budget_ceiling_by_dimension")
     if not isinstance(expected_by_arm, dict) or set(expected_by_arm) != {
         "control",
         "treatment",
     }:
         return "BLOCKED"
-    all_ids = expected_by_arm["control"] + expected_by_arm["treatment"]
-    if not all_ids or len(all_ids) != len(set(all_ids)):
+    expected_records = expected_by_arm["control"] + expected_by_arm["treatment"]
+    if not expected_records:
+        return "BLOCKED"
+    if any(
+        not isinstance(record, dict)
+        or set(record) != {"event_id", "event_kind"}
+        or record["event_kind"] not in {"scheduled_chat", "deterministic_selection"}
+        for record in expected_records
+    ):
+        return "BLOCKED"
+    all_ids = [record["event_id"] for record in expected_records]
+    if len(all_ids) != len(set(all_ids)):
         return "BLOCKED"
     if not isinstance(ceilings, dict) or set(ceilings) != DIMENSIONS:
         return "BLOCKED"
@@ -539,17 +586,25 @@ def evidence_admission(contract, bundle, authority_key, evaluator_key):
         if (
             ledger.get("budget_id") != cost["budget_id"]
             or ledger.get("budget_manifest_sha256") != cost["budget_manifest_sha256"]
-            or ledger.get("expected_event_ids") != expected_by_arm[arm]
+            or ledger.get("expected_event_records") != expected_by_arm[arm]
         ):
             return "BLOCKED"
         observed = ledger.get("observed_events")
         if not isinstance(observed, list):
             return "BLOCKED"
+        expected_map = {
+            record["event_id"]: record["event_kind"]
+            for record in expected_by_arm[arm]
+        }
         observed_ids = [event.get("event_id") for event in observed]
-        if sorted(observed_ids) != sorted(expected_by_arm[arm]):
+        if sorted(observed_ids) != sorted(expected_map):
             return "BLOCKED"
         totals = {dimension: 0 for dimension in DIMENSIONS}
         for event in observed:
+            event_id = event.get("event_id")
+            event_kind = event.get("event_kind")
+            if event_kind != expected_map.get(event_id):
+                return "BLOCKED"
             usage = event.get("usage")
             if not isinstance(usage, dict) or set(usage) != DIMENSIONS:
                 return "BLOCKED"
@@ -558,6 +613,31 @@ def evidence_admission(contract, bundle, authority_key, evaluator_key):
                 for value in usage.values()
             ):
                 return "BLOCKED"
+            if event_kind == "scheduled_chat":
+                if usage["model_calls"] != 1:
+                    return "BLOCKED"
+                if usage["input_utf8_bytes"] <= 0 or usage["output_utf8_bytes"] <= 0:
+                    return "BLOCKED"
+                if (
+                    event.get("request_utf8_bytes") != usage["input_utf8_bytes"]
+                    or event.get("terminal_response_utf8_bytes")
+                    != usage["output_utf8_bytes"]
+                    or not valid_sha256(event.get("request_artifact_sha256"))
+                    or not valid_sha256(
+                        event.get("terminal_response_artifact_sha256")
+                    )
+                ):
+                    return "BLOCKED"
+            elif event_kind == "deterministic_selection":
+                if (
+                    usage["model_calls"] != 0
+                    or usage["input_utf8_bytes"] != 0
+                    or usage["output_utf8_bytes"] != 0
+                    or usage["orchestration_milliseconds"] <= 0
+                    or not valid_sha256(event.get("command_artifact_sha256"))
+                    or not valid_sha256(event.get("result_artifact_sha256"))
+                ):
+                    return "BLOCKED"
             for dimension in DIMENSIONS:
                 totals[dimension] += usage[dimension]
         if any(totals[d] > ceilings[d] for d in DIMENSIONS):
@@ -693,10 +773,10 @@ class Goal2ContractTests(unittest.TestCase):
 
     def test_cross_arm_or_incomplete_cost_events_are_blocked(self):
         contract = copy.deepcopy(self.frozen)
-        contract["complete_r_and_d_cost"]["expected_event_ids_by_arm"][
+        contract["complete_r_and_d_cost"]["expected_event_records_by_arm"][
             "treatment"
         ] = list(
-            contract["complete_r_and_d_cost"]["expected_event_ids_by_arm"]["control"]
+            contract["complete_r_and_d_cost"]["expected_event_records_by_arm"]["control"]
         )
         bundle = complete_bundle(contract)
         self.assert_blocked(contract=contract, bundle=bundle)
@@ -707,6 +787,20 @@ class Goal2ContractTests(unittest.TestCase):
         bundle["cost_ledgers"]["control"] = signed(
             self.frozen["complete_r_and_d_cost"]["cost_ledger_schema"], payload
         )
+        self.assert_blocked(bundle=bundle)
+
+    def test_zero_cost_scheduled_chat_is_blocked(self):
+        bundle = complete_bundle(self.frozen)
+        for arm in ("control", "treatment"):
+            payload = bundle["cost_ledgers"][arm]["payload"]
+            for event in payload["observed_events"]:
+                if event["event_kind"] == "scheduled_chat":
+                    event["usage"] = {dimension: 0 for dimension in DIMENSIONS}
+                    event["request_utf8_bytes"] = 0
+                    event["terminal_response_utf8_bytes"] = 0
+            bundle["cost_ledgers"][arm] = signed(
+                self.frozen["complete_r_and_d_cost"]["cost_ledger_schema"], payload
+            )
         self.assert_blocked(bundle=bundle)
 
     def test_early_evaluation_release_or_leakage_is_blocked(self):
