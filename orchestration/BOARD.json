@@ -7,12 +7,16 @@
     {
       "id": "G1-116",
       "owner": "MF01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/artifacts.py",
         "tests/test_artifacts.py"
       ],
-      "objective": "Implement exact content-addressed UTF-8 artifact envelopes for visible scheduled-chat requests and terminal responses, binding byte length, SHA-256, media type, run, problem, arm, and attempt without claiming provider-token or hidden-compute telemetry."
+      "objective": "Implement exact content-addressed UTF-8 artifact envelopes for visible scheduled-chat requests and terminal responses, binding byte length, SHA-256, media type, run, problem, arm, and attempt without claiming provider-token or hidden-compute telemetry.",
+      "completion": {
+        "pull_request": 28,
+        "merge_commit": "6b4e37e1f1e9aaac2732537d2256891b724d10c7"
+      }
     },
     {
       "id": "G1-117",
@@ -68,7 +72,7 @@
     {
       "id": "G1-119",
       "owner": "MM02",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/contracts.py",
         "src/supernova_goal1/evaluate.py",
@@ -78,7 +82,11 @@
         "tests/test_adversarial.py",
         "tests/test_decisions.py"
       ],
-      "objective": "Bind one explicit model-usage basis into ExperimentSpec and every OutcomeRecord so the evaluator rejects missing or mixed bases and scientific evaluation cannot run while the basis is UNFROZEN; keep cost_model_frozen false."
+      "objective": "Bind one explicit model-usage basis into ExperimentSpec and every OutcomeRecord so the evaluator rejects missing or mixed bases and scientific evaluation cannot run while the basis is UNFROZEN; keep cost_model_frozen false.",
+      "completion": {
+        "pull_request": 30,
+        "merge_commit": "f58246539f8f4a6d9b6d757afec63f3bdbc78797"
+      }
     },
     {
       "id": "G1-108",
@@ -122,12 +130,16 @@
     {
       "id": "G1-012",
       "owner": "EXT01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "docs/THREAT_MODEL.md",
         "docs/PRIOR_ART.md"
       ],
-      "objective": "Resolve the open construct-validity review on PR #8: phase-rank gates, define the first estimand as the verified-gated package effect unless reject/retry is matched, specify scheduled-chat cost proxies and sensitivity analysis, and keep evidence bindings composable."
+      "objective": "Resolve the open construct-validity review on PR #8: phase-rank gates, define the first estimand as the verified-gated package effect unless reject/retry is matched, specify scheduled-chat cost proxies and sensitivity analysis, and keep evidence bindings composable.",
+      "completion": {
+        "pull_request": 8,
+        "merge_commit": "f272b5e5f03ac9e9f375800f1fb815ddfd7dee08"
+      }
     },
     {
       "id": "G1-113",
