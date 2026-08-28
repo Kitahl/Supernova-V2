@@ -16,8 +16,8 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactKind,
 )
 from supernova_goal1.contracts import Arm
-from supernova_goal1.dispatch import CompletionRecord, CompletionSigner, DispatchAuthority
-from supernova_goal1.execution.common import AttemptStatus, FrozenProblemRequest
+from supernova_goal1.dispatch import (\n    CompletionPayload,\n    CompletionRecord,\n    CompletionSigner,\n    DispatchAuthority,\n)
+from supernova_goal1.execution.common import (\n    AttemptResult,\n    AttemptStatus,\n    FrozenProblemRequest,\n    LeanVerifierReceipt,\n)
 from supernova_goal1.execution.verified_chain import (
     AdmittedProduct,
     RetryLink,
@@ -319,24 +319,12 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             "0" * len(record.signature),
         )
         forged = AdmittedProduct(forged_record, product.producer_response_utf8)
-        request_utf8 = render_verified_chain_request(
-            self.prompt,
-            execution_authority=self.execution_authority,
-            admitted_products=(forged,),
-            retry_of=None,
-        )
-        request = self.request(attempt=1, request_utf8=request_utf8)
-        with self.assertRaisesRegex(ValueError, "signature verification failed"):
-            execute_verified_chain_step(
-                authority=self.authority,
+        with self.assertRaisesRegex(ValueError, "trusted execution record"):
+            render_verified_chain_request(
+                self.prompt,
                 execution_authority=self.execution_authority,
-                manifest=first.baseline.manifest,
-                request=request,
-                problem_prompt_utf8=self.prompt,
                 admitted_products=(forged,),
                 retry_of=None,
-                model_call=lambda *_: None,
-                verifier_call=lambda *_: None,
             )
         self.assertEqual(1, len(self.authority.current_manifest().entries))
 
@@ -473,6 +461,62 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "CompletionRecord"):
             RetryLink(entry)
 
+    def test_self_registered_fake_pass_is_not_admitted(self) -> None:
+        request_utf8 = render_verified_chain_request(
+            self.prompt,
+            execution_authority=self.execution_authority,
+            admitted_products=(),
+            retry_of=None,
+        )
+        request = self.request(attempt=0, request_utf8=request_utf8)
+        signer = CompletionSigner.generate()
+        manifest = self.authority.register(
+            self.authority.current_manifest(),
+            request=request,
+            completion_verifier_sha256=signer.public_commitment,
+        )
+        entry = manifest.entries[-1]
+        response_artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
+            self.product_response,
+            kind=ScheduledChatArtifactKind.TERMINAL_RESPONSE,
+            run_id=request.run_id,
+            problem_id=request.problem_id,
+            arm=request.arm,
+            attempt=request.attempt,
+        )
+        result = AttemptResult(
+            frozen_request_sha256=request.frozen_request_sha256,
+            run_id=request.run_id,
+            problem_id=request.problem_id,
+            arm=request.arm,
+            attempt=request.attempt,
+            request_artifact_id=request.request_artifact.artifact_id,
+            response_artifact=response_artifact,
+            status=AttemptStatus.ANSWERED,
+            error=None,
+        )
+        fake_pass = self.verifier(VerifierStatus.PASS, self.product_response)
+        receipt = LeanVerifierReceipt.from_verifier_result(
+            request=request,
+            attempt_result=result,
+            verifier_result=fake_pass,
+        )
+        completion = signer.complete(
+            entry=entry,
+            payload=CompletionPayload(request, result, receipt),
+        )
+        structurally_valid_fake = AdmittedProduct(
+            completion,
+            self.product_response,
+        )
+        with self.assertRaisesRegex(ValueError, "absent from trusted execution"):
+            render_verified_chain_request(
+                self.prompt,
+                execution_authority=self.execution_authority,
+                admitted_products=(structurally_valid_fake,),
+                retry_of=None,
+            )
+
     def test_forged_retry_completion_is_rejected_before_dispatch(self) -> None:
         _failed_request, failed, _seen = self.emit_product(
             verifier_status=VerifierStatus.FAIL
@@ -487,24 +531,12 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             "0" * len(record.signature),
         )
         retry = RetryLink(forged_record)
-        request_utf8 = render_verified_chain_request(
-            self.prompt,
-            execution_authority=self.execution_authority,
-            admitted_products=(),
-            retry_of=retry,
-        )
-        request = self.request(attempt=1, request_utf8=request_utf8)
-        with self.assertRaisesRegex(ValueError, "signature verification failed"):
-            execute_verified_chain_step(
-                authority=self.authority,
+        with self.assertRaisesRegex(ValueError, "trusted execution record"):
+            render_verified_chain_request(
+                self.prompt,
                 execution_authority=self.execution_authority,
-                manifest=failed.baseline.manifest,
-                request=request,
-                problem_prompt_utf8=self.prompt,
                 admitted_products=(),
                 retry_of=retry,
-                model_call=lambda *_: None,
-                verifier_call=lambda *_: None,
             )
         self.assertEqual(1, len(self.authority.current_manifest().entries))
 
