@@ -183,9 +183,6 @@ def validate_protocol(protocol: object, benchmark: dict) -> None:
         raise ValueError("sealed rules schema changed")
     if canonical_sha256(rules) != protocol["sealed_rules_sha256"]:
         raise ValueError("sealed rules digest mismatch")
-    if protocol["sealed_rules_sha256"] != EXPECTED_RULES_SHA256:
-        raise ValueError("sealed rules identity changed")
-
     authorities = rules["frozen_authorities"]
     for name, expected_blob in EXPECTED_AUTHORITY_BLOBS.items():
         if git_blob_sha1(canonical_lf(AUTHORITY_PATHS[name])) != expected_blob:
@@ -416,6 +413,12 @@ def validate_protocol(protocol: object, benchmark: dict) -> None:
         "unknown_field_missing_binding_or_unresolved_input": "BLOCKED",
     }:
         raise ValueError("mutation policy changed")
+
+    # Semantic checks above provide precise fail-closed diagnostics.  This
+    # immutable identity check remains the final catch-all for any otherwise
+    # unrecognised mutation to the sealed rules.
+    if protocol["sealed_rules_sha256"] != EXPECTED_RULES_SHA256:
+        raise ValueError("sealed rules identity changed")
 
 
 class ConfirmatoryProtocolTests(unittest.TestCase):
