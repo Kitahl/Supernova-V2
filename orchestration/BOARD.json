@@ -119,12 +119,16 @@
     {
       "id": "G1-110",
       "owner": "MM05",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "docs/ANALYSIS_PLAN.md",
         "tests/test_analysis_plan.py"
       ],
-      "objective": "Write a prospective pilot and confirmatory analysis plan: estimand, all four paired contrasts, Holm correction, incomplete-run handling, discordance-based power update, and no scientific PASS from the pilot."
+      "objective": "Write a prospective pilot and confirmatory analysis plan: estimand, all four paired contrasts, Holm correction, incomplete-run handling, discordance-based power update, and no scientific PASS from the pilot.",
+      "completion": {
+        "pull_request": 36,
+        "merge_commit": "f9075bbf448888a87137c723293ab9afe3b3ba73"
+      }
     },
     {
       "id": "G1-111",
