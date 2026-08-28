@@ -49,12 +49,45 @@ def _canonical_bytes(value: object) -> bytes:
     ).encode("utf-8")
 
 
+def render_product_emission(product_utf8: bytes) -> bytes:
+    """Render the signed model-visible discriminator for an emitted product."""
+
+    product = _utf8(product_utf8, "product_utf8")
+    if not product:
+        raise ValueError("product_utf8 must not be empty")
+    return _canonical_bytes(
+        {
+            "content_utf8": product.decode("utf-8"),
+            "kind": "PRODUCT",
+            "schema": "supernova.product-emission.v1",
+        }
+    )
+
+
+def _parse_product_emission(response_utf8: bytes) -> bytes:
+    response = _utf8(response_utf8, "product response")
+    try:
+        raw = json.loads(response)
+    except json.JSONDecodeError as exc:
+        raise ValueError("product response must be canonical JSON") from exc
+    expected = {"content_utf8", "kind", "schema"}
+    if not isinstance(raw, dict) or set(raw) != expected:
+        raise ValueError("product response fields are not canonical")
+    if raw["kind"] != "PRODUCT" or raw["schema"] != "supernova.product-emission.v1":
+        raise ValueError("product response discriminator is invalid")
+    if type(raw["content_utf8"]) is not str or not raw["content_utf8"]:
+        raise ValueError("product response content_utf8 must be non-empty")
+    if response != _canonical_bytes(raw):
+        raise ValueError("product response bytes are not canonical")
+    return raw["content_utf8"].encode("utf-8")
+
+
 @dataclass(frozen=True)
 class VisibleProduct:
     """One immutable unverified product bound to its signed producer completion."""
 
     producer_completion: CompletionRecord
-    content_utf8: bytes
+    producer_response_utf8: bytes
 
     def __post_init__(self) -> None:
         if type(self.producer_completion) is not CompletionRecord:
@@ -62,9 +95,7 @@ class VisibleProduct:
         completion = CompletionRecord.from_mapping(
             self.producer_completion.to_mapping()
         )
-        content = _utf8(self.content_utf8, "content_utf8")
-        if not content:
-            raise ValueError("visible product content must not be empty")
+        response = _utf8(self.producer_response_utf8, "producer_response_utf8")
         payload = completion.payload
         result = payload.attempt_result
         if payload.request.arm is not Arm.PRODUCT_ONLY:
@@ -73,10 +104,15 @@ class VisibleProduct:
             raise ValueError("visible product producer must be a non-terminal product step")
         if payload.verifier_receipt is not None:
             raise ValueError("visible products must be unverified")
-        if not result.response_artifact.verifies(content):
-            raise ValueError("visible product bytes do not match producer completion")
+        if not result.response_artifact.verifies(response):
+            raise ValueError("producer response bytes do not match signed completion")
+        _parse_product_emission(response)
         object.__setattr__(self, "producer_completion", completion)
-        object.__setattr__(self, "content_utf8", bytes(content))
+        object.__setattr__(self, "producer_response_utf8", bytes(response))
+
+    @property
+    def content_utf8(self) -> bytes:
+        return _parse_product_emission(self.producer_response_utf8)
 
     @property
     def producer_frozen_request_sha256(self) -> str:
@@ -98,6 +134,9 @@ class VisibleProduct:
             "producer_completion_sha256": self.producer_completion.record_sha256,
             "producer_dispatch_id": self.producer_completion.dispatch_id,
             "producer_frozen_request_sha256": self.producer_frozen_request_sha256,
+            "producer_response_artifact_id": (
+                self.producer_completion.payload.attempt_result.response_artifact.artifact_id
+            ),
             "verification": "UNVERIFIED",
         }
 
@@ -162,6 +201,8 @@ class ProductControlObservation:
             if self.error is not None:
                 raise ValueError(f"{kind.value} observation cannot carry error")
         elif kind is ProductObservationKind.NO_ANSWER:
+            if response:
+                raise ValueError("NO_ANSWER observation must have an empty response")
             if self.error is not None:
                 raise ValueError("NO_ANSWER observation cannot carry error")
         elif type(self.error) is not str or not self.error.strip():
@@ -239,7 +280,7 @@ def render_product_only_request(
     snapshots = tuple(
         VisibleProduct(
             product.producer_completion,
-            product.content_utf8,
+            product.producer_response_utf8,
         )
         for product in visible_products
     )
@@ -485,5 +526,6 @@ __all__ = [
     "execute_multi_fidelity_stage",
     "execute_product_only_step",
     "render_multi_fidelity_request",
+    "render_product_emission",
     "render_product_only_request",
 ]
