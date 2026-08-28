@@ -21,13 +21,17 @@
     {
       "id": "G1-117",
       "owner": "MF02",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "scripts/verify_benchmark_runtime.py",
         "tests/test_verify_benchmark_runtime.py",
         "docs/BENCHMARK_RUNTIME.md"
       ],
-      "objective": "Implement a deterministic no-model benchmark/runtime checker that consumes the frozen benchmark lock, verifies a bounded non-credit sample against the pinned Lean 4.33.1 runtime, and emits machine-readable failures without changing benchmark or runtime pins."
+      "objective": "Implement a deterministic no-model benchmark/runtime checker that consumes the frozen benchmark lock, verifies a bounded non-credit sample against the pinned Lean 4.33.1 runtime, and emits machine-readable failures without changing benchmark or runtime pins.",
+      "completion": {
+        "pull_request": 34,
+        "merge_commit": "35b218a13357340611448b9ec8c0d13289b15a94"
+      }
     },
     {
       "id": "G1-118",
