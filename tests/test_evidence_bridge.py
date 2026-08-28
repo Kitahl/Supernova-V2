@@ -524,6 +524,22 @@ class EvidenceBridgeTests(unittest.TestCase):
                 operator_plan=self.manifest_bundle.operator_plan,
             )
             completion = self.completions[0]
+            with self.assertRaisesRegex(
+                ValueError, "no pre-dispatch protocol binding"
+            ):
+                ledger._record_completion(
+                    completion,
+                    context_isolation_receipt=(
+                        ledger._issue_context_isolation_receipt(completion)
+                    ),
+                    predecessor_reconciliation_receipt=(
+                        ledger._issue_predecessor_reconciliation_receipt(
+                            completion
+                        )
+                    ),
+                    orchestration_milliseconds=1,
+                )
+
             dispatch = next(
                 entry
                 for entry in self.authority.current_manifest().entries
