@@ -214,7 +214,7 @@
     {
       "id": "G1-129",
       "owner": "MM05",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/evaluate_confirmatory.py",
         "tests/test_evaluate_confirmatory.py"
@@ -227,12 +227,16 @@
         "Only bridge-produced records are accepted.",
         "PASS requires superiority over all four controls under the frozen rule.",
         "BLOCKED and INCOMPLETE never become FAIL or PASS."
-      ]
+      ],
+      "completion": {
+        "pull_request": 76,
+        "merge_commit": "a230e328b09c859938cdc30f430b372b7f36ef18"
+      }
     },
     {
       "id": "G1-130",
       "owner": "MM07",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
         "tests/test_confirmatory_adversarial.py"
       ],
