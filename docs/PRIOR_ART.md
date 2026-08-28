@@ -372,6 +372,33 @@ threatened scientific question.
 
 `PASS`, `FAIL`, and `INCOMPLETE` remain empirical outcomes of an evaluator, not project phases.
 
+## Benchmark-correction scope: content locking and semantic fidelity are different claims
+
+### 28. AI-MO miniF2F corrections and miniF2F-Lean Revisited — “corrected” is not an exhaustive-fidelity certificate
+
+Direct sources:
+- AI-MO `minif2f_test` dataset card: <https://huggingface.co/datasets/AI-MO/minif2f_test>
+- Ospanov, Farnia & Yousefzadeh, *miniF2F-Lean Revisited: Reviewing Limitations and Charting a Path Forward*: <https://arxiv.org/abs/2511.03108>
+
+**EVIDENCE.** The AI-MO dataset card says it corrected **several erroneous formalizations** in the
+DeepSeek-Prover-derived test set and lists concrete changed theorems. It does not state that every
+test item received an exhaustive semantic-fidelity audit. Ospanov et al. independently report
+formal/informal discrepancies for more than half of the original miniF2F problems and release a
+separately corrected corpus after a full-benchmark analysis.
+
+**EVIDENCE — repository.** Supernova's current locked test bytes come from the AI-MO corrected test
+source; `BENCHMARK.lock.json` content-addresses those bytes but does not contain an item-level
+semantic-fidelity attestation against the intended informal/source problems.
+
+**INFERENCE.** Ospanov et al.'s defect rate must **not** be transferred numerically to the current
+Kimina-corrected bytes; the sources are different revisions and that would exceed the evidence.
+What the evidence does establish is a narrower assurance boundary: the word “corrected” plus a
+content hash proves neither exhaustive correction nor source-problem fidelity. If Goal 1's primary
+construct is exact Lean theorem-solving, Supernova can state that target narrowly and treat broader
+Olympiad fidelity as robustness/interpretation. If the primary claim is about solving the intended
+source mathematics, item-level semantic auditing or an independently audited corrected corpus must
+be frozen before confirmation.
+
 ## Composable evidence boundary
 
 The prior art supports **separation with explicit joins**, not one mega-certificate:
@@ -430,7 +457,7 @@ the relevant verifier-conditioned search/retry opportunities are matched.
 - **Decomposition/state falsifier:** match subgoal/product state capacity and search depth. (Seed-Prover; Prover Agent; Goedel-Architect.)
 - **Cost falsifier:** compare matched realized proxy vectors, a frozen residual-budget policy, or a preregistered performance-versus-proxy-cost frontier. (Snell; Singhi.)
 - **Hidden-compute sensitivity:** prospectively stress hidden reasoning, cache, request-shape, failed-call, verifier-resource and shared-serving asymmetries; report the smallest asymmetry that overturns the fairness interpretation. (OpenAI usage docs; CoIn; Sarathi-Serve; cgroup docs.)
-- **Contamination/fidelity sensitivity:** preserve the primary locked analysis, then report fresh/semantic-overlap/formalization diagnostics without replacing an unfavorable primary result. (LiveBench; MathArena; Spiesberger; Ammanamanchi.)
+- **Contamination/fidelity sensitivity:** preserve the primary locked analysis, then report fresh/semantic-overlap/formalization diagnostics without replacing an unfavorable primary result. If the primary construct itself includes source/Olympiad fidelity, upgrade semantic-fidelity validation from sensitivity to a pre-confirmatory condition. (LiveBench; MathArena; Spiesberger; Ammanamanchi; AI-MO miniF2F; Ospanov et al.)
 - **Input/runtime falsifier:** bind one common problem/prompt payload and freeze/counterbalance model/runtime identity. (Sclar; Chen; Yuan; Python/Elan.)
 - **Evidence-binding falsifier:** independently validate each benchmark, runtime, outcome/verifier and dispatch/cost binding, then join them by immutable subject IDs rather than trusting one aggregate certificate. (MLflow; Lean/SLSA; W3C/OpenTelemetry.)
 - **Statistical falsifier:** freeze the independent sampling unit, effect interpretation, one-shot/sequential analysis rule and familywise correction before confirmatory outcomes. (Eliasziw & Donner; ASA/Lakens; Johari.)
