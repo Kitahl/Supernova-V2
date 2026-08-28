@@ -155,7 +155,7 @@
     {
       "id": "G1-127",
       "owner": "MM03",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
         "src/supernova_goal1/evidence_bridge.py",
         "tests/test_evidence_bridge.py"
@@ -179,7 +179,7 @@
     {
       "id": "G1-128",
       "owner": "MM04",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/confirmatory_manifest.py",
         "tests/test_confirmatory_manifest.py"
@@ -198,7 +198,11 @@
         "All five arms are paired for every selected problem.",
         "No attempt or retry can be added after dispatch begins.",
         "Without an admissible execution-authority bundle the manifest is NON_CREDIT_DRAFT and dispatch is BLOCKED."
-      ]
+      ],
+      "completion": {
+        "pull_request": 70,
+        "merge_commit": "13e46e9ea7aa5831efdf843f96479144bb2a2f71"
+      }
     },
     {
       "id": "G1-129",
