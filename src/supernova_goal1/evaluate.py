@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from math import comb
 from typing import Any, Iterable, Mapping
 
 from .contracts import Arm, CONTROL_ARMS, ExperimentSpec, GoalDecision, OutcomeRecord
+from .statistics import holm_step_down, mcnemar_exact_two_sided
 
 
 @dataclass(frozen=True)
@@ -18,31 +18,21 @@ class PairwiseResult:
     holm_rejects_null: bool = False
 
 
-def _mcnemar_exact_two_sided(candidate_only: int, control_only: int) -> float:
-    discordant = candidate_only + control_only
-    if discordant == 0:
-        return 1.0
-    tail = sum(comb(discordant, index) for index in range(min(candidate_only, control_only) + 1))
-    return min(1.0, 2.0 * tail / (2**discordant))
-
-
 def _apply_holm(results: list[PairwiseResult], alpha: float) -> list[PairwiseResult]:
-    ordered = sorted(enumerate(results), key=lambda item: item[1].exact_two_sided_p)
-    reject = True
-    revised: dict[int, PairwiseResult] = {}
-    total = len(results)
-    for rank, (original_index, result) in enumerate(ordered):
-        threshold = alpha / (total - rank)
-        reject = reject and result.exact_two_sided_p <= threshold
-        revised[original_index] = PairwiseResult(
+    corrections = holm_step_down(
+        (result.exact_two_sided_p for result in results), alpha
+    )
+    return [
+        PairwiseResult(
             control=result.control,
             candidate_only_wins=result.candidate_only_wins,
             control_only_wins=result.control_only_wins,
             exact_two_sided_p=result.exact_two_sided_p,
-            holm_threshold=threshold,
-            holm_rejects_null=reject,
+            holm_threshold=correction.threshold,
+            holm_rejects_null=correction.rejects_null,
         )
-    return [revised[index] for index in range(total)]
+        for result, correction in zip(results, corrections, strict=True)
+    ]
 
 
 def evaluate_experiment(
@@ -108,7 +98,9 @@ def evaluate_experiment(
                     control=control.value,
                     candidate_only_wins=candidate_only,
                     control_only_wins=control_only,
-                    exact_two_sided_p=_mcnemar_exact_two_sided(candidate_only, control_only),
+                    exact_two_sided_p=mcnemar_exact_two_sided(
+                        candidate_only, control_only
+                    ),
                 )
             )
         pairwise = _apply_holm(raw_pairwise, spec.familywise_alpha)
