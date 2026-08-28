@@ -4,728 +4,184 @@ Ticket: `G1-012` (`EXT01`)
 
 This document is an adversarial design review, not an admission certificate. It separates
 **EVIDENCE** (repository state or a primary/direct external source) from **INFERENCE** (the audit
-conclusion drawn from that evidence). A threat remains open until the experiment has a prospective,
-machine-checkable falsifier or mitigation.
+conclusion drawn from that evidence). Threat severity is epistemic; it is **not** automatically a
+workflow gate. The phase table below is the sequencing authority for this document.
 
-## Target claim and causal estimand
+## Current repository state
 
-**EVIDENCE — repository.** `goal1/GOAL1.json` asks whether, within one problem, a chain of
-independently verified intermediate products solves more problems than ordinary, portfolio,
-product-only, and multi-fidelity controls under the same frozen complete-cost budget. The current
-experiment is explicitly `DRY_RUN`; the benchmark is `UNSELECTED`/`UNPINNED`/`UNLOCKED`, and
-`cost_model_frozen=false`.
+**EVIDENCE — repository.** `goal1/GOAL1.json` is still `DRY_RUN`, names an
+`UNSELECTED`/`UNPINNED`/`UNLOCKED` active benchmark, and has `cost_model_frozen=false`. Separately,
+`goal1/BENCHMARK.lock.json` now locks a 488-problem miniF2F composite by file hashes and
+`root_sha256`, but the active `GOAL1.json` does not yet bind that lock into the scientific
+experiment contract.
 
-**INFERENCE.** A positive result supports a mechanism claim about *verify-before-consume* only if
-treatment and controls differ by that mechanism rather than by decomposition, adaptive search,
-state persistence, verifier information, retry/stopping policy, representation, model/tool access,
-or actual compute. Otherwise the estimand is performance of a bundled agent architecture.
+**INFERENCE.** The current repository can support plumbing and feasibility work, but the dry cohort
+cannot earn scientific credit. The existence of a benchmark lock beside the dry experiment is
+progress, not evidence that the current experiment is already content-bound or confirmatory-ready.
+
+## First confirmatory estimand
+
+**EVIDENCE — repository.** The verified-chain execution contract has a verifier-conditioned
+`FAIL -> reject/discard -> retry` path. The product-only control does not expose an equivalent
+verifier-conditioned retry decision. This mismatch is T22 below.
+
+**INFERENCE — primary estimand.** Unless that reject/retry decision is actually matched across the
+relevant control, the first confirmatory estimand is the **package effect of verified-gated search
+and consumption**, not a pure intermediate-product or pure verify-before-consume effect. For each
+control `c`, the paired effect of interest is the difference in final independently verified solve
+probability between the frozen verified-gated package and `c`, under the frozen cost construct.
+Verifier-conditioned rejection, retry allocation, and downstream consumption are part of that
+package.
+
+A narrower **pure gating** estimand is admissible only after a control matches verifier query count,
+feedback bandwidth, reject/discard/retry opportunity, attempt quota, decomposition/state capacity,
+and cost while differing on whether unverified intermediate products may be consumed downstream.
+Until then, documentation must not convert a package win into a pure mechanism claim.
+
+## Phase-ranked gate matrix — authoritative sequencing
+
+This table **supersedes the former blanket “minimum design conditions before a scientific Goal 1
+run” checklist as workflow sequencing**. The old threat numbers remain useful audit identifiers, but
+not every mitigation is a prerequisite to run any informative experiment.
+
+| Phase rank | What may run | Required before that phase | What the phase may establish |
+| --- | --- | --- | --- |
+| **DRY/PILOT** | Schema, transport, verifier, benchmark-import, dispatch, cost-observability and five-arm plumbing tests. A small non-credit execution may run with scientific threats still open if those threats are recorded rather than silently converted to PASS. | Exact run identity; no secret/private leakage; deterministic input/record serialization where claimed; explicit missing/unknown states; no reuse of dry results as confirmatory evidence. For a pilot that exercises real models, preserve raw requests/responses, verifier evidence and observable cost proxies so seam failures can be diagnosed. | Feasibility, failure modes, missing telemetry, runtime incompatibilities, control-contract bugs, and power/discordance planning inputs. **No scientific credit.** |
+| **CONFIRMATORY-BLOCKING** | One prospectively frozen primary confirmatory experiment. | The causal estimand and arm contracts; benchmark/split/content binding; development/confirmatory separation; exact common problem/prompt identity; model/tool/runtime identity; verifier access/feedback and retry semantics; cross-arm isolation; final-verifier evidence binding; trusted dispatch/cost-to-outcome join; a named cost construct with symmetric ceilings/allocation; sampling unit and statistical plan; effect/precision target; one-shot or valid sequential-look rule. Conditional blockers apply when the design uses clustered families, hosted shared quotas, or another identified dependency. | Only the preregistered package effect under the stated cost/measurement construct. It does not automatically establish physical-compute parity, contamination absence, or pure gating. |
+| **ROBUSTNESS/SENSITIVITY** | Prespecified stress tests after or alongside the primary result, without replacing the primary analysis. | The robustness plan itself must be frozen before inspecting the corresponding result when it could affect interpretation. | How sensitive the primary conclusion is to semantic contamination, prompt variants, hosted nondeterminism, hidden/physical compute uncertainty, benchmark-fidelity corrections, alternate family groupings, serving interference, or other residual assumptions. Failure narrows interpretation; it must not be hidden by selecting a favorable robustness run. |
+
+`PASS`, `FAIL`, and `INCOMPLETE` are empirical evaluator outcomes, **not workflow stages**. A dry or
+pilot run may be complete and mechanically successful while still having zero scientific credit.
+
+A methodological precedent for this separation is the CONSORT extension for pilot/feasibility
+trials, which distinguishes feasibility objectives from a later definitive effectiveness test and
+warns against treating an underpowered pilot as the definitive hypothesis test:
+<https://www.bmj.com/content/355/bmj.i5239>. **INFERENCE for Supernova:** this source does not govern
+software experiments, but it supports the general design discipline of separating “can the protocol
+run?” from “did the treatment effect pass its confirmatory test?”
+
+## Hosted and scheduled-chat cost construct
+
+**EVIDENCE — repository.** G1-107 explicitly targets ChatGPT scheduled-task execution where provider
+token telemetry is unavailable. The merged cost model already states that `cost_model_frozen`
+remains false until the measurement environment and comparison assumptions are frozen.
+
+**EVIDENCE — direct external source.** OpenAI's token-usage documentation distinguishes input,
+output, cached-input and reasoning tokens and says API responses can expose usage fields; it also
+notes that reasoning tokens can be invisible in the answer text and that interrupted streaming can
+leave usage unavailable:
+<https://help.openai.com/en/articles/4936856> and
+<https://help.openai.com/en/articles/10478918-reviewing-api-usage-and-costs>.
+
+**INFERENCE.** API telemetry and scheduled-chat observability are different measurement surfaces.
+If the experimental runtime does not expose provider usage counters, Supernova must not fabricate
+or relabel a local estimate as provider-metered tokens, and it must not describe the result as
+physical-compute equality.
+
+### Frozen proxy choices
+
+Before confirmatory execution, choose and name exactly one hosted cost construct:
+
+1. **Provider-metered hosted proxy** — when raw provider usage is available, record model-call count,
+   provider-reported input/output token usage (including cached/reasoning detail when surfaced),
+   verifier elapsed time, and orchestration elapsed time. Missing required provider usage is typed
+   unknown, not zero.
+2. **Scheduled-chat observable proxy** — when provider token telemetry is unavailable, record every
+   model dispatch, exact UTF-8 byte counts of the canonical rendered model-visible input and visible
+   output, optional token estimates from one frozen tokenizer/version labelled explicitly as
+   estimates, verifier elapsed time, orchestration elapsed time, tool-call identities/results that
+   enter later prompts, retries/failures, and trusted dispatch times. This is an observable proxy,
+   not a provider-token or physical-compute meter.
+
+The same proxy definition, accounting boundary and missing-data rules apply to all arms. A shared
+maximum ceiling is not the same as equal realized cost; either match realized proxy vectors, allow a
+prospectively frozen residual-budget policy, or report a performance-versus-proxy-cost frontier.
+
+### Prospective sensitivity analysis for hidden compute
+
+For hosted confirmation where physical compute and hidden reasoning are not independently auditable,
+freeze a sensitivity analysis **before outcomes are inspected**. At minimum:
+
+- vary arm-specific hidden model work over a stated multiplicative/additive range relative to the
+  observable/provider-metered proxy;
+- separately stress cached-input advantage, request-shape/prefill effects, failed-call hidden work,
+  verifier CPU/resource intensity, and shared serving delays when relevant;
+- recompute which arm would be considered cheaper/equal/more expensive under each bound;
+- report the smallest hidden-cost asymmetry that would overturn the fairness interpretation; and
+- if plausible bounds overturn the conclusion, narrow the claim to superiority under the observed
+  proxy rather than “equal compute.”
+
+No sensitivity bound can prove true hardware equality; it makes the residual assumption explicit.
+
+## Composable evidence bindings — do not build one mega-certificate
+
+The following are separate contracts with separate failure modes. They should join through immutable
+subject IDs/digests, not be collapsed into a single oversized certificate:
+
+1. **Benchmark/input binding** — benchmark lock root, split contract, problem-content digest,
+   preprocessing/formalization identity, and canonical common prompt/input digest.
+2. **Runtime/toolchain binding** — resolved verifier executable/image, Lean/toolchain and proof
+   library state, cwd, allowlisted environment, model/provider/version and other runtime identity.
+3. **Outcome/verifier binding** — exact challenge/problem subject, final proof/artifact digest,
+   final-verifier receipt/policy, and independently checkable PASS evidence for a counted solve.
+4. **Dispatch/cost binding** — pre-dispatch cell execution identity, all model/verifier/tool/
+   orchestration events, closed cost report or proxy record, and the deterministic join to the
+   scientific outcome.
+
+A confirmatory cell is admissible only when every binding required for **that claim** validates, but
+one contract must not silently stand in for another. For example, a correct benchmark digest does
+not attest the verifier runtime, and a valid proof receipt does not prove complete cost accounting.
 
 ## Threat ledger
 
-### T1 — Treatment-bundle confounding (`CRITICAL`)
-
-**EVIDENCE — repository.** Proposed G1-006 / PR #5 implements a stateful
-`propose -> verify -> consume -> propose` loop with verifier-conditioned transitions. Proposed
-ordinary/portfolio contracts do not expose the same intermediate-product channel or cross-attempt
-state.
-
-**INFERENCE.** A treatment win could be caused by decomposition, adaptive continuation, persistent
-state, verifier feedback, or composition rather than verified-product consumption itself.
-
-**Required falsifier/mitigation.** Freeze controls/ablations that match model, tools, prompt budget,
-decomposition opportunity, state capacity, retry policy, and search depth while removing one
-mechanism at a time. Include verifier-matched non-chaining and chaining-without-gating controls.
-
-### T2 — A common ceiling is not equal complete cost (`CRITICAL`)
-
-**EVIDENCE — repository.** Goal 1 uses one five-dimensional budget ceiling. Proposed G1-007 checks
-whether each arm stays under that ceiling but does not require equal realized resource vectors.
-**EVIDENCE — external.** Snell et al. show that test-time compute allocation materially changes
-reasoning performance: <https://arxiv.org/abs/2408.03314>.
-
-**INFERENCE.** An arm can consume substantially more generator/verifier work than a control while
-both remain legal. A compute advantage can therefore masquerade as a mechanism advantage.
-
-**Required falsifier/mitigation.** Match realized cost vectors, allow controls to spend residual
-budget under a frozen policy, or compare preregistered performance-versus-cost frontiers. Record
-actual per-cell costs even when an arm stops early.
-
-### T3 — Intermediate verifier access is a privileged search oracle (`CRITICAL`)
-
-**EVIDENCE — external.** Cobbe et al. use a verifier to rank generated candidates and improve math
-answer selection: <https://arxiv.org/abs/2110.14168>. Seed-Prover iteratively uses Lean feedback and
-proved lemmas: <https://arxiv.org/abs/2507.23726>. **EVIDENCE — repository.** Proposed G1-006 exposes
-PASS/FAIL transitions during search.
-
-**INFERENCE.** Search-time verification supplies information, not merely assurance. If controls do
-not receive matched query count, response vocabulary, and diagnostic bandwidth, the experiment does
-not isolate downstream consumption.
-
-**Required falsifier/mitigation.** Freeze verifier-query budgets and feedback semantics. Keep the
-search-verifier channel distinct from the blind final outcome checker and include a verifier-reranked
-portfolio/control when relevant.
-
-### T4 — Distinct IDs do not establish independent verification (`HIGH`)
-
-**EVIDENCE — repository.** Proposed G1-006 requires `verifier_id != producer_id`.
-
-**INFERENCE.** Different strings do not prove independent processes, state, parsers, runtimes, or
-trusted bases.
-
-**Required falsifier/mitigation.** Freeze verifier implementation/version/hash, runtime, allowed
-axioms/imports, timeout, and output contract. Replay final formal artifacts in a clean verifier
-process that the treatment cannot modify.
-
-### T5 — Benchmark contamination and benchmark-selection leakage (`CRITICAL` until pinned)
-
-**EVIDENCE — repository.** The live Goal 1 bootstrap has no selected/locked benchmark.
-**EVIDENCE — external.** LiveBench was designed around frequently refreshed questions to reduce
-contamination risk: <https://arxiv.org/abs/2406.19314>. Deng et al. document contamination signals
-in modern LLM benchmarks: <https://aclanthology.org/2024.naacl-long.482/>.
-
-**INFERENCE.** Selecting or modifying confirmatory items after observing pilot behavior, or using a
-public benchmark exposed during model training/tuning, can inflate apparent capability.
-
-**Required falsifier/mitigation.** Freeze benchmark identity, version, problem IDs, split, hashes,
-and model version before confirmatory treatment tuning. Prefer fresh/hidden or post-model-release
-items and report residual contamination risk when training provenance is unavailable.
-
-### T6 — Formal-library answer leakage (`HIGH`)
-
-**EVIDENCE — external.** LeanDojo provides a reproducible Lean environment and a split intended to
-test generalization to novel premises:
-<https://proceedings.neurips.cc/paper_files/paper/2023/file/4441469427094f8873d0fecb0c4e1cee-Paper-Datasets_and_Benchmarks.pdf>.
-
-**INFERENCE.** A held-out theorem can still leak through an exact/near-duplicate statement, known
-proof, or decisive helper lemma in an allowed library or retrieval corpus.
-
-**Required falsifier/mitigation.** Freeze the proof-library commit and retrieval corpus, audit
-exact/near duplicates and known proofs, define legal helper lemmas, and apply identical retrieval
-visibility to comparable arms.
-
-### T7 — Cross-arm and cross-problem state leakage (`CRITICAL`)
-
-**EVIDENCE — repository.** Proposed assignment work blinds evaluator-visible arm order, but the live
-bootstrap does not yet freeze execution-isolation semantics.
-
-**INFERENCE.** Conversation state, caches, retrieved lemmas, verifier diagnostics, or learned
-products can leak between arms/problems even when scoring is blind.
-
-**Required falsifier/mitigation.** Start every `(problem, arm, replicate)` from a fresh frozen base
-context, randomize/counterbalance execution order, and prohibit cross-problem product reuse for Goal
-1 unless transfer is explicitly part of a later estimand.
-
-### T8 — Unequal model/tool/prompt capability (`CRITICAL`)
-
-**EVIDENCE — repository.** Goal 1 does not yet freeze provider/model version, sampling policy,
-reasoning-effort mode, prompt template, context-window policy, or external tool set.
-
-**INFERENCE.** Arm-specific capability differences can dominate the intended mechanism effect.
-
-**Required falsifier/mitigation.** Freeze model/provider/version, decoding/seed policy, reasoning
-effort, prompts, context limits, network/tool access, and retry semantics across causal controls.
-
-### T9 — Cost-accounting gaps and free work (`HIGH`)
-
-**EVIDENCE — repository.** Proposed G1-007 identifies several exclusions and rejects silently
-zero-filling missing telemetry.
-
-**INFERENCE.** Hidden/reasoning tokens, cached tokens, failed requests, external tool compute,
-retrieval/indexing, preprocessing, shared setup, and human intervention can still subsidize one arm.
-
-**Required falsifier/mitigation.** Predeclare the accounting boundary; charge treatment-specific
-setup/tool calls and all retries/failures; preserve cached/uncached semantics; fail closed on missing
-telemetry; report cumulative resources and wall-clock latency separately.
-
-### T10 — Early stopping and retry asymmetry (`HIGH`)
-
-**EVIDENCE — external.** Test-time strategies can allocate compute adaptively by difficulty, changing
-efficiency and accuracy: <https://arxiv.org/abs/2408.03314>.
-
-**INFERENCE.** Informative retries for one arm and fixed attempts for another create an unfair search
-advantage even under an equal maximum budget.
-
-**Required falsifier/mitigation.** Pre-register success stopping, timeout, retry, and residual-budget
-reuse rules. Controls should receive the strongest analogous adaptive allocation legal under their
-mechanism definition.
-
-### T11 — Verifier overfitting and diagnostic-channel exploitation (`HIGH`)
-
-**EVIDENCE — external.** Prover Agent and Seed-Prover use Lean feedback iteratively:
-<https://arxiv.org/abs/2506.19923> and <https://arxiv.org/abs/2507.23726>.
-
-**INFERENCE.** A search process can overfit checker diagnostics or exploit an implementation bug.
-Final PASS then establishes acceptance by that checker, not necessarily the broader intended
-mathematical construct.
-
-**Required falsifier/mitigation.** Narrow the search-verifier response contract where possible,
-reject unsafe proof mechanisms, preserve raw verifier evidence, and independently replay final
-artifacts in a clean environment.
-
-### T12 — Stochastic seed luck and undefined replication (`HIGH`)
-
-**EVIDENCE — repository.** Goal 1 reduces each problem/arm to a binary solved outcome but does not
-yet freeze how multiple stochastic samples are reduced to that binary value.
-
-**INFERENCE.** Selective reruns or favorable seeds create researcher degrees of freedom.
-
-**Required falsifier/mitigation.** Freeze seeds/replicate counts and the per-problem aggregation rule
-before confirmation. Charge every sample and never rerun only losing cells outside a symmetric,
-deterministic retry rule.
-
-### T13 — Confirmatory-set reuse and adaptive overfitting (`HIGH`)
-
-**EVIDENCE — repository.** The system is actively being built while the final benchmark remains
-unlocked.
-
-**INFERENCE.** Repeatedly inspecting confirmatory failures and changing prompts, decomposition,
-verifier interfaces, or budgets converts the holdout into development data.
-
-**Required falsifier/mitigation.** Maintain separate development and confirmatory sets. Expose the
-confirmatory set once under the frozen protocol or use a preregistered limited-retest rule followed
-by a new untouched holdout after substantive changes.
-
-### T14 — Dry-run evidence accidentally promoted to science (`BLOCKER if misreported`)
-
-**EVIDENCE — repository.** The current experiment is `goal1-bootstrap-dry-run`, has two required dry
-problem IDs, an unselected benchmark, and an unfrozen cost model.
-
-**INFERENCE.** The dry run can test schemas, transport, failure handling, and evaluator behavior but
-cannot support the scientific hypothesis.
-
-**Required falsifier/mitigation.** Keep scientific evaluation `BLOCKED` until the benchmark/split and
-complete-cost semantics are frozen. Never cite dry-run solve counts as mechanism evidence.
-
-### T15 — Kernel-valid can still be benchmark-invalid (`CRITICAL` for formal benchmarks)
-
-**EVIDENCE — external.** Ammanamanchi, Bhat, and Biderman report thousands of findings in Lean
-benchmarks, including mechanically certified vacuity/counterexample/unsafe-axiom defects:
-<https://arxiv.org/abs/2606.29493>.
-
-**INFERENCE.** Kernel acceptance does not prove that the formal statement faithfully represents the
-intended benchmark problem.
-
-**Required falsifier/mitigation.** Run mechanical dataset checks for vacuity, unsafe axioms/imports,
-contradictory assumptions, and degenerate formalizations; preserve an audited informal-to-formal
-mapping and freeze corrected benchmark snapshots prospectively.
-
-### T16 — Verifier computation and verification frequency are treatment variables (`CRITICAL`)
-
-**EVIDENCE — external.** Setlur et al. show verifier-based and verifier-free test-time strategies can
-scale differently: <https://proceedings.mlr.press/v267/setlur25a.html>. Singhi et al. analyze the
-solve-versus-verify compute tradeoff: <https://arxiv.org/abs/2504.01005>. Chen et al. show
-verification frequency can change accuracy and FLOP efficiency: <https://arxiv.org/abs/2505.11730>.
-
-**INFERENCE.** Equal generator calls are not equal inference budgets when one arm receives more
-verifier compute or more frequent information.
-
-**Required falsifier/mitigation.** Log/cap verifier invocations, tokens/FLOPs or timing, diagnostics,
-and granularity. Compare joint generator+verifier resources and include a verifier-frequency-matched
-control when claiming a chaining effect.
-
-### T17 — Public-benchmark success may be instance memorization rather than structural reasoning (`HIGH`)
-
-**EVIDENCE — external.** MathArena reports contamination signals on older public competitions and
-uses newly released problems: <https://arxiv.org/abs/2505.23281>. VAR-MATH reports large drops on
-symbolically variabilized versions of common math problems: <https://arxiv.org/abs/2507.12885>.
-
-**INFERENCE.** A formally correct answer can still arise from memorized instance/pattern retrieval.
-
-**Required falsifier/mitigation.** Prefer fresh/hidden items and, where the benchmark permits,
-predeclare structure-preserving variants as a robustness diagnostic with a frozen aggregation rule.
-
-### T18 — Hosted-model time drift can masquerade as an arm effect (`CRITICAL` for API models)
-
-**EVIDENCE — external.** Chen, Zaharia, and Zou measured material behavior changes between hosted
-GPT versions over a short interval: <https://arxiv.org/abs/2307.09009>. Gemini documentation states
-that `latest` aliases can move while specific stable names are intended to remain stable:
-<https://ai.google.dev/gemini-api/docs/models>.
-
-**INFERENCE.** If arm identity correlates with execution time, a backend/model rollover can appear as
-a treatment effect.
-
-**Required falsifier/mitigation.** Use specific stable versions where possible, record requested and
-returned model identity plus trusted call time, run paired arms in randomized/counterbalanced narrow
-time blocks, and fail closed or segment a run if model identity changes.
-
-### T19 — "Deterministic" inference can vary with backend execution (`HIGH`)
-
-**EVIDENCE — external.** Yuan et al. show batch size, GPU count/type, and numerical precision can
-change outputs and benchmark accuracy under greedy decoding:
-<https://proceedings.neurips.cc/paper_files/paper/2025/hash/f80094a824ba5912d4a2de169c404a40-Abstract-Conference.html>.
-Ouyang et al. report run-to-run variation and that temperature zero does not guarantee deterministic
-outputs: <https://arxiv.org/abs/2308.02828>.
-
-**INFERENCE.** A frozen model name, prompt, seed, and temperature do not by themselves guarantee
-reproducible paired outcomes.
-
-**Required falsifier/mitigation.** Freeze self-hosted serving engine/hardware/precision/batching and
-deterministic-kernel settings, or treat hosted backend execution as residual uncertainty with
-randomized paired order and a prospective replication/sensitivity plan.
-
-### T20 — Soft contamination can survive exact-match decontamination (`CRITICAL` for public pretrained benchmarks)
-
-**EVIDENCE — external.** Spiesberger et al. show semantic duplicates can evade n-gram filtering and
-report measurable benchmark gains from semantic-duplicate exposure:
-<https://arxiv.org/abs/2602.12413>.
-
-**INFERENCE.** Exact hash/string or n-gram absence cannot certify out-of-distribution reasoning.
-
-**Required falsifier/mitigation.** Audit semantic/family-level overlap where training-corpus access
-exists, prefer post-model-cutoff/fresh families, and explicitly state residual soft-contamination
-risk when a clean certificate is impossible.
-
-### T21 — Hosted hidden-reasoning telemetry can make complete-cost parity unobservable (`HIGH` for opaque APIs)
-
-**EVIDENCE — external.** Sun et al. identify an auditability problem when commercial APIs charge for
-hidden reasoning tokens whose traces are not exposed: <https://arxiv.org/abs/2505.13778>.
-
-**INFERENCE.** Provider counters can support a provider-reported usage comparison without proving an
-independently measured compute comparison.
-
-**Required falsifier/mitigation.** Preserve raw usage metadata/request IDs and hidden-token counters;
-never infer missing hidden usage from visible output or zero-fill it. Prefer auditable inference for
-a confirmatory causal claim, or require the conclusion to survive a frozen sensitivity bound.
-
-### T22 — Product-only alignment improved, but verifier-conditioned retry remains non-equivalent (`CRITICAL` for a pure gating claim)
-
-**EVIDENCE — repository.** Current merged G1-005 / PR #12 matches proposed G1-006 on the
-JSON-compatible product value domain, deterministic canonicalization/content identity, runtime
-product-ID choice, bounded dynamic chain length, and early finalization. This closes the earlier
-representation, predeclared-ID, and forced-full-chain portions of the control mismatch. However,
-G1-006 still has an explicit `REJECTED -> discard_rejected -> READY -> propose` path driven by a
-verifier FAIL, while G1-005 has no equivalent verifier-conditioned reject/discard/retry transition.
-**EVIDENCE — external.** Leanabell-Prover-V2 explicitly uses multi-turn Lean verifier feedback to
-correct errors and reports improved pass@128 after verifier-integrated training/search:
-<https://arxiv.org/abs/2507.08649>.
-
-**INFERENCE.** T22 is therefore narrower than in the previous audit, but it is not closed. The
-remaining difference is scientifically central: verifier failure can decide whether a candidate is
-discarded and additional compute is spent on a replacement. A win could reflect
-verification-conditioned search/retry rather than the narrower claim that downstream consumers
-benefit from a verified-product gate. If reject/retry is intentionally part of the treatment, the
-claim should say so.
-
-**Required falsifier/mitigation.** Freeze the estimand. For a *pure downstream gating* claim, add a
-control with matched verifier queries/feedback and matched attempt/retry budget whose downstream
-consumption policy does not depend on PASS/FAIL. For a broader *verified-gated search and
-consumption* claim, predeclare that bundle and stop describing retry as a matched nuisance variable.
-In either case charge every rejected attempt and retry to complete cost.
-
-### T23 — Problem-family clustering can invalidate ordinary McNemar significance (`CRITICAL` if confirmatory items are clustered)
-
-**EVIDENCE — repository.** `goal1/GOAL1.json` requires Holm-corrected exact paired tests. The current
-`src/supernova_goal1/evaluate.py` and proposed G1-010 statistics helper reduce every candidate/control
-comparison to two aggregate discordant counts (`candidate_only`, `control_only`) and apply ordinary
-exact McNemar. Neither contract carries a benchmark-family/cluster identifier or a cluster-aware
-variance/randomization rule. **EVIDENCE — external.** Eliasziw and Donner state that ordinary
-McNemar assumes responses from matched pair to matched pair are mutually independent and develop an
-adjustment for non-independent pairs: <https://onlinelibrary.wiley.com/doi/10.1002/sim.4780101211>.
-Gönen likewise notes that clustered paired-binary data require adjustment for McNemar inference:
-<https://pubmed.ncbi.nlm.nih.gov/15236431/>.
-
-**INFERENCE.** If the eventual confirmatory set contains multiple semantic variants, theorem-family
-siblings, generated perturbations, or other items sharing a common latent source, treating each item
-as an independent McNemar pair can overstate effective sample size and make p-values anti-conservative.
-This is distinct from T20 contamination: even perfectly unseen items can be statistically dependent.
-The risk is especially relevant if robustness variants from T17 are included as if they were new
-independent benchmark problems.
-
-**Required falsifier/mitigation.** Before locking the benchmark, define the independent sampling
-unit and freeze a family/cluster ID when items share a source or generated template. Either sample
-one confirmatory item per independent family, aggregate to a predeclared family-level endpoint, or
-use a cluster-aware paired test/randomization/bootstrap whose unit is the family. Do not count
-structure-preserving variants as independent n. If clustering is uncertain, report a prospectively
-specified sensitivity analysis under plausible family groupings.
-
-### T24 — Aggregate token counts do not identify model compute (`CRITICAL` if "complete cost" means compute parity)
-
-**EVIDENCE — repository.** Proposed G1-007 / PR #2 defines model work by aggregate `model_calls`,
-`input_tokens`, and `output_tokens`. It does not record per-request sequence lengths, prefill/decode
-phase work, accelerator time/FLOPs, or the batching/KV-cache regime, and its documented known
-exclusions include model-call latency. **EVIDENCE — external.** Vaswani et al. give full
-self-attention per-layer complexity as a function of sequence length (`O(n^2 d)`):
-<https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html>.
-Sarathi-Serve distinguishes compute-intensive prompt prefill from one-token-at-a-time decode and
-shows that batching/scheduling materially changes serving efficiency:
-<https://www.usenix.org/conference/osdi24/presentation/agrawal>. DistServe independently treats
-prefill and decode as resource/parallelism-distinct phases:
-<https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin>.
-
-**INFERENCE.** Even perfect token telemetry does not make aggregate token totals an
-architecture-independent measure of inference compute. Two arms can have the same number of calls
-and the same total input/output tokens while distributing those tokens across different request
-lengths and phases, producing different accelerator work or serving opportunity. That is especially
-relevant here because a verified chain structurally changes call segmentation. This is distinct from
-T21: T21 concerns unavailable/opaque token telemetry; T24 remains when token counts are exact.
-
-**Required falsifier/mitigation.** Freeze what the cost construct means. If Goal 1 means a
-provider-metered token/call budget, name it as such and do not infer compute parity from it. If the
-claim requires complete compute parity, preserve per-call input/output lengths and runtime/cache/
-batching provenance and use an auditable hardware measure (for example accelerator-seconds/energy)
-or a validated architecture-specific FLOP estimator; prospectively match or stratify request-shape
-distributions across the causal controls. For opaque hosted models, report the token/call vector as
-a proxy plus a frozen sensitivity bound rather than a complete-compute certificate.
-
-### T25 — Self-declared event manifests cannot certify complete cost (`CRITICAL` until dispatch provenance exists)
-
-**EVIDENCE — repository.** Proposed G1-007 / PR #2 closes an `ArmCostTrace` when observed event IDs
-and kinds exactly match the caller-supplied `expected_events` manifest and required measurements are
-present. The module does not bind that manifest to a trusted pre-execution dispatch ledger or prove
-that a cost-bearing operation omitted from the manifest never occurred; PR #2 explicitly leaves
-external preregistration/non-fabrication of expected events as an unresolved harness assumption.
-**EVIDENCE — external.** The OpenTelemetry tracing SDK specification states that a batching span
-processor has a bounded `maxQueueSize` and drops spans after that queue is full:
-<https://opentelemetry.io/docs/specs/otel/trace/sdk/>. OpenTelemetry's Collector internal-telemetry
-documentation separately exposes enqueue/send failure counters precisely so operators can detect
-telemetry that did not make it through the pipeline:
-<https://opentelemetry.io/docs/collector/internal-telemetry/>.
-
-**INFERENCE.** Exact `observed == expected` equality is not a provenance certificate when the same
-external harness chooses the expected set. A harness can omit an expensive model/verifier/tool call
-from both sides and still close a report; telemetry loss can create the same shape without fraud.
-Therefore the current contract can establish consistency with a supplied manifest, not complete
-cost of all executed work.
-
-**Required falsifier/mitigation.** Route every cost-bearing external operation through a trusted
-dispatch wrapper that allocates and durably records an append-only event ID *before* the side effect.
-At closure, reconcile that dispatch ledger against provider request IDs/verifier invocations and the
-cost-event trace, and require telemetry/export drop counters to be zero or otherwise fully
-accounted. Any unregistered egress, dropped telemetry, post-hoc manifest mutation, or unmatched
-dispatch must block scientific accounting. If that provenance boundary cannot be built, describe
-the result as telemetry-consistent accounting rather than a complete-cost certificate.
-
-### T26 — Shared serving quotas and queues can create cross-arm interference (`CRITICAL` for hosted/concurrent runs)
-
-**EVIDENCE — repository.** Proposed G1-009 / PR #6 separates blinded evaluation order from execution
-order, but neither `goal1/GOAL1.json` nor the current arm contracts freeze an execution-concurrency
-or provider-quota-isolation policy. Proposed G1-007 / PR #2 also lists concurrency semantics among
-the still-unfrozen accounting prerequisites. **EVIDENCE — external.** OpenAI documents that API rate
-limits are defined at organization/project scope, that some model families share rate-limit pools,
-and that unsuccessful requests still consume rate-limit capacity:
-<https://platform.openai.com/docs/guides/rate-limits>. Anthropic documents organization-level limits,
-short-burst enforcement, model-class RPM/ITPM/OTPM limits, and cache-aware token accounting:
-<https://docs.anthropic.com/en/api/rate-limits>.
-
-**INFERENCE.** Paired cells are not isolated if they share a hosted serving quota, queue, cache, or
-retry budget. A request-heavy verified chain can consume RPM/TPM headroom or trigger backoff that
-changes the latency, failure probability, or available retry budget of a control executed nearby;
-conversely an arm can benefit from warm cache state produced by another arm. This can occur without
-semantic state leakage and is therefore distinct from T7. Blinding evaluation order does not repair
-execution-time interference.
-
-**Required falsifier/mitigation.** Prospectively freeze execution order/concurrency and the serving
-isolation boundary. Prefer separate provider projects/keys or isolated self-hosted serving pools per
-paired cell when practical; otherwise serialize/counterbalance cells with a frozen cooldown/reset
-policy and record rate-limit headers, 429/overload responses, automatic retries, cache-hit/write
-telemetry, queue/batch identity, and trusted request time. Treat provider throttling/overload as an
-infrastructure event under a symmetric preregistered rerun/censoring rule rather than selectively
-rerunning losing cells, and charge all retries/wait time that lies inside the declared cost boundary.
-
-### T27 — Scientific outcomes are not yet bound to final-verifier evidence (`CRITICAL`)
-
-**EVIDENCE — repository.** `OutcomeRecord` currently carries only `solved`, `verifier_passed`,
-identity strings, and aggregate cost. Its only verification invariant is that `solved=true` cannot
-coexist with `verifier_passed=false`. `evaluate_experiment` then consumes those booleans directly
-when computing paired wins and a final PASS; it does not require a proof/artifact digest, verifier
-identity/version, verifier result object, challenge/problem digest, or attestation binding the PASS
-to the exact submitted artifact. Proposed G1-003 / PR #9 does produce a richer `VerifierResult`
-(status, command, return code, stdout/stderr, elapsed time), but there is no repository contract yet
-that binds that result to an `OutcomeRecord` or to the exact formal artifact/problem subject.
-**EVIDENCE — external.** Lean's official reference states that tactics construct independently
-checkable proof terms and that each proof is checked by the kernel; its high-assurance validation
-guidance additionally replays the proof against the trusted challenge and checks that the proved
-theorem statement matches that challenge: <https://lean-lang.org/doc/reference/latest/ValidatingProofs/>.
-SLSA's approved Verification Summary Attestation similarly binds a verification result to an
-artifact `subject` digest, verifier identity/version, and verification policy:
-<https://slsa.dev/spec/v1.2/verification_summary>.
-
-**INFERENCE.** The current scientific evaluator can distinguish a contradictory boolean pair, but it
-cannot establish that `verifier_passed=true` came from any kernel execution, much less from the
-correct problem/artifact. A harness defect, record-construction bug, or replayed PASS can therefore
-manufacture an apparently solved cell without violating `OutcomeRecord`. This is distinct from T4
-and T11: those threats concern verifier independence and checker exploitation after a real verifier
-interaction; T27 is the missing evidence-binding edge between final verification and the statistic.
-As written, a future evaluator PASS would not itself prove Goal 1's stated requirement of "kernel
-verification for every solved outcome."
-
-**Required falsifier/mitigation.** Replace the naked scientific boolean with an evidence-bound final
-outcome contract. At minimum bind every solved cell to the exact problem/challenge digest, final
-artifact/proof digest, final-verifier implementation/version and policy/environment identity, and an
-authoritative PASS receipt/attestation digest. The scientific evaluator should validate that binding
-(or consume an independently generated final-verifier ledger) before counting the cell as solved.
-For high-assurance formal runs, replay the exact final artifact against the frozen challenge in a
-clean verifier environment. Missing, mismatched, replayed, or unverifiable evidence must fail closed;
-search-time verifier evidence must remain distinct from final-outcome evidence.
-
-### T28 — Benchmark names and problem IDs are not bound to the locked benchmark bytes (`CRITICAL`)
-
-**EVIDENCE — repository.** Current `BenchmarkProblemIdentity.canonical_id` hashes only the logical
-fields `benchmark`, `version`, `split`, and `native_id`; `SplitContract.contract_id` is derived from
-those logical problem IDs and split metadata. Proposed G1-002 / PR #11 separately creates a
-`BENCHMARK.lock.json` with a `content.root_sha256`, but the current `ExperimentSpec.from_mapping`
-does not consume the `benchmark` object or any benchmark-lock/split-contract digest at all. Current
-`OutcomeRecord` likewise carries only `experiment_id`, `problem_id`, `arm`, `budget_id`, booleans,
-and aggregate cost. **EVIDENCE — external.** MLflow's current dataset-tracking contract records both
-a dataset name and a digest/hash plus source lineage rather than treating the name alone as the data
-identity: <https://mlflow.org/docs/latest/dataset/>. Hugging Face Datasets similarly describes a
-fingerprint as tracking the current state of a dataset and changing after transforms:
-<https://huggingface.co/docs/datasets/v1.16.0/about_cache.html>.
-
-**INFERENCE.** A human-readable benchmark/version/split label is not a content identity. Even after
-G1-002 lands, Goal 1 can have a valid benchmark-tree lock living beside scientific records that are
-not cryptographically or deterministically bound to it. Replacing/correcting benchmark bytes,
-changing preprocessing, or replaying an old outcome against the same logical problem IDs could
-therefore leave the evaluator unable to distinguish different scientific inputs. This is distinct
-from T5/T20 contamination: the defect exists even for a perfectly clean benchmark because the
-measurement record is not tied to the exact dataset state it claims to evaluate.
-
-**Required falsifier/mitigation.** Freeze and bind the exact benchmark artifact into the experiment
-contract before any confirmatory execution. At minimum include the trusted `BENCHMARK.lock.json`
-`content.root_sha256` and the exact `SplitContract.contract_id` (or equivalent content-derived split
-digest) in the frozen `ExperimentSpec`, carry the applicable benchmark/problem-content digest into
-each `OutcomeRecord`, and require `evaluate_experiment` to reject any mismatch. If preprocessing,
-formalization, or retrieval-visible benchmark projections transform the source data, bind those
-transforms/tool versions too. A prior outcome must not be reusable after any benchmark-content or
-split-contract digest changes.
-
-### T29 — Statistical significance is not a minimum scientific effect (`HIGH`)
-
-**EVIDENCE — repository.** `goal1/GOAL1.json` freezes `familywise_alpha=0.05` and requires verified-chain
-superiority over every control under Holm-corrected exact paired tests. Current `ExperimentSpec`
-contains no minimum effect-size, precision, power, or sensitivity target. Current
-`evaluate_experiment` declares PASS when each control comparison has more verified-chain-only wins
-than control-only wins and the Holm-adjusted exact McNemar null is rejected; it does not require a
-minimum absolute solve-rate gain or uncertainty bound around that gain. **EVIDENCE — external.** The
-American Statistical Association's statement on p-values explicitly says that statistical
-significance does not measure effect size or importance, and that scientific conclusions should not
-be based only on crossing a p-value threshold:
-<https://doi.org/10.1080/00031305.2016.1154108>. Lakens' sample-size-justification review likewise
-argues that study design should be tied to the inferential goal, including the smallest effect size
-of interest, desired precision, or power/sensitivity:
-<https://doi.org/10.1525/collabra.33267>.
-
-**INFERENCE.** A sufficiently large confirmatory set can make a very small positive paired advantage
-statistically decisive, while a small confirmatory set can fail to reject despite an effect large
-enough to matter. The current binary PASS/FAIL therefore answers a null-rejection question but does
-not by itself establish that the gain is scientifically meaningful, nor does FAIL establish useful
-absence of an effect. This is distinct from T23: T23 concerns invalid p-values under clustered
-sampling; T29 remains even when every McNemar assumption is satisfied.
-
-**Required falsifier/mitigation.** Before confirmatory execution, freeze the effect quantity that
-matters (for example paired solve-rate difference against each control), a justified smallest effect
-size of interest or other decision-relevant margin, and the intended uncertainty/sensitivity rule.
-Report the effect estimate and an interval or equivalent uncertainty summary for every control.
-Justify the confirmatory problem count prospectively against that inferential target; if no minimum
-meaningful effect can be justified, narrow PASS to "statistically detectable positive difference
-under the frozen test" rather than treating it as evidence of a practically/scientifically material
-mechanism advantage.
-
-### T30 — Paired cells are not bound to the same problem/prompt payload (`CRITICAL`)
-
-**EVIDENCE — repository.** Current `OrdinaryRequest`, `PortfolioRequest`, `ProductOnlyRequest`, and
-`MultiFidelityRequest` each accept an independently supplied free-form `problem_statement` string.
-Their result validators bind request/result identity through `request_id`, `experiment_id`,
-`problem_id`, and `budget_id` (plus arm-specific attempt/product/stage identifiers), but do not bind
-or compare a digest of the exact problem text or rendered prompt payload. `OutcomeRecord` and
-`evaluate_experiment` likewise join paired cells by logical `problem_id` and arm without carrying a
-request/prompt digest. Proposed G1-006 / PR #5 is even narrower at its verification boundary:
-`VerifiedChain` is constructed from `problem_id`, and its verification subject commits to that
-logical ID plus product/lineage fields, not to the exact problem statement or model-visible prompt
-bytes. **EVIDENCE — external.** Sclar et al., ICLR 2024, found that meaning-preserving prompt-format
-changes can produce very large performance differences, including up to 76 accuracy points in their
-evaluated setting: <https://openreview.net/pdf?id=RIu5lyNXjT>.
-
-**INFERENCE.** A nominally paired `(problem_id, arm)` comparison can therefore count outcomes from
-non-identical causal inputs. One arm could receive a differently normalized theorem, altered premise
-order, additional hint, different wrapper/instruction text, truncated context, or other prompt
-projection while retaining the same `problem_id`. That can create or erase a measured arm effect
-without changing the intended verified-product mechanism. This remains possible even if T8 freezes a
-global prompt template and T28 binds the benchmark tree: neither currently proves that the exact
-per-cell model-visible problem/prompt payload is identical wherever the causal design requires it.
-
-**Required falsifier/mitigation.** Derive each benchmark problem payload once from the frozen content
-lock, canonicalize the exact model-visible problem statement plus common instruction/context wrapper,
-and assign a content digest before arm dispatch. Every arm request and scientific outcome should
-carry that digest; admission/evaluation should reject paired cells whose common-input digest differs.
-Arm-specific mechanism instructions should be represented as a separately frozen, explicit,
-allowlisted delta so only the intended causal treatment differs. Preserve the final rendered input
-(or an independently reconstructable digest/provenance record) for audit and replay.
-
-### T31 — Repeated confirmatory looks can turn fixed-horizon PASS into optional-stopping bias (`CRITICAL`)
-
-**EVIDENCE — repository.** `goal1/GOAL1.json` freezes one `familywise_alpha=0.05` and requires
-Holm-corrected exact paired tests, but it does not freeze the number of outcome-bearing confirmatory
-analyses, a maximum number of whole-run reruns, an alpha-spending rule, or an anytime-valid
-procedure. `ExperimentSpec` likewise has no confirmatory run/analysis nonce, look index, maximum
-looks, or sequential-testing contract. `evaluate_experiment` applies the same fixed-horizon exact
-McNemar plus Holm decision rule whenever it receives a complete record set; nothing in that contract
-prevents another stochastic/nondeterministic complete run from being evaluated after a FAIL.
-**EVIDENCE — external.** Johari, Koomen, Pekelis, and Walsh show that ordinary frequentist p-values
-and confidence intervals lose their nominal guarantees when sample size/stopping is chosen by
-continuous monitoring, and develop always-valid sequential alternatives:
-<https://pubsonline.informs.org/doi/10.1287/opre.2021.2135>. FDA group-sequential guidance likewise
-describes planned interim looks as requiring prospective design while controlling the study-wide
-Type I error rate:
-<https://www.fda.gov/files/medical%20devices/published/Adaptive-Designs-for-Medical-Device-Clinical-Studies---Guidance-for-Industry-and-Food-and-Drug-Administration-Staff.pdf>.
-
-**INFERENCE.** Holm correction controls multiplicity across the four control comparisons *within one
-analysis*; it is not a correction for repeatedly rerunning or re-evaluating the confirmatory claim
-and stopping at the first PASS. This threat remains even if the benchmark, prompts, model, and
-analysis code never change: stochastic model outputs, hosted-runtime nondeterminism, or symmetric
-whole-run retries can create multiple looks whose continuation decision depends on observed
-outcomes. T31 is therefore distinct from T12 (how stochastic samples are reduced inside one cell)
-and T13 (protocol/holdout adaptation after seeing results).
-
-**Required falsifier/mitigation.** Freeze one of two valid regimes before confirmation. Prefer a
-one-shot primary analysis: assign one immutable confirmatory run/analysis ID, one frozen record set,
-and exactly one authorized primary statistical evaluation, with infrastructure reruns governed by a
-symmetric prospective rule that does not depend on scientific outcomes and preserves failed/aborted
-attempts in an audit ledger. If multiple outcome-bearing looks are scientifically intended, freeze a
-valid group-sequential/alpha-spending or anytime-valid procedure, including maximum looks or stopping
-boundaries and how Holm/multiple-control correction composes with the sequential rule. Never discard
-a failed complete look and restart at full alpha. Within-look Holm must not be represented as
-sequential error control.
-
-## Minimum design conditions before a scientific Goal 1 run
-
-The confirmatory run should not start until all of the following are frozen and inspectable:
-
-1. benchmark identity, immutable split/hashes, allowed proof library, contamination policy, and benchmark-fidelity audit;
-2. exact model/provider/version, prompts, sampling/seed policy, context limits, and tool permissions;
-3. executable contracts for all five arms showing which causal features differ;
-4. search-verifier and final-verifier identities, query/diagnostic budgets, verification granularity, and clean replay rules;
-5. cross-arm/cross-problem isolation and execution randomization;
-6. complete-cost accounting boundary plus an equal-cost or preregistered cost-frontier comparison, including generator and verifier computation;
-7. retry, timeout, early-stop, residual-budget, and failure semantics;
-8. replication/aggregation rule and the frozen paired statistical decision rule;
-9. development/confirmatory separation preventing adaptive benchmark reuse;
-10. prospective robustness checks against memorized-instance success when controlled variants are used;
-11. model-version attestation and paired time blocking for hosted services;
-12. inference-runtime reproducibility controls or an explicit hosted-backend uncertainty plan;
-13. semantic/family-level contamination analysis with residual risk stated explicitly;
-14. auditable hidden/reasoning-cost telemetry or a frozen uncertainty/sensitivity analysis;
-15. contract-equivalent intermediate representation, chain-length, stopping, parentage, and finalization semantics for the primary verified-chain/product-only causal pair;
-16. an explicit estimand for verifier-conditioned reject/retry: either matched as a nuisance variable or declared part of the treatment;
-17. an independent benchmark sampling unit plus cluster/family-aware inference when multiple items share a latent source/template;
-18. request-shape-aware model-compute accounting, or an explicit statement that the frozen cost construct is a token/call proxy rather than complete compute;
-19. a trusted pre-execution dispatch ledger reconciled to all cost events/provider-runtime request evidence, with dropped or unregistered telemetry blocking closure;
-20. an execution-isolation plan for shared provider quotas, caches, queues, backoff/retry state, and concurrent serving interference;
-21. evidence-bound final outcomes tying every solved cell to the exact challenge, proof/artifact digest, final-verifier identity/policy, and independently checkable PASS evidence;
-22. an experiment-level benchmark-content binding tying every scientific outcome to the exact benchmark lock, split contract, and any preprocessing/formalization transform identity;
-23. a prospectively justified effect-size/precision target and confirmatory problem count, with uncertainty reported alongside every paired comparison;
-24. a content-addressed common problem/prompt payload bound into every paired arm request/outcome, with arm-specific prompt differences restricted to a frozen causal-delta contract;
-25. a one-shot confirmatory analysis identity or a prospectively valid sequential/alpha-spending rule covering every outcome-bearing look/rerun, with failed/aborted runs preserved rather than selectively discarded.
-
-Passing implementation tests is necessary but not sufficient for these scientific conditions. The
-adversarial question for every future change is: **could this change improve the verified-chain arm
-without changing the intended verified-product mechanism?** If yes, the change is a potential
-confound and needs either a matched control or a narrower claim.
-
-### T32 — Verifier identity is not bound to a hermetic executable/toolchain environment (`CRITICAL`)
-
-**EVIDENCE — repository.** Current merged G1-006 derives `_verifier_id` only from the verifier command
-template and timeout. `VerifiedChain.verify_pending` invokes G1-003 `run_verifier` with only that
-command and timeout; it does not pass a frozen `cwd` or `env`. G1-003 in turn calls
-`subprocess.Popen` with `cwd=None` and `env=None` in this path. The evidence digest binds the command
-template, timeout, result status/return code, and stdout/stderr hashes, but it does not bind the
-resolved executable bytes, ambient environment, working directory, proof-assistant toolchain,
-project/library snapshot, or container/runtime image. **EVIDENCE — external.** Python's official
-`subprocess.Popen` documentation states that `env=None` uses the default behavior of inheriting the
-current process environment, that executable-path resolution is platform dependent, and recommends
-a fully qualified executable path for maximum reliability:
-<https://docs.python.org/3/library/subprocess.html>. Lean's official Elan documentation states that
-PATH proxies select a toolchain from the current context/project and recommends a specific version
-in `lean-toolchain` for reproducible project use:
-<https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Managing-Toolchains-with-Elan/>.
-
-**INFERENCE.** The same Supernova `verifier_id` can therefore name materially different checker
-executions. A PATH change, directory-specific Elan override, different `lean-toolchain`, library
-checkout, environment variable, or replaced executable can change what accepts a product without
-changing the hashed verifier identity. Even if the output/status happens to remain the same, the
-receipt cannot prove which verifier implementation or dependency state actually ran. T32 is more
-specific than T4's abstract independence concern and survives T27's proposed outcome-evidence
-binding unless the verifier identity itself becomes content/environment bound.
-
-**Required falsifier/mitigation.** Make verifier execution hermetic and bind that identity into every
-search/final verification receipt: use an absolute/content-addressed executable or immutable runtime
-image; freeze and record the exact toolchain version/digest, project/library/import snapshot,
-working directory, and an allowlisted environment; include those digests in `verifier_id` and the
-evidence subject. For Lean, pin the project toolchain to a specific release/nightly and freeze the
-library/manifest state used by the checker. At replay, resolve and attest the same executable,
-toolchain, environment, and inputs before accepting PASS. Any drift should fail closed rather than
-reuse the same verifier identity.
-
-**Addendum to minimum design conditions.** 26. a hermetic, content-addressed verifier runtime binding
-covering executable/toolchain bytes, cwd, allowlisted environment, proof-library/import state, and
-runtime/container identity, with drift rejected during replay.
-
-### T33 — Elapsed verifier/orchestration milliseconds are not resource-normalized compute (`HIGH`; `CRITICAL` if complete cost means compute parity)
-
-**EVIDENCE — repository.** `CompleteCost` represents non-model work only as
-`verifier_milliseconds` and `orchestration_milliseconds`. `CostEvent` accepts one elapsed
-`milliseconds` value for verifier/orchestration events; it carries no CPU/core time, accelerator
-usage, memory, energy, thread/quota allocation, or resource-container identity. The merged
-`docs/COST_MODEL.md` already requires the measurement environment, host class, timing method, and
-concurrency semantics to be frozen before scientific use, and explicitly keeps the cost model
-unfrozen until those assumptions are justified. **EVIDENCE — external.** Python's official `time`
-documentation distinguishes elapsed/performance time from CPU time: `perf_counter()` includes time
-elapsed during sleep, while `process_time()` measures system plus user CPU time and excludes sleep:
-<https://docs.python.org/3/library/time.html>. Linux cgroup v2 exposes `cpu.stat` usage (`usage_usec`,
-`user_usec`, `system_usec`) and throttling separately (`nr_throttled`, `throttled_usec`):
-<https://kernel.org/doc/html/next/admin-guide/cgroup-v2.html>.
-
-**INFERENCE.** Equal elapsed milliseconds do not establish equal non-model compute. One arm can use
-more CPU cores/threads or accelerator parallelism over the same elapsed interval; conversely,
-queueing, sleeping, or cgroup throttling can increase elapsed time without proportionally increasing
-executed compute. Summing overlapping per-operation elapsed durations closes a makespan discount but
-does not normalize resource intensity. This is distinct from T24, which concerns model-token and
-request-shape proxies for LLM inference compute; T33 concerns verifier/orchestration resources.
-
-**Required falsifier/mitigation.** Prospectively freeze per-cell CPU quota/core count, thread policy,
-accelerator allocation, host/container/cgroup identity, and relevant runtime settings. Preserve
-elapsed latency separately, but also record resource-normalized usage where material—for example
-cgroup/process CPU time and accelerator time/energy or another auditable hardware measure—and bind
-that provenance to the cost record. Fail closed or stratify on allocation drift. If only elapsed
-milliseconds are available, narrow the claim to an elapsed-time/token cost proxy and do not describe
-it as complete compute parity.
-
-**Addendum to minimum design conditions.** 27. resource-normalized verifier/orchestration accounting,
-or an explicit elapsed-time proxy limitation, with CPU/accelerator allocation and measured usage
-bound into the scientific cost record.
-
-### T34 — Scientific cost is not bound to the closed cost-telemetry report (`CRITICAL`)
-
-**EVIDENCE — repository.** Current `OutcomeRecord` carries a standalone caller-supplied `CompleteCost`
-value. `evaluate_experiment` checks that value directly with `record.cost.within(spec.budget_ceiling)`
-and never consumes `ArmCostTrace` or `CompleteCostReport`. Conversely, merged G1-007's
-`CompleteCostReport` closes five arm traces from event/manifest telemetry but carries no
-`experiment_id`, `problem_id`, replicate/cell identity, outcome-record digest, or other subject that
-lets the scientific evaluator deterministically join one closed telemetry report to the exact
-outcome it scores. **EVIDENCE — external.** The W3C Trace Context Recommendation defines a propagated
-`trace-id` specifically so data for one distributed request/transaction can be uniquely identified
-and correlated across participating components: <https://www.w3.org/TR/trace-context/>. OpenTelemetry
-likewise defines `SpanContext` with propagated `TraceId`/`SpanId` and links for causally related work:
-<https://opentelemetry.io/docs/specs/otel/trace/api/>.
-
-**INFERENCE.** A correct complete-cost subsystem can exist beside a scientifically unbound cost
-field. As the contracts stand, a harness can supply an `OutcomeRecord.cost` that is lower than the
-cost established by a closed telemetry report, or attach a valid report from a different problem,
-replicate, or arm execution, and `evaluate_experiment` has no evidence edge on which to detect the
-mismatch. This is distinct from T25: T25 asks whether the telemetry/manifest itself is complete; T34
-asks whether even a complete telemetry record is the one actually attributable to the scored
-scientific cell. Until that join exists, evaluator budget compliance is a claim about a submitted
-aggregate, not a certificate derived from the trusted execution ledger.
-
-**Required falsifier/mitigation.** Allocate an immutable cell-execution/trace identity before any
-cost-bearing dispatch and bind it to experiment ID, exact problem/input digest, arm, replicate/run,
-and budget. Carry that subject identity through every dispatch/event and the closed cost report, then
-derive (rather than independently accept) the scientific `OutcomeRecord.cost` from the closed report
-or its authenticated digest. The evaluator should join and recompute cost from that evidence, reject
-missing/multiple/mismatched report subjects, and prevent one closed report from being replayed across
-cells. If reporting costs at a coarser run level, freeze an explicit deterministic allocation rule
-that reconciles the run-level ledger to every scored cell.
-
-**Addendum to minimum design conditions.** 28. an evidence-bound cost-to-outcome join that derives
-each scored cell's budget/accounting claim from its uniquely attributable closed telemetry/dispatch
-record rather than from an independently supplied aggregate.
+The severity labels describe how damaging the threat would be to the corresponding interpretation.
+The **phase** column identifies when the mitigation must be resolved for the stated claim.
+
+| ID | Threat | Severity | Evidence and inference | Smallest falsifier / mitigation | Phase |
+| --- | --- | --- | --- | --- | --- |
+| T1 | Treatment-bundle confounding | CRITICAL | Verified chain combines decomposition, state, verification, continuation and consumption. A win need not be a pure gating effect. | Freeze the package estimand now; for a pure-gating claim add matched ablations that remove one mechanism at a time. | Confirmatory |
+| T2 | Common ceiling != equal realized cost | CRITICAL | Test-time allocation changes capability; both arms can be below one ceiling while one spends more. Snell et al.: <https://arxiv.org/abs/2408.03314>. | Match realized proxy cost, freeze residual-budget reuse, or compare preregistered cost frontiers. | Confirmatory |
+| T3 | Intermediate verifier is a search oracle | CRITICAL | Verifier ranking/feedback can improve search independently of downstream verified-object consumption. Cobbe et al.: <https://arxiv.org/abs/2110.14168>. | Match verifier query count, response vocabulary, diagnostic bandwidth and verification frequency. | Confirmatory |
+| T4 | Distinct IDs != independent verification | HIGH | Different producer/verifier strings do not prove independent process/runtime state. | Bind implementation/runtime identities and replay in a clean verifier process. | Confirmatory for independence claim; otherwise robustness limitation |
+| T5 | Benchmark contamination / selection leakage | CRITICAL | Public benchmarks may appear in training and adaptive benchmark choice can overfit. LiveBench: <https://arxiv.org/abs/2406.19314>. | Freeze content/split before confirmation; protect confirmatory set; report residual training-overlap risk. | Confirmatory; semantic residual risk in robustness |
+| T6 | Formal-library answer leakage | HIGH | Held-out theorem statements can leak through known proofs/helper lemmas in allowed libraries. LeanDojo: <https://proceedings.neurips.cc/paper_files/paper/2023/file/4441469427094f8873d0fecb0c4e1cee-Paper-Datasets_and_Benchmarks.pdf>. | Freeze library/retrieval snapshot and audit exact/near proof overlap. | Confirmatory for allowed-access parity; residual novelty/generalization in robustness |
+| T7 | Cross-arm / cross-problem state leakage | CRITICAL | Conversation state, products, caches or diagnostics can cross causal cells. | Fresh per-cell state; frozen order/randomization; prohibit undeclared transfer. | Confirmatory |
+| T8 | Unequal model/tool/prompt capability | CRITICAL | Provider/model/version, prompt, reasoning effort and tools can dominate the mechanism. | Freeze common capability surface and explicit arm-specific causal delta. | Confirmatory |
+| T9 | Free work outside accounting boundary | HIGH | Failed calls, tools, preprocessing, retrieval, setup and human intervention may subsidize one arm. | Predeclare boundary; dispatch-register every attributable operation; missing telemetry is unknown. | Confirmatory for included resources; omitted-resource sensitivity afterward |
+| T10 | Early-stop / retry asymmetry | CRITICAL for pure gating | Adaptive retries change search opportunity. Snell et al.: <https://arxiv.org/abs/2408.03314>. | Match or explicitly include reject/retry in package estimand; charge all attempts. | Confirmatory |
+| T11 | Verifier overfitting / diagnostic exploitation | HIGH | Iterative Lean feedback can be optimized against; checker acceptance may be narrower than intended construct. | Narrow search-verifier channel; clean final replay; preserve raw evidence. | Confirmatory for kernel-valid claim; broader semantic robustness later |
+| T12 | Seed luck / undefined replication | HIGH | Selective reruns create researcher degrees of freedom. | Freeze seeds/replicate count and aggregation; preserve failed attempts. | Confirmatory |
+| T13 | Confirmatory-set reuse | CRITICAL | Repeated adaptation to held-out outcomes converts the holdout into development data. | Separate development/pilot and one protected confirmatory analysis or valid retest rule. | Confirmatory |
+| T14 | Dry-run evidence promoted to science | BLOCKER if misreported | Active `GOAL1.json` is dry and cost-unfrozen. | Label all dry/pilot outputs zero-credit. | Dry/Pilot |
+| T15 | Kernel-valid but benchmark-invalid | HIGH/CRITICAL by benchmark | Formal statements can be vacuous/unsafe/wrongly formalized. Ammanamanchi et al.: <https://arxiv.org/abs/2606.29493>. | Mechanical fidelity audit and audited informal-to-formal mapping. | Core malformed-item checks before confirmation; broader sensitivity after |
+| T16 | Verifier compute/frequency is a treatment | CRITICAL | Solve-versus-verify allocation and verification frequency affect performance. Setlur: <https://proceedings.mlr.press/v267/setlur25a.html>; Singhi: <https://arxiv.org/abs/2504.01005>. | Match/log verifier frequency and account generator+verifier resources jointly. | Confirmatory |
+| T17 | Memorized instance vs structural reasoning | HIGH | Fresh/variabilized math can expose memorization. MathArena: <https://arxiv.org/abs/2505.23281>; VAR-MATH: <https://arxiv.org/abs/2507.12885>. | Fresh/post-cutoff or structure-preserving variants under frozen analysis. | Robustness/Sensitivity |
+| T18 | Hosted model time drift | CRITICAL if arm/time confounded | Hosted model behavior/version can move. Chen et al.: <https://arxiv.org/abs/2307.09009>. | Specific version where possible; trusted request time; paired counterbalanced narrow blocks. | Confirmatory |
+| T19 | Backend nondeterminism | HIGH | Batch/hardware/numerics can change outputs even at deterministic decoding. Yuan et al.: <https://proceedings.neurips.cc/paper_files/paper/2025/hash/f80094a824ba5912d4a2de169c404a40-Abstract-Conference.html>. | Freeze self-hosted runtime or randomize/replicate hosted runs under a prospective policy. | Confirmatory design control; residual sensitivity |
+| T20 | Soft contamination | CRITICAL for strong OOD claim | Semantic duplicates evade exact/n-gram filters. Spiesberger et al.: <https://arxiv.org/abs/2602.12413>. | Semantic/family overlap audit or fresh post-cutoff families; state residual risk. | Robustness/Sensitivity unless clean-OOD is part of primary claim |
+| T21 | Hidden-reasoning telemetry | HIGH | Invisible reasoning can be billed/used without visible text. CoIn: <https://arxiv.org/abs/2505.13778>. | Name provider-metered or scheduled-chat proxy; never zero-fill; freeze hidden-cost sensitivity. | Confirmatory proxy definition; physical-compute uncertainty in robustness |
+| T22 | Verifier-conditioned retry mismatch | CRITICAL for pure gating | Product-only now matches representation/chain semantics better, but verified chain still gets FAIL-conditioned reject/retry. Leanabell-Prover-V2: <https://arxiv.org/abs/2507.08649>. | Primary estimand = verified-gated search+consumption package unless retry is matched. | Confirmatory |
+| T23 | Clustered problem families break ordinary McNemar assumptions | CRITICAL if clustered | Ordinary McNemar assumes independence across matched pairs. Eliasziw & Donner: <https://onlinelibrary.wiley.com/doi/10.1002/sim.4780101211>. | Freeze independent sampling unit; family-level or cluster-aware inference. | Conditional confirmatory blocker |
+| T24 | Aggregate tokens != physical compute | CRITICAL only for equal-compute claim | Sequence shape, prefill/decode and batching change work. Vaswani: <https://papers.nips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html>; Sarathi-Serve: <https://www.usenix.org/conference/osdi24/presentation/agrawal>. | Call the metric a token/call proxy unless auditable hardware compute is available; freeze sensitivity. | Proxy definition confirmatory; physical-compute question robustness |
+| T25 | Self-declared event manifest != complete provenance | CRITICAL | A harness can omit work from both expected and observed sets; telemetry may drop. OpenTelemetry SDK: <https://opentelemetry.io/docs/specs/otel/trace/sdk/>. | Trusted pre-dispatch append-only registration plus reconciliation/drop detection. | Confirmatory; pilot may exercise it without credit |
+| T26 | Shared serving quota/queue interference | CRITICAL when hosted cells share capacity | Provider quotas/caches/backoff can couple arms. OpenAI rate limits: <https://platform.openai.com/docs/guides/rate-limits>; Anthropic: <https://docs.anthropic.com/en/api/rate-limits>. | Isolate serving pools or serialize/counterbalance with complete rate-limit/retry telemetry. | Conditional confirmatory blocker |
+| T27 | Outcome not bound to final-verifier evidence | CRITICAL | Naked `verifier_passed`/`solved` booleans cannot prove which artifact/challenge passed. Lean validation: <https://lean-lang.org/doc/reference/latest/ValidatingProofs/>. | Bind exact challenge, artifact digest, verifier/runtime policy and PASS receipt; clean replay. | Confirmatory; pilot should exercise join |
+| T28 | Scientific record not bound to benchmark bytes | CRITICAL | A locked benchmark exists separately from active scientific records. | Bind `BENCHMARK.lock.json` root, split contract and transforms into experiment/outcome identities. | Confirmatory |
+| T29 | Statistical significance != meaningful effect | HIGH | P-value thresholds do not encode effect magnitude. ASA: <https://doi.org/10.1080/00031305.2016.1154108>; Lakens: <https://doi.org/10.1525/collabra.33267>. | Freeze effect quantity, meaningful margin or explicit no-margin interpretation, precision/power target. | Confirmatory |
+| T30 | Paired arms not bound to exact same model-visible input | CRITICAL | Meaning-preserving prompt formatting can materially change performance. Sclar et al.: <https://openreview.net/pdf?id=RIu5lyNXjT>. | Content-address canonical common input; arm-specific instructions are a frozen causal delta. | Confirmatory |
+| T31 | Repeated confirmatory looks / optional stopping | CRITICAL | Reusing fixed-horizon p-values across outcome-dependent looks inflates error. Johari et al.: <https://pubsonline.informs.org/doi/10.1287/opre.2021.2135>. | One immutable primary analysis or prospectively valid sequential/alpha-spending rule. | Confirmatory |
+| T32 | Verifier identity not hermetic | CRITICAL for reproducible proof evidence | Ambient PATH/env/cwd can change the checker behind one command string. Python subprocess: <https://docs.python.org/3/library/subprocess.html>; Lean Elan: <https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Managing-Toolchains-with-Elan/>. | Bind resolved executable/image, toolchain/library, cwd and allowlisted env; fail replay on drift. | Confirmatory for reproducible final evidence; deeper environment stress robustness |
+| T33 | Elapsed ms != resource-normalized non-model compute | HIGH; CRITICAL only for physical-compute claim | Wall time includes queue/sleep and ignores core/accelerator intensity. Python time: <https://docs.python.org/3/library/time.html>; Linux cgroup v2: <https://kernel.org/doc/html/next/admin-guide/cgroup-v2.html>. | Freeze resource allocation; measure CPU/accelerator usage where available; otherwise call it elapsed-time proxy and sensitivity-test. | Proxy definition confirmatory; physical-compute parity robustness |
+| T34 | Cost report not bound to scored scientific cell | CRITICAL | `OutcomeRecord.cost` can be supplied independently of the closed cost telemetry report. W3C Trace Context: <https://www.w3.org/TR/trace-context/>. | Pre-dispatch cell execution ID; propagate through all events/report; evaluator derives/reconciles cost and rejects replay/mismatch. | Confirmatory; pilot should test failure paths |
+
+## Interpretation rule
+
+Passing implementation tests is necessary but not sufficient. For every future change ask:
+**could this improve the verified-gated arm without changing the intended frozen package?** If yes,
+it is either a confound that needs matching or a reason to narrow the estimand.
+
+For the first confirmatory run, the scientifically honest statement is therefore conditional:
+Supernova may estimate the effect of the **verified-gated search-and-consumption package under the
+frozen observable/provider-metered cost proxy**. A claim about pure intermediate-product gating,
+contamination-free structural reasoning, or equal physical compute requires the additional matched
+control or robustness evidence identified above.
