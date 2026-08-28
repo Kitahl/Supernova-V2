@@ -5,6 +5,11 @@ completion signing material is created outside :class:`DispatchAuthority` and mu
 remain process-isolated from the registrar/closer. Python object privacy, name
 mangling, and copy guards are defense-in-depth only; they are not the security
 boundary.
+
+Completeness is enforceable only for dispatches preregistered through the retained
+authority. An out-of-band model or scheduled-chat call that bypasses registration is
+outside this module's observation boundary; credited consumers must require the
+authority-backed closed-join readback/verification path.
 """
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -522,7 +528,7 @@ class CompletionSigner:
     not defend against a malicious process that can inspect its own memory.
     """
 
-    __slots__ = ("__private_key", "__public_key", "__used")
+    __slots__ = ("__private_key", "__public_key", "__used", "__lock")
 
     def __init__(self, private_key: bytes | None = None, *, _factory: object | None = None) -> None:
         if _factory is not _SIGNER_FACTORY or type(private_key) is not bytes or len(private_key) != _OTS_PRIVATE_BYTES:
@@ -530,6 +536,7 @@ class CompletionSigner:
         self.__private_key = bytearray(private_key)
         self.__public_key = _ots_public_key(private_key)
         self.__used = False
+        self.__lock = threading.Lock()
 
     @classmethod
     def generate(cls) -> "CompletionSigner":
@@ -549,8 +556,6 @@ class CompletionSigner:
         raise TypeError("CompletionSigner must not be serialized; isolate it in the executor process")
 
     def complete(self, *, entry: DispatchEntry, payload: CompletionPayload) -> CompletionRecord:
-        if self.__used:
-            raise ValueError("completion signer is one-shot")
         entry = _revalidate_entry(entry)
         payload = _revalidate_payload(payload)
         request = payload.request
@@ -565,11 +570,15 @@ class CompletionSigner:
         if not hmac.compare_digest(self.public_commitment, entry.completion_verifier_sha256):
             raise ValueError("executor signer does not match preregistered verifier commitment")
         body = CompletionRecord._body(entry, payload)
-        key_bytes = bytes(self.__private_key)
-        signature = _ots_sign(key_bytes, _canon("supernova.dispatch.completion.v3", body))
-        for i in range(len(self.__private_key)):
-            self.__private_key[i] = 0
-        self.__used = True
+        message = _canon("supernova.dispatch.completion.v3", body)
+        with self.__lock:
+            if self.__used:
+                raise ValueError("completion signer is one-shot")
+            self.__used = True
+            key_bytes = bytes(self.__private_key)
+            for i in range(len(self.__private_key)):
+                self.__private_key[i] = 0
+            signature = _ots_sign(key_bytes, message)
         return CompletionRecord(
             entry.run_id,
             entry.dispatch_id,
