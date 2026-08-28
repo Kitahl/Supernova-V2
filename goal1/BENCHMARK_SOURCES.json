@@ -20,7 +20,8 @@
       "validation_split_value": "valid",
       "test_split_value": "test",
       "license": "UNSPECIFIED_IN_SOURCE_REPOSITORY",
-      "role": "validation source and test-identity reference"
+      "role": "validation source and test-identity reference",
+      "raw_url": "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-Prover-V1.5/2c4ba9119eef74d0d611f494261b2c5bae98c69a/datasets/minif2f.jsonl"
     },
     "kimina_corrected_test": {
       "repository_url": "https://huggingface.co/datasets/AI-MO/minif2f_test",
@@ -31,7 +32,8 @@
       "format": "parquet",
       "expected_records": 244,
       "license": "Apache-2.0",
-      "role": "corrected test source"
+      "role": "corrected test source",
+      "raw_url": "https://huggingface.co/datasets/AI-MO/minif2f_test/resolve/5def318348521dfc34875045a9ecddf729a2b49f/data/train-00000-of-00001.parquet?download=true"
     }
   },
   "assembly": {
