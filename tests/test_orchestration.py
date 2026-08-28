@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -23,6 +24,8 @@ EXPECTED_ROLES = {
     "MF06",
     "BIL00",
 }
+SUPERVISORS = {"MM06", "MF06", "BIL00"}
+VALID_STATUSES = {"READY", "WAITING", "DONE"}
 
 
 class OrchestrationTests(unittest.TestCase):
@@ -50,12 +53,23 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(len(scheduler_ids), len(set(scheduler_ids)))
         self.assertEqual(task_ticket_ids, board_ticket_ids)
 
-    def test_builders_start_ready_and_supervisors_wait(self) -> None:
+    def test_worker_states_are_typed_and_supervisors_wait(self) -> None:
         by_owner = {ticket["owner"]: ticket for ticket in self.board["tickets"]}
-        for role in EXPECTED_ROLES - {"MM06", "MF06", "BIL00"}:
-            self.assertEqual("READY", by_owner[role]["status"])
-        for role in {"MM06", "MF06", "BIL00"}:
+        for ticket in self.board["tickets"]:
+            self.assertIn(ticket["status"], VALID_STATUSES)
+        for role in EXPECTED_ROLES - SUPERVISORS:
+            self.assertIn(by_owner[role]["status"], {"READY", "DONE"})
+        for role in SUPERVISORS:
             self.assertEqual("WAITING", by_owner[role]["status"])
+
+    def test_done_tickets_bind_their_merged_pull_request(self) -> None:
+        done = [ticket for ticket in self.board["tickets"] if ticket["status"] == "DONE"]
+        self.assertEqual({"G1-101", "G1-102", "G1-103"}, {ticket["id"] for ticket in done})
+        for ticket in done:
+            completion = ticket["completion"]
+            self.assertIsInstance(completion["pull_request"], int)
+            self.assertGreater(completion["pull_request"], 0)
+            self.assertRegex(completion["merge_commit"], re.compile(r"^[0-9a-f]{40}$"))
 
 
 if __name__ == "__main__":

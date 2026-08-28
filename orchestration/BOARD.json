@@ -7,34 +7,46 @@
     {
       "id": "G1-101",
       "owner": "MF01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/BENCHMARK_SOURCES.json",
         "scripts/assemble_minif2f_kimina.py",
         "tests/test_assemble_minif2f_kimina.py"
       ],
-      "objective": "Define and validate the exact public-source lineage for the 244-validation plus 244-test miniF2F composite; bind DeepSeek-Prover-V1.5 validation and AI-MO/Kimina corrected test by URL, commit, file SHA-256, record identity, and deterministic output bytes."
+      "objective": "Define and validate the exact public-source lineage for the 244-validation plus 244-test miniF2F composite; bind DeepSeek-Prover-V1.5 validation and AI-MO/Kimina corrected test by URL, commit, file SHA-256, record identity, and deterministic output bytes.",
+      "completion": {
+        "pull_request": 21,
+        "merge_commit": "9672ddf5dae205ddbfef7cb57b47cb0e6774fa6a"
+      }
     },
     {
       "id": "G1-102",
       "owner": "MF02",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/BENCHMARK.lock.json",
         "scripts/import_benchmark.py",
         "tests/test_import_benchmark.py"
       ],
-      "objective": "Lock the assembled validation and test bytes, verify both split counts and identities, and keep benchmark data out of git; do not change GOAL1.json."
+      "objective": "Lock the assembled validation and test bytes, verify both split counts and identities, and keep benchmark data out of git; do not change GOAL1.json.",
+      "completion": {
+        "pull_request": 22,
+        "merge_commit": "f71c6c77db4b0da56872b3332e790cc474c77d04"
+      }
     },
     {
       "id": "G1-103",
       "owner": "MF03",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "runtime/lean/",
         "tests/test_lean_runtime.py"
       ],
-      "objective": "Create a reproducible Lean 4.33.1 plus compatible Mathlib runtime definition and compile a bounded benchmark smoke fixture without any model call."
+      "objective": "Create a reproducible Lean 4.33.1 plus compatible Mathlib runtime definition and compile a bounded benchmark smoke fixture without any model call.",
+      "completion": {
+        "pull_request": 24,
+        "merge_commit": "d1474fe9b564cd3551ed792f439cca1ad732d6fb"
+      }
     },
     {
       "id": "G1-104",
