@@ -46,12 +46,18 @@ class EvaluateExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outcome model_usage_basis"):
             evaluate_experiment(self.spec, records)
 
+    def test_unfrozen_spec_rejects_mixed_outcome_bases(self) -> None:
+        records = copy.deepcopy(self.records)
+        records[0]["model_usage_basis"] = "visible_utf8_bytes"
+        with self.assertRaisesRegex(ValueError, "mixed model_usage_basis"):
+            evaluate_experiment(self.spec, records)
+
     def test_selected_usage_basis_rejects_mismatched_outcome(self) -> None:
         spec = copy.deepcopy(self.spec)
         spec["model_usage_basis"] = "provider_tokens"
         records = copy.deepcopy(self.records)
         records[0]["model_usage_basis"] = "visible_utf8_bytes"
-        with self.assertRaisesRegex(ValueError, "does not match"):
+        with self.assertRaisesRegex(ValueError, "mixed model_usage_basis"):
             evaluate_experiment(spec, records)
 
     def test_missing_record_is_incomplete_after_cost_freeze(self) -> None:
