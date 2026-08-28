@@ -113,12 +113,16 @@
     {
       "id": "G1-109",
       "owner": "MM04",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/run_manifest.py",
         "tests/test_run_manifest.py"
       ],
-      "objective": "Generate a seeded paired pilot manifest with blinded arm labels, frozen problem identities, attempt quotas, and a separate operator-only reveal map."
+      "objective": "Generate a seeded paired pilot manifest with blinded arm labels, frozen problem identities, attempt quotas, and a separate operator-only reveal map.",
+      "completion": {
+        "pull_request": 39,
+        "merge_commit": "d9db8a918006aa4708a43b0ee6f964b8c3a2dc59"
+      }
     },
     {
       "id": "G1-110",
