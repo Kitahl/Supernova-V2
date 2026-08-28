@@ -562,29 +562,7 @@ class EvidenceBridgeTests(unittest.TestCase):
     def test_frozen_request_protocol_binding_cannot_be_added_post_hoc(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         try:
-            run_id = "run-binding"
-            ledger = ExecutionLedgerAuthority(
-                str(Path(tmp.name, "execution.sqlite").resolve()),
-                run_id=run_id,
-                issuer_id="test-host",
-                execution_authority_sha256=sha("non-credit-test-authority"),
-                secret=b"e" * 32,
-                protocol=self.protocol,
-                public_manifest=self.manifest_bundle.public_manifest,
-                operator_plan=self.manifest_bundle.operator_plan,
-            )
-            authority = DispatchAuthority(
-                str(Path(tmp.name, "dispatch.sqlite").resolve()), run_id
-            )
             base = self.completions[0].payload.request
-            request_artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
-                b"binding-negative",
-                kind=ScheduledChatArtifactKind.REQUEST,
-                run_id=run_id,
-                problem_id=base.problem_id,
-                arm=base.arm,
-                attempt=base.attempt,
-            )
             wrong_slot = next(
                 entry["dispatch_id"]
                 for entry in self.manifest_bundle.operator_plan["entries"]
@@ -604,12 +582,38 @@ class EvidenceBridgeTests(unittest.TestCase):
                     "confirmatory manifest binding",
                 ),
             )
-            manifest = authority.current_manifest()
-            for (
+            for index, (
                 protocol_dispatch_id,
                 confirmatory_manifest_sha256,
                 expected_error,
-            ) in variants:
+            ) in enumerate(variants):
+                run_id = f"run-binding-{index}"
+                ledger = ExecutionLedgerAuthority(
+                    str(Path(tmp.name, f"execution-{index}.sqlite").resolve()),
+                    run_id=run_id,
+                    issuer_id="test-host",
+                    execution_authority_sha256=sha(
+                        "non-credit-test-authority"
+                    ),
+                    secret=b"e" * 32,
+                    protocol=self.protocol,
+                    public_manifest=self.manifest_bundle.public_manifest,
+                    operator_plan=self.manifest_bundle.operator_plan,
+                )
+                authority = DispatchAuthority(
+                    str(Path(tmp.name, f"dispatch-{index}.sqlite").resolve()),
+                    run_id,
+                )
+                request_artifact = (
+                    ScheduledChatArtifactEnvelope.from_visible_utf8(
+                        b"binding-negative",
+                        kind=ScheduledChatArtifactKind.REQUEST,
+                        run_id=run_id,
+                        problem_id=base.problem_id,
+                        arm=base.arm,
+                        attempt=base.attempt,
+                    )
+                )
                 request = FrozenProblemRequest(
                     run_id=run_id,
                     experiment_id=base.experiment_id,
@@ -630,7 +634,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                 )
                 signer = CompletionSigner.generate()
                 manifest = authority.register(
-                    manifest,
+                    authority.current_manifest(),
                     request=request,
                     completion_verifier_sha256=signer.public_commitment,
                 )
