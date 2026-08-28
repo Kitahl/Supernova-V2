@@ -492,6 +492,37 @@ class ProductAdmissionTests(unittest.TestCase):
         result = self.evaluate(evidence=evidence)
         self.assertIn("duplicate evidence_id", result["reasons"])
 
+    def test_polymorphic_duplicate_evidence_ids_reject(self) -> None:
+        class HashSpoofString(str):
+            __hash__ = object.__hash__
+
+        evidence = copy.deepcopy(self.evidence)
+        evidence[0]["evidence_id"] = HashSpoofString("shared")
+        evidence[1]["evidence_id"] = HashSpoofString("shared")
+        evidence[0] = sign_evidence(evidence[0], AUTH_KEYS[KERNEL_AUTHORITY])
+        evidence[1] = sign_evidence(evidence[1], AUTH_KEYS[FIDELITY_AUTHORITY])
+
+        result = self.evaluate(evidence=evidence)
+
+        self.assertEqual("REJECTED", result["admission"])
+        self.assertFalse(result["admitted"])
+        self.assertEqual(["shared", "shared"], result["evidence_ids"])
+        self.assertIn("duplicate evidence_id", result["reasons"])
+
+    def test_polymorphic_outcome_cannot_impersonate_pass(self) -> None:
+        class OutcomeSpoof(str):
+            def __hash__(self) -> int:
+                return hash("PASS")
+
+            def __eq__(self, other: object) -> bool:
+                return True
+
+        evidence = copy.deepcopy(self.evidence)
+        evidence[0]["outcome"] = OutcomeSpoof("not-a-real-outcome")
+
+        with self.assertRaisesRegex(ValueError, "unknown evidence outcome"):
+            self.evaluate(evidence=evidence)
+
     def test_input_order_does_not_change_decision(self) -> None:
         forward = self.evaluate()
         reverse = self.evaluate(evidence=reversed(self.evidence))
