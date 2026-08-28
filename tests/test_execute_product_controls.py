@@ -99,6 +99,41 @@ class ProductControlExecutionTests(unittest.TestCase):
             elapsed_milliseconds=9,
         )
 
+    def emit_product(
+        self,
+        *,
+        attempt: int,
+        manifest,
+        visible_products=(),
+        content_utf8: bytes = b'{"lemma":"x + 0 = x"}',
+    ):
+        request_utf8 = render_product_only_request(
+            self.prompt,
+            visible_products=visible_products,
+            retry_of_attempt=None,
+        )
+        request = self.request(
+            arm=Arm.PRODUCT_ONLY,
+            attempt=attempt,
+            request_utf8=request_utf8,
+        )
+        return execute_product_only_step(
+            authority=self.authority,
+            manifest=manifest,
+            request=request,
+            problem_prompt_utf8=self.prompt,
+            visible_products=visible_products,
+            retry_of_attempt=None,
+            model_call=lambda dispatch, _payload: ProductControlObservation(
+                dispatch.entry.dispatch_id,
+                ProductObservationKind.PRODUCT,
+                content_utf8,
+            ),
+            verifier_call=lambda *_: (_ for _ in ()).throw(
+                AssertionError("intermediate product must not be verified")
+            ),
+        )
+
     def test_product_step_emits_unverified_product_without_verifier_call(self) -> None:
         request_utf8 = render_product_only_request(
             self.prompt,
@@ -151,7 +186,12 @@ class ProductControlExecutionTests(unittest.TestCase):
     def test_later_product_step_exposes_exact_products_and_verifies_only_answer(
         self,
     ) -> None:
-        product = VisibleProduct(digest("producer"), 0, b'{"lemma":"x + 0 = x"}')
+        producer = self.emit_product(
+            attempt=0,
+            manifest=self.authority.current_manifest(),
+        )
+        product = producer.emitted_product
+        self.assertIsNotNone(product)
         request_utf8 = render_product_only_request(
             self.prompt,
             visible_products=(product,),
@@ -174,7 +214,7 @@ class ProductControlExecutionTests(unittest.TestCase):
 
         execution = execute_product_only_step(
             authority=self.authority,
-            manifest=self.authority.current_manifest(),
+            manifest=producer.baseline.manifest,
             request=request,
             problem_prompt_utf8=self.prompt,
             visible_products=(product,),
@@ -207,12 +247,18 @@ class ProductControlExecutionTests(unittest.TestCase):
             attempt=1,
             request_utf8=frozen_utf8,
         )
-        hidden = VisibleProduct(digest("producer"), 0, b"hidden lemma")
+        producer = self.emit_product(
+            attempt=0,
+            manifest=self.authority.current_manifest(),
+            content_utf8=b"hidden lemma",
+        )
+        hidden = producer.emitted_product
+        self.assertIsNotNone(hidden)
 
         with self.assertRaisesRegex(ValueError, "visibility"):
             execute_product_only_step(
                 authority=self.authority,
-                manifest=self.authority.current_manifest(),
+                manifest=producer.baseline.manifest,
                 request=request,
                 problem_prompt_utf8=self.prompt,
                 visible_products=(hidden,),
@@ -220,7 +266,7 @@ class ProductControlExecutionTests(unittest.TestCase):
                 model_call=lambda *_: None,
                 verifier_call=lambda *_: None,
             )
-        self.assertEqual(0, len(self.authority.current_manifest().entries))
+        self.assertEqual(1, len(self.authority.current_manifest().entries))
 
     def test_product_retry_must_point_to_earlier_attempt(self) -> None:
         request_utf8 = render_product_only_request(
@@ -246,14 +292,58 @@ class ProductControlExecutionTests(unittest.TestCase):
             )
 
     def test_product_visibility_rejects_duplicate_content_addresses(self) -> None:
-        left = VisibleProduct(digest("left"), 0, b"same")
-        right = VisibleProduct(digest("right"), 1, b"same")
+        first = self.emit_product(
+            attempt=0,
+            manifest=self.authority.current_manifest(),
+            content_utf8=b"same",
+        )
+        first_product = first.emitted_product
+        self.assertIsNotNone(first_product)
+        second = self.emit_product(
+            attempt=1,
+            manifest=first.baseline.manifest,
+            visible_products=(first_product,),
+            content_utf8=b"same",
+        )
+        second_product = second.emitted_product
+        self.assertIsNotNone(second_product)
         with self.assertRaisesRegex(ValueError, "unique"):
             render_product_only_request(
                 self.prompt,
-                visible_products=(left, right),
+                visible_products=(first_product, second_product),
                 retry_of_attempt=None,
             )
+
+    def test_cross_dispatch_product_observation_cannot_emit_product(self) -> None:
+        request_utf8 = render_product_only_request(
+            self.prompt,
+            visible_products=(),
+            retry_of_attempt=None,
+        )
+        request = self.request(
+            arm=Arm.PRODUCT_ONLY,
+            attempt=0,
+            request_utf8=request_utf8,
+        )
+        execution = execute_product_only_step(
+            authority=self.authority,
+            manifest=self.authority.current_manifest(),
+            request=request,
+            problem_prompt_utf8=self.prompt,
+            visible_products=(),
+            retry_of_attempt=None,
+            model_call=lambda *_: ProductControlObservation(
+                "0" * 64,
+                ProductObservationKind.PRODUCT,
+                b"foreign",
+            ),
+            verifier_call=lambda *_: None,
+        )
+        self.assertEqual(
+            AttemptStatus.ERROR,
+            execution.baseline.completion.payload.attempt_result.status,
+        )
+        self.assertIsNone(execution.emitted_product)
 
     def test_multi_fidelity_stage_binds_rank_retry_and_empty_products(self) -> None:
         stage = FidelityStage("high", 2, 0)
