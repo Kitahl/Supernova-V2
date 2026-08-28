@@ -27,6 +27,7 @@ class DecisionTests(unittest.TestCase):
             "problem_id": problem_id,
             "arm": arm,
             "budget_id": "dry-budget-v1",
+            "model_usage_basis": "provider_tokens",
             "solved": solved,
             "verifier_passed": solved,
             "cost": {
@@ -44,6 +45,7 @@ class DecisionTests(unittest.TestCase):
         spec["experiment_id"] = "strong-candidate"
         spec["required_problem_ids"] = problem_ids
         spec["cost_model_frozen"] = True
+        spec["model_usage_basis"] = "provider_tokens"
         records = [
             self.record("strong-candidate", problem_id, arm, arm == "verified_chain")
             for problem_id in problem_ids
@@ -56,6 +58,7 @@ class DecisionTests(unittest.TestCase):
     def test_tie_fails_and_input_order_is_irrelevant(self) -> None:
         spec = copy.deepcopy(self.base_spec)
         spec["cost_model_frozen"] = True
+        spec["model_usage_basis"] = "provider_tokens"
         records = [
             self.record(spec["experiment_id"], problem_id, arm, False)
             for problem_id in spec["required_problem_ids"]
