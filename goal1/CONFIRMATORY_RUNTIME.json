@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "runtime_id": "goal1-confirmatory-lean-runtime-v1",
+  "status": "FROZEN",
+  "scientific_credit": "RUNTIME_INPUT_ONLY_NO_OUTCOME_CREDIT",
+  "lean": {
+    "repository": "https://github.com/leanprover/lean4",
+    "tag": "v4.33.1",
+    "commit": "819816b2e0a3bf405af45ae5c7af2491d8f5bee6",
+    "toolchain": "leanprover/lean4:v4.33.1",
+    "version_probe": {
+      "argv": [
+        "lake",
+        "env",
+        "lean",
+        "--short-version"
+      ],
+      "expected_stdout_trimmed": "4.33.1"
+    },
+    "git_hash_probe": {
+      "argv": [
+        "lake",
+        "env",
+        "lean",
+        "--githash"
+      ],
+      "expected_stdout_trimmed": "819816b2e0a3bf405af45ae5c7af2491d8f5bee6"
+    },
+    "shell_source_evidence": {
+      "ref": "v4.33.1",
+      "path": "src/Lean/Shell.lean",
+      "git_blob_sha": "3f73f6fe35d11cbccd9b6effe1bafad030fdbdce"
+    }
+  },
+  "mathlib": {
+    "repository": "https://github.com/leanprover-community/mathlib4",
+    "tag": "v4.33.1",
+    "commit": "0df444a360eaa60ab8c11dca51a86af692955474",
+    "lean_toolchain": {
+      "path": "lean-toolchain",
+      "exact_utf8": "leanprover/lean4:v4.33.1\n",
+      "git_blob_sha": "a8afa7d1b02d96f0671eba854a8dc4b416beb473"
+    },
+    "lake_manifest": {
+      "path": "lake-manifest.json",
+      "git_blob_sha": "1a4cd1dbe61cb8ca3779d972a6ffcd415ce50c52"
+    }
+  },
+  "materialization": {
+    "checkout_ref_must_resolve_to_mathlib_commit": true,
+    "verify_git_head_argv": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "expected_git_head": "0df444a360eaa60ab8c11dca51a86af692955474",
+    "dependency_fetch_permitted_only_before_execution_seal": true,
+    "network_after_execution_seal": "DISABLED",
+    "mutable_branch_or_tag_resolution_after_seal": "BLOCKED"
+  },
+  "verifier": {
+    "input_kind": "GENERATED_REGULAR_LEAN_FILE",
+    "command_transport": "ARGV_WITHOUT_SHELL",
+    "argv_template": [
+      "lake",
+      "env",
+      "lean",
+      "-t",
+      "0",
+      "-DwarningAsError=true",
+      "-M",
+      "4096",
+      "{source_path}"
+    ],
+    "working_directory": "EXACT_MATHLIB_CHECKOUT_ROOT",
+    "source_path_rules": {
+      "must_be_absolute": true,
+      "must_be_regular_file": true,
+      "symlink": "BLOCKED",
+      "must_resolve_within": "SEALED_PER_CELL_WORK_DIRECTORY",
+      "bytes_sha256_must_match_dispatch": true
+    },
+    "theorem_wrapper_rules": {
+      "candidate_payload_kind": "TACTIC_BODY_ONLY",
+      "benchmark_statement_bytes_must_match_frozen_record": true,
+      "imports_and_statement_not_model_mutable": true,
+      "append_command": "#print axioms {theorem_name}",
+      "theorem_name_must_equal_problem_id": true
+    },
+    "axiom_policy": {
+      "allowed_exact": [
+        "Classical.choice",
+        "propext",
+        "Quot.sound"
+      ],
+      "forbidden_exact": [
+        "sorryAx"
+      ],
+      "undeclared_axiom": "BLOCKED",
+      "missing_or_unparseable_print_axioms": "BLOCKED"
+    },
+    "pass_rule": {
+      "process_exit_code": 0,
+      "version_and_git_hash_probes_must_match": true,
+      "stdout_and_stderr_must_be_complete": true,
+      "warning_as_error_must_remain_enabled": true,
+      "printed_axioms_must_be_subset_of_allowlist": true
+    }
+  },
+  "resource_limits": {
+    "lean_memory_megabytes": 4096,
+    "host_wall_clock_milliseconds": 600000,
+    "stdout_max_bytes": 1048576,
+    "stderr_max_bytes": 1048576,
+    "process_tree_kill_on_limit": true,
+    "timeout_or_truncation_decision": "BLOCKED"
+  },
+  "drift_policy": {
+    "version_mismatch": "BLOCKED",
+    "git_hash_mismatch": "BLOCKED",
+    "mathlib_head_mismatch": "BLOCKED",
+    "toolchain_file_mismatch": "BLOCKED",
+    "lake_manifest_blob_mismatch": "BLOCKED",
+    "verifier_argv_mismatch": "BLOCKED",
+    "resource_limit_mismatch": "BLOCKED",
+    "network_enabled_after_seal": "BLOCKED",
+    "untrusted_axiom_or_sorry": "BLOCKED"
+  },
+  "provenance_sources": [
+    {
+      "claim": "Lean v4.33.1 tag resolves to the frozen Lean commit.",
+      "url": "https://github.com/leanprover/lean4/commit/819816b2e0a3bf405af45ae5c7af2491d8f5bee6"
+    },
+    {
+      "claim": "Mathlib v4.33.1 pins leanprover/lean4:v4.33.1.",
+      "url": "https://github.com/leanprover-community/mathlib4/commit/0df444a360eaa60ab8c11dca51a86af692955474"
+    }
+  ]
+}
