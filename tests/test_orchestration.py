@@ -71,7 +71,7 @@ def archived_commit_is_reachable(commit: str, runner=subprocess.run) -> bool:
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
         return False
     exists = runner(
-        ["git", "cat-file", "-e", f"{commit}^{commit}"],
+        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
         cwd=ROOT,
         capture_output=True,
         check=False,
