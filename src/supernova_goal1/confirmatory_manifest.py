@@ -23,7 +23,17 @@ CANONICAL_ARMS = (
     "multi_fidelity",
     "verified_chain",
 )
-CHAINED_ARMS = frozenset({"product_only", "multi_fidelity", "verified_chain"})
+LINEAR_CHAINED_ARMS = frozenset({"product_only", "verified_chain"})
+MULTI_FIDELITY_ELIGIBLE_PREDECESSORS = {
+    8: (0, 1),
+    9: (2, 3),
+    10: (4, 5),
+    11: (6, 7),
+    12: (8, 9),
+    13: (10, 11),
+    14: (12, 13),
+    15: (14,),
+}
 ATTEMPTS = tuple(range(16))
 EXPECTED_REPORT_PROBLEMS = 244
 EXPECTED_CELLS = EXPECTED_REPORT_PROBLEMS * len(CANONICAL_ARMS)
@@ -266,13 +276,29 @@ def _build_records(
                     protocol_rules_sha256,
                     dispatch_id,
                 )
-                predecessor_attempt_index: int | None = None
-                predecessor_dispatch_id: str | None = None
-                if arm in CHAINED_ARMS and attempt_index > 0:
-                    predecessor_attempt_index = attempt_index - 1
-                    predecessor_dispatch_id = dispatch_by_slot[
-                        (problem_id, arm, attempt_index - 1)
-                    ]
+                eligible_attempts: tuple[int, ...] = ()
+                predecessor_policy = "NONE_INDEPENDENT_ATTEMPT"
+                selected_predecessor_attempt_index: int | None = None
+                selected_predecessor_dispatch_id: str | None = None
+                if arm in LINEAR_CHAINED_ARMS:
+                    predecessor_policy = "FIXED_LINEAR_AUTHENTICATED_COMPLETION"
+                    if attempt_index > 0:
+                        eligible_attempts = (attempt_index - 1,)
+                        selected_predecessor_attempt_index = attempt_index - 1
+                        selected_predecessor_dispatch_id = dispatch_by_slot[
+                            (problem_id, arm, attempt_index - 1)
+                        ]
+                elif arm == "multi_fidelity":
+                    predecessor_policy = (
+                        "FROZEN_SUCCESSIVE_HALVING_ELIGIBLE_SET_SELECTION"
+                    )
+                    eligible_attempts = MULTI_FIDELITY_ELIGIBLE_PREDECESSORS.get(
+                        attempt_index, ()
+                    )
+                eligible_dispatch_ids = [
+                    dispatch_by_slot[(problem_id, arm, predecessor_attempt)]
+                    for predecessor_attempt in eligible_attempts
+                ]
                 dispatch_by_slot[(problem_id, arm, attempt_index)] = dispatch_id
 
                 operator_records.append(
@@ -282,14 +308,23 @@ def _build_records(
                         "budget_attempt_index": attempt_index,
                         "dispatch_id": dispatch_id,
                         "dispatch_index": dispatch_index,
+                        "eligible_predecessor_attempt_indices": list(
+                            eligible_attempts
+                        ),
+                        "eligible_predecessor_dispatch_ids": eligible_dispatch_ids,
                         "evaluation_id": evaluation_id,
                         "family_id": family_by_problem[problem_id],
-                        "predecessor_attempt_index": predecessor_attempt_index,
-                        "predecessor_dispatch_id": predecessor_dispatch_id,
+                        "predecessor_policy": predecessor_policy,
                         "problem_id": problem_id,
                         "problem_index": problem_index,
                         "registered_model_call_slots": 1,
                         "retry_allowance": 0,
+                        "selected_predecessor_attempt_index": (
+                            selected_predecessor_attempt_index
+                        ),
+                        "selected_predecessor_dispatch_id": (
+                            selected_predecessor_dispatch_id
+                        ),
                     }
                 )
 
