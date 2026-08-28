@@ -1,208 +1,269 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "repository": "Kitahl/Supernova-V2",
-  "tranche": "goal1-execution-pilot-v1",
+  "tranche": "goal1-confirmatory-freeze-v1",
   "integration_policy": "pull_request_only",
   "tickets": [
     {
-      "id": "G1-116",
+      "id": "G1-120",
       "owner": "MF01",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "src/supernova_goal1/artifacts.py",
-        "tests/test_artifacts.py"
+        "goal1/CONFIRMATORY_BENCHMARK.json",
+        "tests/test_confirmatory_benchmark.py"
       ],
-      "objective": "Implement exact content-addressed UTF-8 artifact envelopes for visible scheduled-chat requests and terminal responses, binding byte length, SHA-256, media type, run, problem, arm, and attempt without claiming provider-token or hidden-compute telemetry.",
-      "completion": {
-        "pull_request": 28,
-        "merge_commit": "6b4e37e1f1e9aaac2732537d2256891b724d10c7"
-      }
+      "depends_on": [],
+      "objective": "Freeze the exact benchmark bytes, development and held-out split, problem identities, and contamination exclusions from the existing content-addressed benchmark lock.",
+      "acceptance": [
+        "Every selected problem is a member of the locked root.",
+        "Development and report sets are disjoint and immutable.",
+        "The checker rejects changed bytes, split leakage, duplicates, and post-freeze edits."
+      ]
     },
     {
-      "id": "G1-117",
+      "id": "G1-121",
       "owner": "MF02",
-      "status": "DONE",
+      "status": "WAITING",
       "paths": [
-        "scripts/verify_benchmark_runtime.py",
-        "tests/test_verify_benchmark_runtime.py",
-        "docs/BENCHMARK_RUNTIME.md"
+        "goal1/CONFIRMATORY_PROTOCOL.json",
+        "tests/test_confirmatory_protocol.py"
       ],
-      "objective": "Implement a deterministic no-model benchmark/runtime checker that consumes the frozen benchmark lock, verifies a bounded non-credit sample against the pinned Lean 4.33.1 runtime, and emits machine-readable failures without changing benchmark or runtime pins.",
-      "completion": {
-        "pull_request": 34,
-        "merge_commit": "35b218a13357340611448b9ec8c0d13289b15a94"
-      }
+      "depends_on": [
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126"
+      ],
+      "objective": "Seal the accepted benchmark, runtime, five-arm contracts, analysis inputs, and complete-cost policy into one immutable confirmatory protocol digest.",
+      "acceptance": [
+        "All declared dependencies are DONE at the sealed revisions.",
+        "One canonical digest binds every scientific input.",
+        "The checker rejects any post-freeze mutation or unresolved input."
+      ]
     },
     {
-      "id": "G1-118",
+      "id": "G1-122",
       "owner": "MF03",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "src/supernova_goal1/execution/common.py",
-        "tests/test_execution_common.py"
+        "goal1/CONFIRMATORY_RUNTIME.json",
+        "tests/test_confirmatory_runtime.py"
       ],
-      "objective": "Define strict common execution value contracts for frozen problem requests, attempt results, and Lean verifier receipts, binding benchmark lock, arm, budget, attempt, artifact identities, and runtime identity without performing model calls.",
-      "completion": {
-        "pull_request": 32,
-        "merge_commit": "708bc56891231928188a2413ebacf3702dd03fae"
-      }
+      "depends_on": [],
+      "objective": "Freeze the exact Lean and Mathlib runtime, verifier invocation, resource limits, and drift checks used for every confirmatory arm.",
+      "acceptance": [
+        "Runtime and verifier identities are content-addressed.",
+        "Lean 4.33.1 is checked rather than inferred.",
+        "Any version, command, or environment drift blocks execution."
+      ]
     },
     {
-      "id": "G1-104",
+      "id": "G1-123",
       "owner": "MF04",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "src/supernova_goal1/execution/baselines.py",
-        "tests/test_execute_baselines.py"
+        "goal1/CONFIRMATORY_BASELINES.json",
+        "tests/test_confirmatory_baselines.py"
       ],
-      "objective": "Implement real ordinary and portfolio execution adapters that consume one frozen problem request, emit auditable attempts, and register expected cost events before dispatch.",
-      "completion": {
-        "pull_request": 41,
-        "merge_commit": "1f71a6f69dfc90e2c518f39a88a9d80f389c62b6"
-      }
+      "depends_on": [],
+      "objective": "Freeze ordinary and portfolio prompts, sampling, attempt and retry rules, result handling, and expected cost events at matched complete cost.",
+      "acceptance": [
+        "Both baseline contracts are machine-readable and closed.",
+        "Attempt quotas and cost events are explicit.",
+        "Unregistered retries or prompt changes are rejected."
+      ]
     },
     {
-      "id": "G1-105",
+      "id": "G1-124",
       "owner": "MF05",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "src/supernova_goal1/execution/product_controls.py",
-        "tests/test_execute_product_controls.py"
+        "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json",
+        "tests/test_confirmatory_product_controls.py"
       ],
-      "objective": "Implement real product-only and multi-fidelity execution adapters with explicit product visibility, retry, and verifier-call boundaries.",
-      "completion": {
-        "pull_request": 43,
-        "merge_commit": "c7957b2164e920379a2298e0131d10c5078d98bb"
-      }
+      "depends_on": [],
+      "objective": "Freeze product-only and multi-fidelity visibility, retry, verifier-call, and cost-event contracts, including predecessor provenance sufficient for paired scientific comparison.",
+      "acceptance": [
+        "Every retry binds an authenticated predecessor completion.",
+        "Product visibility is explicit and arm-local.",
+        "Unregistered products, retries, or cost events are rejected."
+      ]
     },
     {
-      "id": "G1-106",
+      "id": "G1-125",
       "owner": "MM01",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "src/supernova_goal1/execution/verified_chain.py",
-        "tests/test_execute_verified_chain.py"
+        "goal1/CONFIRMATORY_VERIFIED_CHAIN.json",
+        "tests/test_confirmatory_verified_chain.py"
       ],
-      "objective": "Implement the real verified-chain executor so only admitted intermediate products enter later prompts, with every attempt and verifier event preregistered.",
-      "completion": {
-        "pull_request": 45,
-        "merge_commit": "bda03978d51d6b0508f84ccbac7b2beb62d4e736"
-      }
+      "depends_on": [],
+      "objective": "Freeze verified-chain admission, verifier, retry, within-problem memory, termination, and complete-cost boundaries.",
+      "acceptance": [
+        "Only kernel-passing products can enter later prompts.",
+        "Every retry and admitted product is authority-bound.",
+        "No cross-problem or cross-arm product reuse is permitted."
+      ]
     },
     {
-      "id": "G1-119",
+      "id": "G1-126",
       "owner": "MM02",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "src/supernova_goal1/contracts.py",
-        "src/supernova_goal1/evaluate.py",
-        "tests/test_evaluate.py",
-        "examples/dry_run_records.json",
-        "goal1/GOAL1.json",
-        "tests/test_adversarial.py",
-        "tests/test_decisions.py"
+        "goal1/CONFIRMATORY_COST_POLICY.json",
+        "tests/test_confirmatory_cost_policy.py"
       ],
-      "objective": "Bind one explicit model-usage basis into ExperimentSpec and every OutcomeRecord so the evaluator rejects missing or mixed bases and scientific evaluation cannot run while the basis is UNFROZEN; keep cost_model_frozen false.",
-      "completion": {
-        "pull_request": 30,
-        "merge_commit": "f58246539f8f4a6d9b6d757afec63f3bdbc78797"
-      }
+      "depends_on": [],
+      "objective": "Freeze one observable complete-cost basis, per-arm ceiling, matching rule, retry estimand, and treatment of missing or unknowable usage.",
+      "acceptance": [
+        "One model-usage basis applies to every arm and outcome.",
+        "Every expected event must be reconciled before evaluation.",
+        "Unknown or over-budget cost blocks credit rather than becoming zero."
+      ]
     },
     {
-      "id": "G1-108",
+      "id": "G1-127",
       "owner": "MM03",
-      "status": "DONE",
+      "status": "WAITING",
       "paths": [
-        "src/supernova_goal1/dispatch.py",
-        "tests/test_dispatch.py"
+        "src/supernova_goal1/evidence_bridge.py",
+        "tests/test_evidence_bridge.py"
       ],
-      "objective": "Implement an append-only pre-dispatch manifest and completion join that prevents fabricated, omitted, replayed, or cross-arm execution events.",
-      "completion": {
-        "pull_request": 23,
-        "merge_commit": "639908fd9b39cf2826c27ec34c5aa9e69ab0eb00"
-      }
+      "depends_on": [
+        "G1-121",
+        "G1-128"
+      ],
+      "objective": "Build the typed authority-to-evaluator bridge so only a closed dispatch joined to authenticated completions, verifier evidence, execution-ledger evidence, and reconciled costs can produce evaluator inputs.",
+      "acceptance": [
+        "Raw caller-supplied solved or cost booleans are not accepted.",
+        "Every evaluator record binds the protocol, manifest, completion, verifier, and cost evidence.",
+        "Partial, replayed, cross-run, or unaccounted evidence is rejected."
+      ]
     },
     {
-      "id": "G1-109",
+      "id": "G1-128",
       "owner": "MM04",
-      "status": "DONE",
+      "status": "WAITING",
       "paths": [
-        "src/supernova_goal1/run_manifest.py",
-        "tests/test_run_manifest.py"
+        "src/supernova_goal1/confirmatory_manifest.py",
+        "tests/test_confirmatory_manifest.py"
       ],
-      "objective": "Generate a seeded paired pilot manifest with blinded arm labels, frozen problem identities, attempt quotas, and a separate operator-only reveal map.",
-      "completion": {
-        "pull_request": 39,
-        "merge_commit": "d9db8a918006aa4708a43b0ee6f964b8c3a2dc59"
-      }
+      "depends_on": [
+        "G1-121"
+      ],
+      "objective": "Expand the frozen protocol into one blinded one-shot paired cohort with every problem, arm, attempt, retry allowance, and budget preregistered.",
+      "acceptance": [
+        "The manifest is derived only from the frozen protocol digest.",
+        "All five arms are paired for every selected problem.",
+        "No attempt or retry can be added after dispatch begins."
+      ]
     },
     {
-      "id": "G1-110",
+      "id": "G1-129",
       "owner": "MM05",
-      "status": "DONE",
+      "status": "WAITING",
       "paths": [
-        "docs/ANALYSIS_PLAN.md",
-        "tests/test_analysis_plan.py"
+        "src/supernova_goal1/evaluate_confirmatory.py",
+        "tests/test_evaluate_confirmatory.py"
       ],
-      "objective": "Write a prospective pilot and confirmatory analysis plan: estimand, all four paired contrasts, Holm correction, incomplete-run handling, discordance-based power update, and no scientific PASS from the pilot.",
-      "completion": {
-        "pull_request": 36,
-        "merge_commit": "f9075bbf448888a87137c723293ab9afe3b3ba73"
-      }
+      "depends_on": [
+        "G1-127"
+      ],
+      "objective": "Implement the confirmatory evaluator over evidence-bridge output only, with complete-cohort checks, four paired contrasts, Holm correction, complete-cost matching, and explicit terminal states.",
+      "acceptance": [
+        "Only bridge-produced records are accepted.",
+        "PASS requires superiority over all four controls under the frozen rule.",
+        "BLOCKED and INCOMPLETE never become FAIL or PASS."
+      ]
     },
     {
-      "id": "G1-111",
+      "id": "G1-130",
       "owner": "MM07",
-      "status": "DONE",
+      "status": "WAITING",
       "paths": [
-        "tests/test_execution_adversarial.py"
+        "tests/test_confirmatory_adversarial.py"
       ],
-      "objective": "Add adversarial integration tests for split leakage, hidden product reuse, post-hoc dispatch registration, missing telemetry, unmatched retries, wrong Lean runtime, and partial five-arm cohorts.",
-      "completion": {
-        "pull_request": 47,
-        "merge_commit": "e8648e59c095006aa7c297ec395c0801ff0c46ff"
-      }
+      "depends_on": [
+        "G1-127",
+        "G1-129"
+      ],
+      "objective": "Add adversarial confirmatory tests that try stale protocols, benchmark leakage, unregistered retries, fabricated outcomes, missing costs, verifier substitution, and partial cohorts.",
+      "acceptance": [
+        "Each named attack is deterministically rejected.",
+        "No error path can yield scientific PASS.",
+        "The tests exercise the real bridge and evaluator boundary."
+      ]
     },
     {
-      "id": "G1-012",
+      "id": "G2-001",
       "owner": "EXT01",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "docs/THREAT_MODEL.md",
-        "docs/PRIOR_ART.md"
+        "goal2/GOAL2.json",
+        "docs/GOAL2_CONTRACT.md",
+        "tests/test_goal2_contract.py"
       ],
-      "objective": "Resolve the open construct-validity review on PR #8: phase-rank gates, define the first estimand as the verified-gated package effect unless reject/retry is matched, specify scheduled-chat cost proxies and sensitivity analysis, and keep evidence bindings composable.",
-      "completion": {
-        "pull_request": 8,
-        "merge_commit": "f272b5e5f03ac9e9f375800f1fb815ddfd7dee08"
-      }
+      "depends_on": [],
+      "objective": "Define Goal 2 as a falsifiable improver-of-improver contract with separated solver, memory, and improver components; matched R&D cost; fresh evaluation; and an explicit Goal-1 gate.",
+      "acceptance": [
+        "The hypothesis and PASS, FAIL, BLOCKED, and INCOMPLETE rules are machine-readable.",
+        "The contract binds untouched-solver comparison, fresh evaluation, and complete R&D cost.",
+        "No Goal-2 execution ticket may open when requires_goal1_pass is true and Goal 1 has no valid PASS."
+      ]
     },
     {
-      "id": "G1-113",
+      "id": "G1-131",
       "owner": "MM06",
       "status": "WAITING",
       "paths": [
-        "reviews/"
+        "reviews/G1_CONFIRMATORY_REVIEW.md"
       ],
-      "objective": "Review execution-tranche PRs against exact ticket paths, local tests, real CI, benchmark lineage, and unresolved scientific assumptions; never author or merge reviewed code."
+      "depends_on": [
+        "G1-130"
+      ],
+      "objective": "Independently review the exact frozen protocol, implementation, tests, evidence lineage, and unresolved assumptions without authoring or merging reviewed code.",
+      "acceptance": [
+        "The review binds exact commit and protocol digests.",
+        "Every unresolved scientific or integrity finding is blocking.",
+        "The verdict is PASS, AMEND, or KILL and cannot create scientific credit."
+      ]
     },
     {
-      "id": "G1-114",
+      "id": "G1-132",
       "owner": "MF06",
       "status": "WAITING",
       "paths": [
-        "integration/"
+        "integration/goal1_confirmatory/"
       ],
-      "objective": "After benchmark, runtime, dispatch, and five executors land, run one non-credit pilot cohort and report concrete seam failures without changing the frozen inputs."
+      "depends_on": [
+        "G1-131"
+      ],
+      "objective": "Run exactly one frozen confirmatory Goal-1 cohort and emit authority-backed evidence without changing any scientific input after manifest or dispatch start.",
+      "acceptance": [
+        "The reviewed protocol and manifest digests are unchanged.",
+        "Every planned completion and cost event is reconciled.",
+        "The integration layer emits evidence only; it does not adjudicate the hypothesis."
+      ]
     },
     {
-      "id": "G1-115",
+      "id": "G1-133",
       "owner": "BIL00",
       "status": "WAITING",
       "paths": [
-        "reports/STATUS.md"
+        "reports/GOAL1_FINAL.md"
       ],
-      "objective": "Report merged evidence, open scientific blockers, pilot readiness, and the next executable action; never declare Goal 1 PASS or FAIL without evaluator output."
+      "depends_on": [
+        "G1-129",
+        "G1-132"
+      ],
+      "objective": "Report the confirmatory evaluator output and evidence digests without making any claim beyond PASS, FAIL, BLOCKED, or INCOMPLETE.",
+      "acceptance": [
+        "The report references exact protocol, cohort, bridge, and evaluator evidence.",
+        "No missing or partial evidence is summarized as a negative result.",
+        "Goal 2 is unblocked only if its contract allows it and the reported result is valid PASS."
+      ]
     }
   ]
 }
