@@ -21,6 +21,7 @@ from supernova_goal1.execution.common import AttemptStatus, FrozenProblemRequest
 from supernova_goal1.execution.verified_chain import (
     AdmittedProduct,
     RetryLink,
+    VerifiedChainExecutionAuthority,
     VerifiedChainObservation,
     VerifiedChainObservationKind,
     execute_verified_chain_step,
@@ -42,6 +43,10 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         self.authority = DispatchAuthority(
             str(Path(self.tmp.name, "dispatch.sqlite").resolve()),
             self.run_id,
+        )
+        self.execution_authority = VerifiedChainExecutionAuthority(
+            str(Path(self.tmp.name, "verified-execution.sqlite").resolve()),
+            bytes.fromhex(digest("host-owned-execution-secret")),
         )
         self.problem = BenchmarkProblemIdentity(
             "miniF2F-Lean4-Kimina-composite",
@@ -130,6 +135,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         manifest = manifest or authority.current_manifest()
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(),
             retry_of=None,
         )
@@ -142,6 +148,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
 
         execution = execute_verified_chain_step(
             authority=authority,
+            execution_authority=self.execution_authority,
             manifest=manifest,
             request=request,
             problem_prompt_utf8=self.prompt,
@@ -179,6 +186,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         retry = None
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(product,),
             retry_of=retry,
         )
@@ -195,6 +203,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
 
         execution = execute_verified_chain_step(
             authority=self.authority,
+            execution_authority=self.execution_authority,
             manifest=first.baseline.manifest,
             request=request,
             problem_prompt_utf8=self.prompt,
@@ -207,7 +216,11 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         )
 
         visible = json.loads(seen["payload"])
-        self.assertEqual([product.to_mapping()], visible["admitted_products"])
+        expected_product = product.to_mapping()
+        expected_product["execution_evidence_id"] = (
+            self.execution_authority.verify_admitted_product(product)
+        )
+        self.assertEqual([expected_product], visible["admitted_products"])
         self.assertIsNone(visible["retry_of"])
         self.assertEqual((product.product_id,), execution.visible_product_ids)
         self.assertTrue(execution.terminal_answer)
@@ -247,6 +260,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             attempt=1,
             request_utf8=render_verified_chain_request(
                 self.prompt,
+                execution_authority=self.execution_authority,
                 admitted_products=(),
                 retry_of=None,
             ),
@@ -254,6 +268,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "visibility"):
             execute_verified_chain_step(
                 authority=self.authority,
+                execution_authority=self.execution_authority,
                 manifest=first.baseline.manifest,
                 request=request,
                 problem_prompt_utf8=self.prompt,
@@ -269,6 +284,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         product = first.admitted_product
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(product,),
             retry_of=None,
         )
@@ -280,6 +296,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "frozen cell"):
             execute_verified_chain_step(
                 authority=self.authority,
+                execution_authority=self.execution_authority,
                 manifest=first.baseline.manifest,
                 request=request,
                 problem_prompt_utf8=self.prompt,
@@ -304,6 +321,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         forged = AdmittedProduct(forged_record, product.producer_response_utf8)
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(forged,),
             retry_of=None,
         )
@@ -311,6 +329,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "signature verification failed"):
             execute_verified_chain_step(
                 authority=self.authority,
+                execution_authority=self.execution_authority,
                 manifest=first.baseline.manifest,
                 request=request,
                 problem_prompt_utf8=self.prompt,
@@ -331,6 +350,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             product = foreign.admitted_product
             request_utf8 = render_verified_chain_request(
                 self.prompt,
+                execution_authority=self.execution_authority,
                 admitted_products=(product,),
                 retry_of=None,
             )
@@ -338,6 +358,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "authority"):
                 execute_verified_chain_step(
                     authority=self.authority,
+                    execution_authority=self.execution_authority,
                     manifest=foreign.baseline.manifest,
                     request=request,
                     problem_prompt_utf8=self.prompt,
@@ -351,12 +372,14 @@ class VerifiedChainExecutionTests(unittest.TestCase):
     def test_cross_dispatch_observation_cannot_admit_product(self) -> None:
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(),
             retry_of=None,
         )
         request = self.request(attempt=0, request_utf8=request_utf8)
         execution = execute_verified_chain_step(
             authority=self.authority,
+            execution_authority=self.execution_authority,
             manifest=self.authority.current_manifest(),
             request=request,
             problem_prompt_utf8=self.prompt,
@@ -392,6 +415,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "product_ids"):
             render_verified_chain_request(
                 self.prompt,
+                execution_authority=self.execution_authority,
                 admitted_products=(product, product),
                 retry_of=None,
             )
@@ -403,12 +427,14 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         retry = RetryLink(failed.baseline.completion)
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(),
             retry_of=retry,
         )
         request = self.request(attempt=1, request_utf8=request_utf8)
         execution = execute_verified_chain_step(
             authority=self.authority,
+            execution_authority=self.execution_authority,
             manifest=failed.baseline.manifest,
             request=request,
             problem_prompt_utf8=self.prompt,
@@ -432,6 +458,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
     def test_registered_but_uncompleted_request_cannot_authorize_retry(self) -> None:
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(),
             retry_of=None,
         )
@@ -462,6 +489,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         retry = RetryLink(forged_record)
         request_utf8 = render_verified_chain_request(
             self.prompt,
+            execution_authority=self.execution_authority,
             admitted_products=(),
             retry_of=retry,
         )
@@ -469,6 +497,7 @@ class VerifiedChainExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "signature verification failed"):
             execute_verified_chain_step(
                 authority=self.authority,
+                execution_authority=self.execution_authority,
                 manifest=failed.baseline.manifest,
                 request=request,
                 problem_prompt_utf8=self.prompt,
