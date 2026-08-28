@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import re
 import subprocess
 import tomllib
 import unittest
@@ -38,6 +40,24 @@ class LeanRuntimeTests(unittest.TestCase):
         )
         self.assertEqual([{"name": "SupernovaGoal1Smoke"}], lakefile["lean_lib"])
 
+    def test_manifest_locks_mathlib_and_every_dependency_to_commits(self) -> None:
+        manifest = json.loads(
+            (RUNTIME / "lake-manifest.json").read_text(encoding="utf-8")
+        )
+        packages = {package["name"]: package for package in manifest["packages"]}
+        self.assertEqual(
+            "0df444a360eaa60ab8c11dca51a86af692955474",
+            packages["mathlib"]["rev"],
+        )
+        self.assertEqual("v4.33.1", packages["mathlib"]["inputRev"])
+        self.assertGreaterEqual(len(packages), 1)
+        for name, package in packages.items():
+            self.assertRegex(
+                package["rev"],
+                re.compile(r"^[0-9a-f]{40}$"),
+                msg=f"{name} is not locked to a full commit SHA",
+            )
+
     def test_smoke_file_has_no_unproved_escape_hatch(self) -> None:
         source = (RUNTIME / "SupernovaGoal1Smoke.lean").read_text(encoding="utf-8")
         lowered = source.lower()
@@ -52,6 +72,7 @@ class LeanRuntimeTests(unittest.TestCase):
         self.assertIn("lake exe cache get-", readme)
         self.assertIn("lake exe cache unpack", readme)
         self.assertNotIn("lake exe cache get\n", readme)
+        self.assertIn("short physical path", readme)
 
     def test_checker_requires_exact_lean_version_then_compiles_smoke(self) -> None:
         responses = [
