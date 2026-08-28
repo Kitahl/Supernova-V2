@@ -50,12 +50,16 @@
     {
       "id": "G1-104",
       "owner": "MF04",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/execution/baselines.py",
         "tests/test_execute_baselines.py"
       ],
-      "objective": "Implement real ordinary and portfolio execution adapters that consume one frozen problem request, emit auditable attempts, and register expected cost events before dispatch."
+      "objective": "Implement real ordinary and portfolio execution adapters that consume one frozen problem request, emit auditable attempts, and register expected cost events before dispatch.",
+      "completion": {
+        "pull_request": 41,
+        "merge_commit": "1f71a6f69dfc90e2c518f39a88a9d80f389c62b6"
+      }
     },
     {
       "id": "G1-105",
