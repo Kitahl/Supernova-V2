@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "contract_id": "goal1-confirmatory-verified-chain-v1",
+  "status": "FROZEN",
+  "arm": "verified_chain",
+  "estimand_role": "TREATMENT_ARM_DEFINITION_ONLY",
+  "scientific_credit": "NONE_UNTIL_SEALED_BY_CONFIRMATORY_PROTOCOL_AND_EXECUTED_WITH_ADMISSIBLE_EVIDENCE",
+  "authorities": {
+    "product_controls": {
+      "path": "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json",
+      "git_blob_sha1": "ab2b298e29022f931ec141bdba50485b0967ad3f",
+      "shared_surface_field": "shared.product_chain_shared_surface.projection",
+      "shared_surface_projection_sha256": "f68045d4d9554b0639b4abae86658c6bacee3f29ef1cc4b5c4f5deac7b654ed7"
+    },
+    "runtime": {
+      "path": "goal1/CONFIRMATORY_RUNTIME.json",
+      "git_blob_sha1": "1fa7caeefdf3c01cea5603f4865c2f9eec11a0fb",
+      "runtime_id": "goal1-confirmatory-lean-runtime-v1"
+    },
+    "future_cost_policy": {
+      "path": "goal1/CONFIRMATORY_COST_POLICY.json",
+      "required_status": "FROZEN",
+      "missing_or_digest_mismatch": "BLOCKED"
+    }
+  },
+  "shared_surface_binding": {
+    "attempt_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "exact_projection_sha256": "f68045d4d9554b0639b4abae86658c6bacee3f29ef1cc4b5c4f5deac7b654ed7",
+    "must_equal_product_control_projection": true,
+    "sole_permitted_arm_difference": "USE_OF_THE_IDENTICAL_PRODUCT_VERIFIER_RESULT_FOR_ADMISSION_PRODUCT_ONLY_IGNORES_IT_VERIFIED_CHAIN_REQUIRES_ADMISSIBLE_PASS",
+    "mismatch": "BLOCKED"
+  },
+  "execution": {
+    "dispatch_policy": "REGISTER_ALL_16_SLOTS_AND_THE_EXACT_LINEAR_PREDECESSOR_GRAPH_BEFORE_FIRST_MODEL_CALL",
+    "completion_policy": "EXECUTE_AND_RECONCILE_ALL_16_EVEN_AFTER_A_VERIFIED_FINAL_PASS",
+    "fresh_context_scope": "ONE_NEW_EMPTY_MODEL_CONTEXT_PER_PROBLEM_ARM_ATTEMPT",
+    "admissible_context_receipt_modes": [
+      "PROVIDER_ATTESTED_EMPTY_CONTEXT",
+      "HERMETIC_LOCAL_INSTANCE"
+    ],
+    "recurring_chat_without_provider_fresh_context_attestation": "NON_CREDIT_ONLY",
+    "predecessor_graph": [
+      {
+        "attempt_index": 0,
+        "predecessor_completion_of_attempt": null
+      },
+      {
+        "attempt_index": 1,
+        "predecessor_completion_of_attempt": 0
+      },
+      {
+        "attempt_index": 2,
+        "predecessor_completion_of_attempt": 1
+      },
+      {
+        "attempt_index": 3,
+        "predecessor_completion_of_attempt": 2
+      },
+      {
+        "attempt_index": 4,
+        "predecessor_completion_of_attempt": 3
+      },
+      {
+        "attempt_index": 5,
+        "predecessor_completion_of_attempt": 4
+      },
+      {
+        "attempt_index": 6,
+        "predecessor_completion_of_attempt": 5
+      },
+      {
+        "attempt_index": 7,
+        "predecessor_completion_of_attempt": 6
+      },
+      {
+        "attempt_index": 8,
+        "predecessor_completion_of_attempt": 7
+      },
+      {
+        "attempt_index": 9,
+        "predecessor_completion_of_attempt": 8
+      },
+      {
+        "attempt_index": 10,
+        "predecessor_completion_of_attempt": 9
+      },
+      {
+        "attempt_index": 11,
+        "predecessor_completion_of_attempt": 10
+      },
+      {
+        "attempt_index": 12,
+        "predecessor_completion_of_attempt": 11
+      },
+      {
+        "attempt_index": 13,
+        "predecessor_completion_of_attempt": 12
+      },
+      {
+        "attempt_index": 14,
+        "predecessor_completion_of_attempt": 13
+      },
+      {
+        "attempt_index": 15,
+        "predecessor_completion_of_attempt": 14
+      }
+    ],
+    "successor_requires_authenticated_terminal_predecessor_completion": true,
+    "predecessor_completion_metadata_model_visible": false,
+    "required_context_receipt_fields": [
+      "receipt_schema",
+      "issuer_id",
+      "model_identity_sha256",
+      "context_id",
+      "problem_id",
+      "arm",
+      "attempt_index",
+      "initial_context_sha256",
+      "request_artifact_sha256",
+      "response_artifact_sha256",
+      "opened_at",
+      "closed_at",
+      "signature"
+    ]
+  },
+  "response_contract": {
+    "classification": "EXACT_FIRST_TWO_VISIBLE_LINES",
+    "product_prefix_lines": [
+      "-- supernova-kind: PRODUCT_CANDIDATE",
+      "-- supernova-schema: supernova.product-candidate-emission.v1"
+    ],
+    "final_answer_prefix_lines": [
+      "-- supernova-kind: FINAL_ANSWER",
+      "-- supernova-schema: supernova.final-answer-emission.v1"
+    ],
+    "no_answer_exact_utf8": "-- supernova-kind: NO_ANSWER\n-- supernova-schema: supernova.no-answer-emission.v1\n",
+    "allowed_kinds": [
+      "PRODUCT_CANDIDATE",
+      "FINAL_ANSWER",
+      "NO_ANSWER"
+    ],
+    "missing_duplicate_or_ambiguous_discriminator": "BLOCKED"
+  },
+  "product_declaration_policy": {
+    "required_name_template": "SupernovaProduct.P_{FULL_PROBLEM_SHA256}.a{ATTEMPT_INDEX_TWO_DIGITS}",
+    "declaration_count": 1,
+    "allowed_declaration_kinds": [
+      "theorem",
+      "lemma"
+    ],
+    "parser_mode": "PINNED_LEAN_PARSER_WITHOUT_ELABORATION",
+    "forbidden_syntax": [
+      "import",
+      "namespace",
+      "end",
+      "section",
+      "variable",
+      "notation",
+      "macro",
+      "syntax",
+      "attribute",
+      "set_option",
+      "axiom",
+      "opaque",
+      "unsafe",
+      "sorry",
+      "admit",
+      "declaration_attributes"
+    ],
+    "unique_name_problem_arm_attempt_binding_required": true,
+    "parse_failure_or_name_kind_policy_violation": "PRODUCT_NOT_ADMISSIBLE"
+  },
+  "harness_construction": {
+    "product_harness": "FROZEN_IMPORT_AND_PREFIX_BYTES_PLUS_ALL_EARLIER_ADMITTED_PRODUCT_RESPONSE_BYTES_IN_ATTEMPT_ORDER_PLUS_EXACT_CURRENT_PRODUCT_RESPONSE_BYTES",
+    "final_harness": "INSERT_ALL_ADMITTED_PRODUCT_RESPONSE_BYTES_IN_ATTEMPT_ORDER_AT_THE_FROZEN_PRE_TARGET_OFFSET_THEN_REPLACE_ONLY_THE_UNIQUE_FROZEN_PROOF_HOLE_BYTE_SLICE_WITH_EXACT_FINAL_ANSWER_RESPONSE_BYTES",
+    "transformation": "BYTE_SLICE_ONLY_NO_PARSING_NORMALIZATION_OR_TARGET_REGENERATION",
+    "product_harness_forbidden_material": [
+      "TARGET_DECLARATION",
+      "SOLVED_TARGET_STUB",
+      "UNADMITTED_PRODUCT"
+    ],
+    "target_statement_or_import_mutation": "BLOCKED"
+  },
+  "product_admission": {
+    "verifier_invocation": "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_PER_PRODUCT_CANDIDATE",
+    "required_result": "PASS",
+    "required_runtime_id": "goal1-confirmatory-lean-runtime-v1",
+    "required_axiom_allowlist_exact": [
+      "Classical.choice",
+      "propext",
+      "Quot.sound"
+    ],
+    "forbidden_axiom_exact": [
+      "sorryAx"
+    ],
+    "admission_requires": [
+      "SYNTACTICALLY_ADMISSIBLE_EXACT_PRODUCT_RESPONSE_BYTES",
+      "AUTHENTICATED_CONTEXT_RECEIPT",
+      "AUTHENTICATED_PREDECESSOR_COMPLETION_BINDING",
+      "AUTHENTICATED_HOST_EXECUTION_RECORD",
+      "BOUND_PRODUCT_VERIFIER_RECEIPT",
+      "PINNED_RUNTIME_PASS",
+      "PRINTED_AXIOMS_SUBSET_OF_RUNTIME_ALLOWLIST"
+    ],
+    "fail_error_timeout_truncation_missing_or_unparseable_axioms": "PRODUCT_NOT_ADMITTED_AND_CELL_REMAINS_COMPLETE_ONLY_WITH_TYPED_RECEIPTS",
+    "product_pass_is_terminal_solution": false,
+    "admission_by_model_claim_human_judgment_or_unbound_boolean": "BLOCKED"
+  },
+  "product_receipt": {
+    "schema": "supernova.verified-product-receipt.v1",
+    "issuer": "HOST_VERIFIER_CONTROLLER_ONLY",
+    "required_bindings": [
+      "response_kind",
+      "exact_response_sha256",
+      "request_artifact_sha256",
+      "dispatch_sha256",
+      "ordered_predecessor_product_sha256",
+      "product_harness_sha256",
+      "runtime_contract_git_blob_sha1",
+      "runtime_probe_sha256",
+      "run_id",
+      "problem_id",
+      "full_problem_sha256",
+      "arm",
+      "attempt_index",
+      "context_receipt_sha256",
+      "predecessor_completion_sha256",
+      "host_execution_record_sha256",
+      "verifier_result",
+      "printed_axioms",
+      "receipt_signature"
+    ],
+    "replay_cross_problem_cross_arm_cross_attempt_or_digest_mismatch": "BLOCKED"
+  },
+  "model_visible_memory": {
+    "allowed": "EXACT_PRODUCT_CANDIDATE_RESPONSE_BYTES_WITH_ADMISSIBLE_PASS_RECEIPTS_FROM_LOWER_ATTEMPTS_IN_THIS_EXACT_RUN_PROBLEM_AND_ARM",
+    "ordering": "STRICT_ASCENDING_PRODUCER_ATTEMPT_INDEX",
+    "inclusion": "ALL_AND_ONLY_ADMITTED_PRODUCTS",
+    "exact_response_bytes_only": true,
+    "forbidden": [
+      "PRODUCT_RECEIPT",
+      "VERIFIER_STATUS",
+      "VERIFIER_STDOUT",
+      "VERIFIER_STDERR",
+      "VERIFIER_TIMING",
+      "FAIL_OR_ERROR_DIAGNOSTIC",
+      "PREDECESSOR_COMPLETION_METADATA",
+      "FINAL_ANSWER_RESPONSE",
+      "NO_ANSWER",
+      "CROSS_PROBLEM_PRODUCT",
+      "CROSS_ARM_PRODUCT",
+      "UNADMITTED_PRODUCT",
+      "HUMAN_SUMMARY"
+    ],
+    "any_hidden_conversation_or_saved_memory": "BLOCKED"
+  },
+  "final_answer": {
+    "verifier_invocation": "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_PER_FINAL_ANSWER",
+    "required_result": "PASS",
+    "final_receipt_schema": "supernova.verified-final-receipt.v1",
+    "required_bindings": [
+      "frozen_target_source_sha256",
+      "unique_proof_hole_start_byte",
+      "unique_proof_hole_end_byte",
+      "ordered_admitted_product_response_sha256",
+      "exact_final_answer_response_sha256",
+      "constructed_final_source_sha256",
+      "request_artifact_sha256",
+      "dispatch_sha256",
+      "runtime_contract_git_blob_sha1",
+      "host_execution_record_sha256",
+      "verifier_result",
+      "printed_axioms",
+      "receipt_signature"
+    ],
+    "target_statement_or_import_mutation": "BLOCKED"
+  },
+  "terminal_result": {
+    "solved": "AT_LEAST_ONE_OF_16_ATTEMPTS_HAS_AN_ADMISSIBLE_FINAL_KERNEL_PASS",
+    "selected_attempt": "LOWEST_ATTEMPT_INDEX_WITH_AN_ADMISSIBLE_FINAL_KERNEL_PASS_AFTER_ALL_16_COMPLETE",
+    "no_passing_attempt": "UNSOLVED_ONLY_WHEN_ALL_16_CELLS_AND_COST_EVENTS_ARE_COMPLETE_OTHERWISE_INCOMPLETE",
+    "product_pass_alone_never_solves": true,
+    "human_selection_or_posthoc_rerun": "FORBIDDEN",
+    "decision_priority": [
+      "BLOCKED",
+      "INCOMPLETE",
+      "SOLVED",
+      "UNSOLVED"
+    ]
+  },
+  "cost_boundary": {
+    "model_calls": 16,
+    "orchestration_events": 16,
+    "product_candidate_and_final_answer": "CHARGE_ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT",
+    "no_answer_or_error": "CHARGE_ONE_TYPED_NOT_INVOKED_VERIFIER_SLOT",
+    "exact_input_and_output_bytes": "CHARGED",
+    "unknown_or_unreconciled_event": "BLOCKED",
+    "complete_cost_rule": "MUST_EQUAL_THE_FROZEN_G1_126_COMMON_COMPLETE_COST_BASIS_AND_CEILING"
+  }
+}
