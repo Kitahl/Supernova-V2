@@ -27,11 +27,15 @@
     "authority_key_id": "MUST_BE_FROZEN_BEFORE_OPEN",
     "authority_key_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
     "authority_secret_is_host_owned_and_must_not_be_stored_in_repository": true,
-    "execution_ticket_rule": "NO_GOAL2_EXECUTION_TICKET_MAY_OPEN_UNLESS_THE_AUTHENTICATED_GATE_RETURNS_OPEN",
+    "execution_ticket_rule": "NO_GOAL2_EXECUTION_TICKET_MAY OPEN UNLESS PRE_DISPATCH_ADMISSION RETURNS OPEN",
+    "pre_dispatch_admission_uses_only_prospectively_available_evidence": true,
+    "post_run_evidence_admission_is_separate": true,
     "invalid_phase_receipt_signature_run_or_digest_decision": "BLOCKED"
   },
   "components": {
     "required_roles": ["solver_F", "memory_M0", "improver_I0", "memory_M1", "improver_I1"],
+    "frozen_source_roles": ["solver_F", "memory_M0", "improver_I0"],
+    "source_component_manifest_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
     "required_identity_fields": ["component_id", "artifact_sha256", "runtime_or_schema_sha256"],
     "component_ids_must_be_distinct": true,
     "component_artifact_sha256_values_must_be_distinct": true,
@@ -42,6 +46,7 @@
     "control_must_use_exact_I0_and_M0": true,
     "treatment_must_start_with_exact_I0_and_M0": true,
     "treatment_I1_and_M1_ids_and_artifacts_must_be_new_and_distinct": true,
+    "arm_lineage_must_bind_component_ids_and_artifact_sha256_values": true,
     "control_and_treatment_descendant_hashes_must_differ_from_parent_and_each_other": true,
     "missing_mixed_aliased_or_unauthenticated_component_decision": "BLOCKED"
   },
@@ -86,6 +91,9 @@
   "fresh_evaluation": {
     "evaluation_receipt_schema": "supernova.goal2.evaluation-release.v1",
     "evaluation_receipt_authentication": "HMAC-SHA256",
+    "evaluator_authority_key_id": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "evaluator_authority_key_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
+    "evaluator_authority_must_be_distinct_from_r_and_d_authority": true,
     "evaluation_manifest_sha256_must_be_frozen_and_content_addressed": true,
     "evaluation_manifest_sha256": "MUST_BE_FROZEN_BEFORE_OPEN",
     "evaluation_items_must_be_disjoint_from_all_r_and_d_and_meta_improvement_data": true,
