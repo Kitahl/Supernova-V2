@@ -49,10 +49,10 @@ def validate_runtime(runtime: dict[str, Any]) -> None:
         raise ValueError("Lean version drift")
     if lean["toolchain"] != "leanprover/lean4:v4.33.1":
         raise ValueError("Lean toolchain drift")
-    if not SHA1.fullmatch(lean["commit"]):
-        raise ValueError("invalid Lean commit")
-    if not SHA1.fullmatch(mathlib["commit"]):
-        raise ValueError("invalid Mathlib commit")
+    if lean["commit"] != "819816b2e0a3bf405af45ae5c7af2491d8f5bee6":
+        raise ValueError("Lean commit drift")
+    if mathlib["commit"] != "0df444a360eaa60ab8c11dca51a86af692955474":
+        raise ValueError("Mathlib commit drift")
     if lean["version_probe"] != {
         "argv": ["lake", "env", "lean", "--short-version"],
         "expected_stdout_trimmed": "4.33.1",
@@ -75,10 +75,13 @@ def validate_runtime(runtime: dict[str, Any]) -> None:
         raise ValueError("Mathlib tag drift")
     if toolchain["exact_utf8"] != lean["toolchain"] + "\n":
         raise ValueError("Mathlib toolchain mismatch")
-    if not SHA1.fullmatch(toolchain["git_blob_sha"]):
-        raise ValueError("invalid toolchain blob")
-    if not SHA1.fullmatch(mathlib["lake_manifest"]["git_blob_sha"]):
-        raise ValueError("invalid Lake manifest blob")
+    if toolchain["git_blob_sha"] != "a8afa7d1b02d96f0671eba854a8dc4b416beb473":
+        raise ValueError("toolchain blob drift")
+    if (
+        mathlib["lake_manifest"]["git_blob_sha"]
+        != "1a4cd1dbe61cb8ca3779d972a6ffcd415ce50c52"
+    ):
+        raise ValueError("Lake manifest blob drift")
 
     materialization = runtime["materialization"]
     if materialization["expected_git_head"] != mathlib["commit"]:
@@ -113,6 +116,7 @@ def validate_runtime(runtime: dict[str, Any]) -> None:
         path_rules["must_be_absolute"] is not True
         or path_rules["must_be_regular_file"] is not True
         or path_rules["symlink"] != "BLOCKED"
+        or path_rules["must_resolve_within"] != "SEALED_PER_CELL_WORK_DIRECTORY"
         or path_rules["bytes_sha256_must_match_dispatch"] is not True
     ):
         raise ValueError("source-path boundary drift")
@@ -181,9 +185,27 @@ class ConfirmatoryRuntimeTests(unittest.TestCase):
                 ),
             ),
             (
+                "coordinated.lean.substitution",
+                lambda x: (
+                    x["lean"].__setitem__("commit", "0" * 40),
+                    x["lean"]["git_hash_probe"].__setitem__(
+                        "expected_stdout_trimmed", "0" * 40
+                    ),
+                ),
+            ),
+            (
                 "mathlib.head",
                 lambda x: x["materialization"].__setitem__(
                     "expected_git_head", "1" * 40
+                ),
+            ),
+            (
+                "coordinated.mathlib.substitution",
+                lambda x: (
+                    x["mathlib"].__setitem__("commit", "2" * 40),
+                    x["materialization"].__setitem__(
+                        "expected_git_head", "2" * 40
+                    ),
                 ),
             ),
             (
@@ -201,6 +223,12 @@ class ConfirmatoryRuntimeTests(unittest.TestCase):
             (
                 "verifier.argv",
                 lambda x: x["verifier"]["argv_template"].remove("-t"),
+            ),
+            (
+                "source.boundary",
+                lambda x: x["verifier"]["source_path_rules"].__setitem__(
+                    "must_resolve_within", "ANYWHERE"
+                ),
             ),
             (
                 "network",
