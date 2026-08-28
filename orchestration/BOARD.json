@@ -30,7 +30,9 @@
       "status": "READY",
       "paths": [
         "goal1/CONFIRMATORY_PROTOCOL.json",
-        "tests/test_confirmatory_protocol.py"
+        "tests/test_confirmatory_protocol.py",
+        "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+        "tests/test_confirmatory_execution_authority.py"
       ],
       "depends_on": [
         "G1-120",
@@ -40,11 +42,14 @@
         "G1-125",
         "G1-126"
       ],
-      "objective": "Seal the accepted benchmark, runtime, five-arm contracts, analysis inputs, and complete-cost policy into one immutable confirmatory protocol digest.",
+      "objective": "Complete one two-phase MF02 ticket: first seal powered family-aware protocol rules and a fail-closed execution interface; then, without mutating those rules, add the immutable exact model/executor/fresh-context authority bundle required to mark G1-121 DONE.",
       "acceptance": [
-        "All declared dependencies are DONE at the sealed revisions.",
-        "One canonical digest binds every scientific input.",
-        "The checker rejects any post-freeze mutation or unresolved input."
+        "All declared freeze dependencies are DONE at the bound revisions.",
+        "A prospective 244-problem family-aware selection and power basis are frozen before held-out release.",
+        "One canonical protocol-rules digest binds every presently available scientific rule and interface.",
+        "Before execution authority exists, the protocol returns BLOCKED_NO_EXECUTION_AUTHORITY and G1-121 remains not DONE.",
+        "Completion additionally requires an immutable bundle binding exact model/version/settings, executor digest, receipt issuer and verification key, authentic fresh-empty-context preflight receipt, scheduling, and serving-pool policy.",
+        "No second simultaneous MF02 ticket or replacement scheduled task is created."
       ]
     },
     {
@@ -156,7 +161,12 @@
         "tests/test_evidence_bridge.py"
       ],
       "depends_on": [
-        "G1-121",
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126",
         "G1-128"
       ],
       "objective": "Build the typed authority-to-evaluator bridge so only a closed dispatch joined to authenticated completions, verifier evidence, execution-ledger evidence, and reconciled costs can produce evaluator inputs.",
@@ -169,19 +179,25 @@
     {
       "id": "G1-128",
       "owner": "MM04",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
         "src/supernova_goal1/confirmatory_manifest.py",
         "tests/test_confirmatory_manifest.py"
       ],
       "depends_on": [
-        "G1-121"
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126"
       ],
-      "objective": "Expand the frozen protocol into one blinded one-shot paired cohort with every problem, arm, attempt, retry allowance, and budget preregistered.",
+      "objective": "Expand the frozen protocol rules into one blinded one-shot paired manifest schema with every problem, arm, attempt, retry allowance, and budget preregistered; allow deterministic non-credit draft manifests but block production dispatch until the later execution-authority ticket.",
       "acceptance": [
-        "The manifest is derived only from the frozen protocol digest.",
+        "The manifest is derived only from the frozen protocol-rules digest.",
         "All five arms are paired for every selected problem.",
-        "No attempt or retry can be added after dispatch begins."
+        "No attempt or retry can be added after dispatch begins.",
+        "Without an admissible execution-authority bundle the manifest is NON_CREDIT_DRAFT and dispatch is BLOCKED."
       ]
     },
     {
@@ -217,7 +233,8 @@
       "acceptance": [
         "Each named attack is deterministically rejected.",
         "No error path can yield scientific PASS.",
-        "The tests exercise the real bridge and evaluator boundary."
+        "The tests exercise the real bridge and evaluator boundary.",
+        "Draft protocols, simulation issuers, recurring-chat receipts, and absent or invalid execution-authority bundles are blocked from confirmatory credit."
       ]
     },
     {
@@ -249,7 +266,8 @@
         "reviews/G1_CONFIRMATORY_REVIEW.md"
       ],
       "depends_on": [
-        "G1-130"
+        "G1-130",
+        "G1-121"
       ],
       "objective": "Independently review the exact frozen protocol, implementation, tests, evidence lineage, and unresolved assumptions without authoring or merging reviewed code.",
       "acceptance": [
