@@ -64,12 +64,16 @@
     {
       "id": "G1-105",
       "owner": "MF05",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/execution/product_controls.py",
         "tests/test_execute_product_controls.py"
       ],
-      "objective": "Implement real product-only and multi-fidelity execution adapters with explicit product visibility, retry, and verifier-call boundaries."
+      "objective": "Implement real product-only and multi-fidelity execution adapters with explicit product visibility, retry, and verifier-call boundaries.",
+      "completion": {
+        "pull_request": 43,
+        "merge_commit": "c7957b2164e920379a2298e0131d10c5078d98bb"
+      }
     },
     {
       "id": "G1-106",
