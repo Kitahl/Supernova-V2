@@ -66,6 +66,18 @@ class BenchmarkProblemIdentity(_BenchmarkProblemIdentityTuple):
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("BenchmarkProblemIdentity may not be subclassed")
 
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not BenchmarkProblemIdentity:
+            return False
+        return tuple.__eq__(self, other)
+
+    def __ne__(self, other: object) -> bool:
+        if type(other) is not BenchmarkProblemIdentity:
+            return True
+        return tuple.__ne__(self, other)
+
+    __hash__ = tuple.__hash__
+
     @classmethod
     def _make(cls, iterable: object) -> "BenchmarkProblemIdentity":
         return cls(*tuple(iterable))  # type: ignore[arg-type]
@@ -157,6 +169,18 @@ class SplitContract(_SplitContractTuple):
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("SplitContract may not be subclassed")
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not SplitContract:
+            return False
+        return tuple.__eq__(self, other)
+
+    def __ne__(self, other: object) -> bool:
+        if type(other) is not SplitContract:
+            return True
+        return tuple.__ne__(self, other)
+
+    __hash__ = tuple.__hash__
 
     @classmethod
     def _make(cls, iterable: object) -> "SplitContract":
