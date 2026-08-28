@@ -320,7 +320,7 @@
       }
     ],
     "checkpoint_role": "PREREGISTERED_ROBUSTNESS_FRONTIER_NOT_AN_ALTERNATE_POSTHOC_PRIMARY",
-    "matching": "COMPARE_ALL_FIVE PAIRED OUTCOMES_AT_THE_SAME_REGISTERED_PREFIX_CAPACITY_VECTOR",
+    "matching": "COMPARE_ALL_FIVE_PAIRED_OUTCOMES_AT_THE_SAME_REGISTERED_PREFIX_CAPACITY_VECTOR",
     "realized_usage_matching_or_pair_exclusion": "FORBIDDEN",
     "overrun_pair_exclusion": "FORBIDDEN_OVERRUN_BLOCKS_THE_COHORT",
     "favorable_checkpoint_selection": "FORBIDDEN"
