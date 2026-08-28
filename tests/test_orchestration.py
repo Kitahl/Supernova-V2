@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -63,6 +64,27 @@ EXPECTED_ARCHIVED_IDS = {
     "G1-114",
     "G1-115",
 }
+
+
+
+def archived_commit_is_reachable(commit: str, runner=subprocess.run) -> bool:
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        return False
+    exists = runner(
+        ["git", "cat-file", "-e", f"{commit}^{commit}"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if exists.returncode != 0:
+        return False
+    ancestor = runner(
+        ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+    )
+    return ancestor.returncode == 0
 
 
 class OrchestrationTests(unittest.TestCase):
@@ -178,6 +200,31 @@ class OrchestrationTests(unittest.TestCase):
             self.assertIsInstance(completion["pull_request"], int)
             self.assertGreater(completion["pull_request"], 0)
             self.assertRegex(completion["merge_commit"], re.compile(r"^[0-9a-f]{40}$"))
+
+
+    def test_archive_commits_exist_and_are_reachable(self) -> None:
+        for ticket in self.archive["completed_tickets"]:
+            self.assertTrue(
+                archived_commit_is_reachable(ticket["completion"]["merge_commit"]),
+                ticket["id"],
+            )
+
+    def test_archive_commit_verifier_rejects_nonexistent_and_nonancestor(self) -> None:
+        self.assertFalse(archived_commit_is_reachable("0" * 40))
+
+        responses = iter(
+            [
+                subprocess.CompletedProcess([], 0),
+                subprocess.CompletedProcess([], 1),
+            ]
+        )
+
+        def nonancestor_runner(*_args, **_kwargs):
+            return next(responses)
+
+        self.assertFalse(
+            archived_commit_is_reachable("f" * 40, runner=nonancestor_runner)
+        )
 
 
 if __name__ == "__main__":
