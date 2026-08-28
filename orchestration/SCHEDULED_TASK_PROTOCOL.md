@@ -27,9 +27,9 @@ Dependencies:
 - every ticket carries a `depends_on` list of current ticket IDs;
 - dependencies must exist, must not contain the ticket itself, and must form an
   acyclic graph;
-- a non-supervisor ticket with an unresolved dependency remains `WAITING`;
-- a non-supervisor ticket with no unresolved dependency is `READY` unless it is
-  already `DONE`;
+- any ticket with an unresolved dependency remains `WAITING`;
+- any ticket with no unresolved dependency is `READY` unless it is already
+  `DONE`;
 - only the project manager changes dependency-derived ticket state, in a reviewed
   orchestration pull request;
 - dependency completion never changes a scheduler task identity.
@@ -54,6 +54,6 @@ Rules:
   request.
 
 MM06 is review-only, MF06 is integration-test-only, and BIL00 is status-only.
-Those supervisor tickets remain `WAITING` until the project manager explicitly
-dispatches their already-satisfied dependency set. The project manager merges
-after independent verification.
+Those path and authority restrictions do not override dependency-derived state:
+each becomes `READY` when its declared dependencies are `DONE`. The project
+manager merges after independent verification.
