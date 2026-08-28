@@ -18,5 +18,7 @@ jobs:
           python-version: "3.12"
       - name: Unit tests
         run: python -m unittest discover -s tests -p "test_*.py"
+      - name: G1-114 non-credit integration pilot
+        run: python -m unittest discover -s integration -p "test_non_credit_pilot.py"
       - name: Dry-run evaluator
         run: python scripts/evaluate_goal1.py goal1/GOAL1.json examples/dry_run_records.json
