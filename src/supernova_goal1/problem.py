@@ -66,6 +66,20 @@ class BenchmarkProblemIdentity(_BenchmarkProblemIdentityTuple):
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("BenchmarkProblemIdentity may not be subclassed")
 
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not BenchmarkProblemIdentity:
+            return False
+        try:
+            return self._validated_fields() == other._validated_fields()
+        except (TypeError, ValueError):
+            return False
+
+    def __ne__(self, other: object) -> bool:
+        return not self == other
+
+    def __hash__(self) -> int:
+        return hash(self._validated_fields())
+
     @classmethod
     def _make(cls, iterable: object) -> "BenchmarkProblemIdentity":
         return cls(*tuple(iterable))  # type: ignore[arg-type]
@@ -157,6 +171,20 @@ class SplitContract(_SplitContractTuple):
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("SplitContract may not be subclassed")
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not SplitContract:
+            return False
+        try:
+            return self._validated_fields() == other._validated_fields()
+        except (TypeError, ValueError):
+            return False
+
+    def __ne__(self, other: object) -> bool:
+        return not self == other
+
+    def __hash__(self) -> int:
+        return hash(self._validated_fields())
 
     @classmethod
     def _make(cls, iterable: object) -> "SplitContract":
