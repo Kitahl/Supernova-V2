@@ -14,6 +14,9 @@ class ScheduledChatArtifactKind(StrEnum):
     TERMINAL_RESPONSE = "scheduled_chat_terminal_response"
 
 
+_HTTP_TCHAR_PUNCTUATION = frozenset("!#$%&'*+-.^_`|~")
+
+
 def _token(value: str, field: str) -> str:
     if type(value) is not str:
         raise ValueError(f"{field} must be an exact non-empty trimmed string")
@@ -28,6 +31,13 @@ def _token(value: str, field: str) -> str:
     return value
 
 
+def _http_token(value: str) -> bool:
+    return bool(value) and all(
+        char.isascii() and (char.isalnum() or char in _HTTP_TCHAR_PUNCTUATION)
+        for char in value
+    )
+
+
 def _attempt(value: int) -> int:
     if type(value) is not int or value < 0:
         raise ValueError("attempt must be a non-negative integer")
@@ -39,8 +49,11 @@ def _media_type(value: str) -> str:
     if ";" not in value:
         raise ValueError("media_type must declare charset=utf-8")
     parts = [part.strip() for part in value.split(";")]
-    if not parts[0] or "/" not in parts[0]:
-        raise ValueError("media_type must contain a type/subtype")
+    if parts[0].count("/") != 1:
+        raise ValueError("media_type must contain a valid type/subtype")
+    type_name, subtype_name = parts[0].split("/", 1)
+    if not _http_token(type_name) or not _http_token(subtype_name):
+        raise ValueError("media_type must contain a valid type/subtype")
     charset_values = [
         part.split("=", 1)[1].strip().strip('"').lower()
         for part in parts[1:]
