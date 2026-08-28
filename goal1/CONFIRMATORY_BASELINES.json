@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "contract_id": "goal1-confirmatory-baselines-v1",
+  "status": "FROZEN",
+  "scope": [
+    "ordinary",
+    "portfolio"
+  ],
+  "estimand_role": "CONTROL_ARM_DEFINITIONS_ONLY",
+  "scientific_credit": "NONE_UNTIL_SEALED_BY_CONFIRMATORY_PROTOCOL_AND_EXECUTED_WITH_ADMISSIBLE_EVIDENCE",
+  "common": {
+    "attempts_per_problem_arm": 16,
+    "attempt_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "dispatch_policy": "REGISTER_ALL_16_BEFORE_FIRST_MODEL_CALL",
+    "completion_policy": "EXECUTE_AND_RECONCILE_ALL_16_EVEN_AFTER_A_VERIFIED_PASS",
+    "retry_policy": {
+      "adaptive_retries": "FORBIDDEN",
+      "reissue_failed_dispatch": "FORBIDDEN",
+      "unregistered_attempt": "BLOCKED",
+      "provider_or_transport_error": "INCOMPLETE_NOT_UNSOLVED",
+      "terminal_nonanswer_with_complete_artifact_and_cost": "UNSOLVED_ATTEMPT"
+    },
+    "expected_events_per_attempt": [
+      {
+        "event_kind": "scheduled_chat_model_call",
+        "count": 1
+      },
+      {
+        "event_kind": "lean_final_verifier",
+        "count": 1
+      },
+      {
+        "event_kind": "orchestration",
+        "count": 1
+      }
+    ],
+    "response_contract": {
+      "encoding": "UTF-8",
+      "artifact_kind": "LEAN_TACTIC_BODY",
+      "max_visible_response_utf8_bytes": 32768,
+      "empty_response": "TERMINAL_NONANSWER",
+      "over_limit_or_invalid_utf8": "BLOCKED"
+    },
+    "result_rule": {
+      "solved": "AT_LEAST_ONE_OF_16_ATTEMPTS_HAS_AN_ADMISSIBLE_FINAL_KERNEL_PASS",
+      "selected_attempt": "LOWEST_ATTEMPT_INDEX_WITH_AN_ADMISSIBLE_FINAL_KERNEL_PASS_AFTER_ALL_16_COMPLETE",
+      "no_passing_attempt": "UNSOLVED_ONLY_WHEN_ALL_16_CELLS_AND_COST_EVENTS_ARE_COMPLETE_OTHERWISE_INCOMPLETE",
+      "human_selection_or_posthoc_rerun": "FORBIDDEN"
+    },
+    "capability_surface": {
+      "model_provider_version_reasoning_mode_tools_and_generation_settings": "MUST_MATCH_ACROSS_ALL_FIVE_ARMS_AND_BE_BOUND_BY_THE_SHARED_CONFIRMATORY_PROTOCOL",
+      "external_tools": "FORBIDDEN",
+      "network_during_model_attempt": "FORBIDDEN",
+      "model_visible_input": "EXACT_COMMON_TEMPLATE_PLUS_EXACT_ARM_DELTA_ONLY"
+    },
+    "prompt_rendering": {
+      "encoding": "UTF-8",
+      "unicode_normalization": "NONE",
+      "line_endings": "LF",
+      "placeholder_substitution": "SINGLE_PASS_EXACT_NO_TRIMMING",
+      "placeholders": [
+        "SOURCE_SHA256",
+        "THEOREM_NAME",
+        "SOURCE_WITH_PROOF_HOLE",
+        "ATTEMPT_INDEX",
+        "STRATEGY_ID"
+      ],
+      "common_template": "You are solving exactly one frozen Lean 4 theorem.\nReturn only the tactic body that replaces {PROOF_HOLE} in the supplied source.\nDo not return Markdown, prose, imports, declarations, theorem statements, `by`, `sorry`, `admit`, custom axioms, or commands.\nUse only the supplied theorem statement and the imports already present in the frozen source.\nDo not rely on any earlier conversation, benchmark problem, arm, attempt, response, verifier result, saved memory, file, app, tool, or external network.\nFROZEN_SOURCE_SHA256={SOURCE_SHA256}\nFROZEN_THEOREM_NAME={THEOREM_NAME}\nBEGIN_FROZEN_SOURCE\n{SOURCE_WITH_PROOF_HOLE}\nEND_FROZEN_SOURCE"
+    },
+    "context_isolation_declaration": {
+      "shared_protocol_is_canonical_authority": true,
+      "required_scope": "ONE_NEW_EMPTY_MODEL_CONTEXT_PER_PROBLEM_ARM_ATTEMPT",
+      "allowed_predecessor_contexts": [],
+      "forbidden_context": [
+        "PRIOR_PROBLEM",
+        "PRIOR_ARM",
+        "PRIOR_ATTEMPT",
+        "SAVED_MEMORY",
+        "CUSTOM_INSTRUCTIONS",
+        "FILES",
+        "APPS",
+        "TOOLS",
+        "EXTERNAL_NETWORK"
+      ],
+      "admissible_receipt_modes": [
+        "PROVIDER_ATTESTED_EMPTY_CONTEXT",
+        "HERMETIC_LOCAL_INSTANCE"
+      ],
+      "required_receipt_fields": [
+        "receipt_schema",
+        "issuer_id",
+        "model_identity_sha256",
+        "context_id",
+        "problem_id",
+        "arm",
+        "attempt_index",
+        "initial_context_sha256",
+        "request_artifact_sha256",
+        "response_artifact_sha256",
+        "opened_at",
+        "closed_at",
+        "signature"
+      ],
+      "unique_context_id_per_attempt": true,
+      "destroy_or_close_after_response": true,
+      "recurring_chat_or_monitoring_task_without_fresh_context_attestation": "NON_CREDIT_ONLY",
+      "missing_or_self_asserted_receipt": "BLOCKED"
+    }
+  },
+  "arms": {
+    "ordinary": {
+      "prompt_delta": "ARM=ordinary\nATTEMPT={ATTEMPT_INDEX}\nSolve the theorem directly. Do not create a reusable external product or request feedback.",
+      "attempt_relationship": "16_IDENTICALLY_RENDERED_INDEPENDENT_DIRECT_ATTEMPTS",
+      "predecessor_visibility": [],
+      "strategy_schedule": [
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct",
+        "direct"
+      ],
+      "verifier_feedback_to_model": "NONE",
+      "product_persistence": "NONE"
+    },
+    "portfolio": {
+      "prompt_delta": "ARM=portfolio\nATTEMPT={ATTEMPT_INDEX}\nFROZEN_STRATEGY={STRATEGY_ID}\nProduce one independent proof attempt using the named strategy when applicable. Do not read or reuse another attempt.",
+      "attempt_relationship": "16_INDEPENDENT_PREDECLARED_STRATEGY_ATTEMPTS",
+      "predecessor_visibility": [],
+      "strategy_schedule": [
+        "direct_minimal",
+        "simp_norm_num",
+        "linarith",
+        "nlinarith",
+        "ring_ring_nf",
+        "field_simp",
+        "omega",
+        "positivity",
+        "interval_cases",
+        "contradiction",
+        "by_cases",
+        "induction",
+        "calc_rewrite",
+        "library_lemma",
+        "local_have_facts",
+        "alternate_concise"
+      ],
+      "verifier_feedback_to_model": "NONE",
+      "product_persistence": "NONE"
+    }
+  },
+  "cost_binding": {
+    "usage_basis": "visible_utf8_bytes",
+    "input_bytes": "EXACT_RENDERED_REQUEST_BYTES_PER_ATTEMPT",
+    "output_bytes": "EXACT_TERMINAL_RESPONSE_BYTES_PER_ATTEMPT",
+    "model_calls": 16,
+    "verifier_calls": 16,
+    "orchestration_events": 16,
+    "all_failures_and_nonanswers_are_charged": true,
+    "common_ceiling_and_residual_policy": "MUST_BE_BOUND_BY_CONFIRMATORY_COST_POLICY",
+    "unknown_measurement": "BLOCKED"
+  },
+  "terminal_decision_priority": [
+    "BLOCKED",
+    "INCOMPLETE",
+    "SOLVED",
+    "UNSOLVED"
+  ]
+}
