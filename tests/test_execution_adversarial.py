@@ -16,13 +16,13 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactKind,
 )
 from supernova_goal1.contracts import Arm
-from supernova_goal1.dispatch import CompletionSigner, DispatchAuthority
+from supernova_goal1.dispatch import (\n    CompletionPayload,\n    CompletionSigner,\n    DispatchAuthority,\n)
 from supernova_goal1.evaluate import evaluate_experiment
 from supernova_goal1.execution.baselines import (
     ModelAttemptObservation,
     execute_ordinary,
 )
-from supernova_goal1.execution.common import AttemptStatus, FrozenProblemRequest
+from supernova_goal1.execution.common import (\n    AttemptResult,\n    AttemptStatus,\n    FrozenProblemRequest,\n)
 from supernova_goal1.execution.product_controls import (
     ProductControlObservation,
     ProductObservationKind,
@@ -296,7 +296,7 @@ class ExecutionAdversarialIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(execution.cost_trace.coverage_complete)
 
-    def test_registered_but_uncompleted_attempt_cannot_be_a_retry(self) -> None:
+    def test_signed_but_unexecuted_completion_cannot_authorize_retry(self) -> None:
         request_utf8 = render_verified_chain_request(
             self.prompt,
             execution_authority=self.execution_authority,
@@ -314,8 +314,39 @@ class ExecutionAdversarialIntegrationTests(unittest.TestCase):
             request=request,
             completion_verifier_sha256=signer.public_commitment,
         )
-        with self.assertRaisesRegex(TypeError, "CompletionRecord"):
-            RetryLink(manifest.entries[-1])
+        response_artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
+            b"",
+            kind=ScheduledChatArtifactKind.TERMINAL_RESPONSE,
+            run_id=request.run_id,
+            problem_id=request.problem_id,
+            arm=request.arm,
+            attempt=request.attempt,
+        )
+        result = AttemptResult(
+            frozen_request_sha256=request.frozen_request_sha256,
+            run_id=request.run_id,
+            problem_id=request.problem_id,
+            arm=request.arm,
+            attempt=request.attempt,
+            request_artifact_id=request.request_artifact.artifact_id,
+            response_artifact=response_artifact,
+            status=AttemptStatus.NO_ANSWER,
+            error=None,
+        )
+        fabricated_terminal = signer.complete(
+            entry=manifest.entries[-1],
+            payload=CompletionPayload(request, result, None),
+        )
+        retry = RetryLink(fabricated_terminal)
+        with self.assertRaisesRegex(ValueError, "absent from trusted execution"):
+            render_verified_chain_request(
+                self.prompt,
+                execution_authority=self.execution_authority,
+                admitted_products=(),
+                retry_of=retry,
+            )
+        self.assertEqual(1, len(self.authority.current_manifest().entries))
+
 
     def test_wrong_lean_runtime_cannot_consume_prior_product(self) -> None:
         producer = self.emit_verified_product()
