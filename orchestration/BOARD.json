@@ -179,7 +179,7 @@
     {
       "id": "G1-128",
       "owner": "MM04",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
         "src/supernova_goal1/confirmatory_manifest.py",
         "tests/test_confirmatory_manifest.py"
