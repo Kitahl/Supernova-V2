@@ -311,12 +311,18 @@
           "response_discriminators",
           "product_declaration_policy",
           "predecessor_completion_requirement",
-          "cost_schedule",
+          "common_complete_cost_ceiling_and_matching_rule",
           "product_and_final_harness_construction",
           "terminal_result_rule"
         ],
-        "sole_permitted_difference": "PRODUCT_ADMISSION_RULE_UNVERIFIED_SYNTACTIC_ADMISSION_VERSUS_LEAN_PASS_ADMISSION",
-        "mismatch": "BLOCKED"
+        "sole_permitted_difference": "PRODUCT_ADMISSION_RULE_AND_ITS_FULLY_CHARGED_ADMISSION_EVENT_UNVERIFIED_SYNTAX_ADMISSION_VERSUS_LEAN_PASS_ADMISSION",
+        "mismatch": "BLOCKED",
+        "admission_cost_treatment": {
+          "product_only": "CHARGE_DETERMINISTIC_SYNTAX_ADMISSION_EVENT_AND_NO_LEAN_PRODUCT_VERIFIER",
+          "verified_chain": "CHARGE_ONE_LEAN_PRODUCT_VERIFIER_EVENT_FOR_EVERY_PRODUCT_CANDIDATE",
+          "matching": "G1_126_MUST_RECONCILE_THE_DIFFERENT_EVENT_MIX_UNDER_ONE_COMMON_COMPLETE_COST_RULE",
+          "free_or_omitted_verification_cost": "BLOCKED"
+        }
       }
     },
     "multi_fidelity": {
