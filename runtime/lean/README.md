@@ -25,6 +25,12 @@ the committed toolchain and dependency manifest. `check_runtime.py` verifies
 the reported Lean version and compiles `SupernovaGoal1Smoke.lean` with a
 bounded subprocess timeout.
 
+On Windows, keep the repository at a short physical path (for example
+`C:\sv2`). Mathlib contains deep artifact paths, and Lean can fail to create
+them when the physical checkout path approaches the legacy Windows path limit.
+A substituted drive letter is not sufficient because Lake resolves it back to
+the physical path.
+
 Do not run `lake update` during an experiment. Updating dependencies is an
 authority-changing maintenance operation that must produce and review a new
 `lake-manifest.json` before a later run.
