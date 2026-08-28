@@ -201,7 +201,7 @@ class AssembleMiniF2FKiminaTests(unittest.TestCase):
         kimina = manifest["sources"]["kimina_corrected_test"]
         self.assertEqual("2c4ba9119eef74d0d611f494261b2c5bae98c69a", deepseek["commit"])
         self.assertEqual(
-            "466e8d23e5f1ded669848066b0c20431de551ca7ac98817a22657985d0632d4b",
+            "d6654c88476ff14db19d57dea25bd955a240525fb52171e460f89d98f83d7dd5",
             deepseek["sha256"],
         )
         self.assertEqual("5def318348521dfc34875045a9ecddf729a2b49f", kimina["commit"])
