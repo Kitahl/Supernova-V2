@@ -53,8 +53,11 @@ required dimensions are:
 - verifier milliseconds;
 - orchestration milliseconds.
 
-A frozen budget ID and manifest bind the expected event IDs for each arm. Every
-observed event must reconcile exactly, including failed attempts, retries, selection
+An authority-authenticated freeze receipt binds the budget ID and manifest, identical
+per-dimension ceilings, globally unique expected event IDs across both arms, the
+selection rule, candidate-set manifests, fresh-evaluation manifest, and analysis plan.
+Every signed observed event ledger must reconcile exactly, including failed attempts,
+retries, selection
 work, and meta-improvement work. Unknown usage is never imputed as zero. Missing,
 extra, malformed, replaced, or over-budget evidence blocks scientific credit.
 
@@ -67,6 +70,8 @@ meta-improvement data, and released only after both selection seals. The evaluat
 is independent and applies the same items, runtime, verifier, scoring, and analysis
 to the control descendant, treatment descendant, and untouched solver.
 
+The executable contract test consumes and authenticates the lineage, cost, selection,
+freeze, and evaluation-release records; these are not self-asserted booleans.
 Post-release candidate substitution, rule changes, early release, leakage, or a
 missing untouched-solver result returns `BLOCKED`.
 
