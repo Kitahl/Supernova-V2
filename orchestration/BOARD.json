@@ -78,12 +78,16 @@
     {
       "id": "G1-106",
       "owner": "MM01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "src/supernova_goal1/execution/verified_chain.py",
         "tests/test_execute_verified_chain.py"
       ],
-      "objective": "Implement the real verified-chain executor so only admitted intermediate products enter later prompts, with every attempt and verifier event preregistered."
+      "objective": "Implement the real verified-chain executor so only admitted intermediate products enter later prompts, with every attempt and verifier event preregistered.",
+      "completion": {
+        "pull_request": 45,
+        "merge_commit": "bda03978d51d6b0508f84ccbac7b2beb62d4e736"
+      }
     },
     {
       "id": "G1-119",
