@@ -582,3 +582,27 @@ allocations prospectively fixed and recorded, and does the cost record include a
 resource-normalized quantity such as cgroup/process CPU time plus accelerator usage where material?
 If not, is the scientific claim explicitly limited to an elapsed-time/token proxy rather than
 "complete compute" parity?
+
+### 33. W3C Trace Context and OpenTelemetry — distributed evidence needs a shared correlation identity
+
+Primary sources: W3C, *Trace Context* Recommendation.
+<https://www.w3.org/TR/trace-context/>; OpenTelemetry, *Tracing API*.
+<https://opentelemetry.io/docs/specs/otel/trace/api/>.
+
+**EVIDENCE.** W3C Trace Context standardizes propagation of a unique trace identifier so an
+individual request/transaction remains identifiable across participating distributed components and
+trace data from multiple providers can be correlated. OpenTelemetry's `SpanContext` likewise carries
+immutable `TraceId`/`SpanId` identifiers, propagates the trace identity across process boundaries,
+and supports links between causally related spans.
+
+**INFERENCE for Goal 1.** These are observability/provenance precedents, not evidence that Supernova's
+mechanism works. They expose a repository seam: current `OutcomeRecord.cost` is a standalone
+aggregate consumed by `evaluate_experiment`, while G1-007's closed event telemetry is not joined to
+the experiment/problem/arm/replicate subject being scored. A cost report can therefore be complete
+yet scientifically misattributed, or a cheap-looking outcome aggregate can be accepted without being
+derived from the closed ledger.
+
+**Strong-control addendum — cost-to-outcome binding falsifier.** Does every scored cell carry one
+immutable execution/trace identity created before dispatch, shared by its model/verifier/orchestration
+events and closed cost report, and does the evaluator derive/reconcile the cell's cost from that
+report while rejecting missing, mismatched, duplicate, or replayed subjects?
