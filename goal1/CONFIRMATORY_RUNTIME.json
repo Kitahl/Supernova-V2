@@ -29,7 +29,7 @@
     "shell_source_evidence": {
       "ref": "v4.33.1",
       "path": "src/Lean/Shell.lean",
-      "git_blob_sha": "7395cf2f3c097f26a4fdb19d32f1cd02d537dd4f"
+      "git_blob_sha": "3f73f6fe35d11cbccd9b6effe1bafad030fdbdce"
     }
   },
   "mathlib": {
