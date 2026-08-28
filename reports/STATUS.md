@@ -104,6 +104,7 @@ Replace the completed pilot board with one dependency-aware confirmatory tranche
 In the same board transition, define Goal 2 as a contract-only ticket. Goal 2
 execution must remain blocked if that contract requires a valid Goal 1 PASS.
 
-The supervisor tickets MM06, MF06, and BIL00 remain `WAITING` by orchestration
-invariant even though their current-tranche review, pilot, and status artifacts
-have landed. Their state must not be rewritten to manufacture completion.
+The prior MM06, MF06, and BIL00 artifacts are archived with exact merge
+evidence. Their new tickets are initially `WAITING` because dependencies are
+unresolved; each becomes `READY` when its dependencies are `DONE`. Their
+review-only, integration-only, and status-only authority restrictions remain.
