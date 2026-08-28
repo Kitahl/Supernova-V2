@@ -400,22 +400,22 @@ def _base_result(bundle: EvidenceBridgeBundle) -> dict[str, object]:
         "run_id": _safe_text_attr(bundle, "run_id"),
         "experiment_id": EXPECTED_EXPERIMENT_ID,
         "bridge_sha256": bridge_sha256,
-        "bridge_authority_receipt_sha256": _safe_attr(
+        "bridge_authority_receipt_sha256": _safe_text_attr(
             bundle, "authority_receipt_sha256"
         ),
         "protocol_rules_sha256": _safe_text_attr(bundle, "protocol_rules_sha256"),
-        "confirmatory_manifest_sha256": _safe_attr(
+        "confirmatory_manifest_sha256": _safe_text_attr(
             bundle, "confirmatory_manifest_sha256"
         ),
-        "dispatch_manifest_sha256": _safe_attr(
+        "dispatch_manifest_sha256": _safe_text_attr(
             bundle, "dispatch_manifest_sha256"
         ),
         "close_sha256": _safe_text_attr(bundle, "close_sha256"),
         "completion_set_sha256": _safe_text_attr(bundle, "completion_set_sha256"),
-        "execution_authority_sha256": _safe_attr(
+        "execution_authority_sha256": _safe_text_attr(
             bundle, "execution_authority_sha256"
         ),
-        "manifest_credit_status": _safe_attr(
+        "manifest_credit_status": _safe_text_attr(
             bundle, "manifest_credit_status"
         ),
         "model_usage_basis": EXPECTED_USAGE_BASIS,
