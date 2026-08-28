@@ -129,7 +129,100 @@
       "no_passing_attempt": "UNSOLVED_ONLY_WHEN_ALL_16_CELLS_AND_COST_EVENTS_ARE_COMPLETE_OTHERWISE_INCOMPLETE",
       "human_selection_or_posthoc_rerun": "FORBIDDEN"
     },
-    "product_chain_prompt_template": "You are working on exactly one frozen Lean 4 theorem in one fresh context.\nUse only the frozen source and the admitted product declarations printed below.\nReturn exactly one canonical PRODUCT_CANDIDATE or FINAL_ANSWER response.\nA PRODUCT_CANDIDATE starts with the two frozen product discriminator comment lines and then contains exactly one permitted theorem or lemma declaration with the required declaration name.\nA FINAL_ANSWER starts with the two frozen answer discriminator comment lines and then contains only the tactic body that replaces the unique frozen proof hole.\nDo not return Markdown or prose. Do not add imports, axioms, commands, namespaces, sections, notation, macros, attributes, options, unsafe declarations, `sorry`, or `admit`.\nDo not rely on any earlier conversation, unprinted attempt, response, verifier result, memory, file, app, tool, or network.\nMODEL_VISIBLE_ARM_LABEL=product_chain\nATTEMPT={ATTEMPT_INDEX}\nREQUIRED_PRODUCT_DECLARATION_NAME={PRODUCT_DECLARATION_NAME}\nFROZEN_SOURCE_SHA256={SOURCE_SHA256}\nFROZEN_THEOREM_NAME={THEOREM_NAME}\nBEGIN_FROZEN_SOURCE\n{SOURCE_WITH_PROOF_HOLE}\nEND_FROZEN_SOURCE\nBEGIN_ADMITTED_PRODUCTS\n{ORDERED_ADMITTED_PRODUCT_RESPONSE_BYTES}\nEND_ADMITTED_PRODUCTS"
+    "product_chain_prompt_template": "You are working on exactly one frozen Lean 4 theorem in one fresh context.\nUse only the frozen source and the admitted product declarations printed below.\nReturn exactly one canonical PRODUCT_CANDIDATE or FINAL_ANSWER response.\nA PRODUCT_CANDIDATE starts with the two frozen product discriminator comment lines and then contains exactly one permitted theorem or lemma declaration with the required declaration name.\nA FINAL_ANSWER starts with the two frozen answer discriminator comment lines and then contains only the tactic body that replaces the unique frozen proof hole.\nDo not return Markdown or prose. Do not add imports, axioms, commands, namespaces, sections, notation, macros, attributes, options, unsafe declarations, `sorry`, or `admit`.\nDo not rely on any earlier conversation, unprinted attempt, response, verifier result, memory, file, app, tool, or network.\nMODEL_VISIBLE_ARM_LABEL=product_chain\nATTEMPT={ATTEMPT_INDEX}\nREQUIRED_PRODUCT_DECLARATION_NAME={PRODUCT_DECLARATION_NAME}\nFROZEN_SOURCE_SHA256={SOURCE_SHA256}\nFROZEN_THEOREM_NAME={THEOREM_NAME}\nBEGIN_FROZEN_SOURCE\n{SOURCE_WITH_PROOF_HOLE}\nEND_FROZEN_SOURCE\nBEGIN_ADMITTED_PRODUCTS\n{ORDERED_ADMITTED_PRODUCT_RESPONSE_BYTES}\nEND_ADMITTED_PRODUCTS",
+    "product_chain_shared_surface": {
+      "canonicalization": "RFC8785_COMPATIBLE_UTF8_SORTED_KEYS_NO_INSIGNIFICANT_WHITESPACE_FOR_THIS_ASCII_DOMAIN",
+      "projection": {
+        "schema": "supernova.product-chain-shared-surface.v1",
+        "attempt_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "completion_policy": "EXECUTE_AND_RECONCILE_ALL_16_EVEN_AFTER_A_VERIFIED_PASS",
+        "context_scope": "ONE_NEW_EMPTY_MODEL_CONTEXT_PER_PROBLEM_ARM_ATTEMPT",
+        "predecessor_rule": "ATTEMPT_I_BINDS_AUTHENTICATED_TERMINAL_COMPLETION_OF_ATTEMPT_I_MINUS_1_REGARDLESS_OF_OUTCOME",
+        "predecessor_metadata_model_visible": false,
+        "model_visible_prompt_template": "You are working on exactly one frozen Lean 4 theorem in one fresh context.\nUse only the frozen source and the admitted product declarations printed below.\nReturn exactly one canonical PRODUCT_CANDIDATE or FINAL_ANSWER response.\nA PRODUCT_CANDIDATE starts with the two frozen product discriminator comment lines and then contains exactly one permitted theorem or lemma declaration with the required declaration name.\nA FINAL_ANSWER starts with the two frozen answer discriminator comment lines and then contains only the tactic body that replaces the unique frozen proof hole.\nDo not return Markdown or prose. Do not add imports, axioms, commands, namespaces, sections, notation, macros, attributes, options, unsafe declarations, `sorry`, or `admit`.\nDo not rely on any earlier conversation, unprinted attempt, response, verifier result, memory, file, app, tool, or network.\nMODEL_VISIBLE_ARM_LABEL=product_chain\nATTEMPT={ATTEMPT_INDEX}\nREQUIRED_PRODUCT_DECLARATION_NAME={PRODUCT_DECLARATION_NAME}\nFROZEN_SOURCE_SHA256={SOURCE_SHA256}\nFROZEN_THEOREM_NAME={THEOREM_NAME}\nBEGIN_FROZEN_SOURCE\n{SOURCE_WITH_PROOF_HOLE}\nEND_FROZEN_SOURCE\nBEGIN_ADMITTED_PRODUCTS\n{ORDERED_ADMITTED_PRODUCT_RESPONSE_BYTES}\nEND_ADMITTED_PRODUCTS",
+        "response_discriminator": {
+          "product_prefix_lines": [
+            "-- supernova-kind: PRODUCT_CANDIDATE",
+            "-- supernova-schema: supernova.product-candidate-emission.v1"
+          ],
+          "final_answer_prefix_lines": [
+            "-- supernova-kind: FINAL_ANSWER",
+            "-- supernova-schema: supernova.final-answer-emission.v1"
+          ],
+          "classification": "EXACT_FIRST_TWO_VISIBLE_LINES",
+          "missing_duplicate_or_ambiguous_discriminator": "BLOCKED",
+          "no_answer_exact_utf8": "-- supernova-kind: NO_ANSWER\n-- supernova-schema: supernova.no-answer-emission.v1\n"
+        },
+        "product_declaration_policy": {
+          "required_name_template": "SupernovaProduct.P_{FULL_PROBLEM_SHA256}.a{ATTEMPT_INDEX_TWO_DIGITS}",
+          "declaration_count": 1,
+          "allowed_declaration_kinds": [
+            "theorem",
+            "lemma"
+          ],
+          "parser_mode": "PINNED_LEAN_PARSER_WITHOUT_ELABORATION",
+          "forbidden_syntax": [
+            "import",
+            "namespace",
+            "end",
+            "section",
+            "variable",
+            "notation",
+            "macro",
+            "syntax",
+            "attribute",
+            "set_option",
+            "axiom",
+            "opaque",
+            "unsafe",
+            "sorry",
+            "admit",
+            "declaration_attributes"
+          ],
+          "unique_name_and_attempt_binding_required": true,
+          "parse_failure_or_name_kind_policy_violation": "PRODUCT_NOT_ADMISSIBLE"
+        },
+        "product_harness": "FROZEN_IMPORT_AND_PREFIX_BYTES_PLUS_ALL_EARLIER_ADMITTED_PRODUCT_RESPONSE_BYTES_IN_ATTEMPT_ORDER_PLUS_EXACT_CURRENT_PRODUCT_RESPONSE_BYTES",
+        "final_harness": "INSERT_ALL_ADMITTED_PRODUCT_RESPONSE_BYTES_IN_ATTEMPT_ORDER_AT_THE_FROZEN_PRE_TARGET_OFFSET_THEN_REPLACE_ONLY_THE_UNIQUE_FROZEN_PROOF_HOLE_BYTE_SLICE_WITH_EXACT_FINAL_ANSWER_RESPONSE_BYTES",
+        "construction_transformation": "BYTE_SLICE_ONLY_NO_PARSING_NORMALIZATION_OR_TARGET_REGENERATION",
+        "required_construction_bindings": [
+          "frozen_target_source_sha256",
+          "unique_proof_hole_start_byte",
+          "unique_proof_hole_end_byte",
+          "ordered_admitted_product_response_sha256",
+          "exact_response_sha256",
+          "constructed_source_sha256"
+        ],
+        "product_verifier_invocation": "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_PER_PRODUCT_CANDIDATE",
+        "final_verifier_invocation": "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_PER_FINAL_ANSWER",
+        "common_complete_cost_rule": "MUST_BE_BOUND_BY_CONFIRMATORY_COST_POLICY",
+        "terminal_result_rule": {
+          "solved": "AT_LEAST_ONE_OF_16_ATTEMPTS_HAS_AN_ADMISSIBLE_FINAL_KERNEL_PASS",
+          "selected_attempt": "LOWEST_ATTEMPT_INDEX_WITH_AN_ADMISSIBLE_FINAL_KERNEL_PASS_AFTER_ALL_16_COMPLETE",
+          "no_passing_attempt": "UNSOLVED_ONLY_WHEN_ALL_16_CELLS_AND_COST_EVENTS_ARE_COMPLETE_OTHERWISE_INCOMPLETE",
+          "human_selection_or_posthoc_rerun": "FORBIDDEN"
+        }
+      },
+      "projection_sha256": "78cd516ce0f5e908c60f1e58c8b00bbd8c27ac0d50d8fc588c6e52d521df8d92",
+      "g1_125_requirement": "MUST_REFERENCE_AND_MATCH_THIS_EXACT_PROJECTION_SHA256"
+    }
   },
   "arms": {
     "product_only": {
@@ -234,11 +327,12 @@
         "one_output_kind_per_attempt": true,
         "product_candidate_requires_syntax_and_name_policy": true,
         "product_candidate_is_never_lean_verified_before_admission": true,
-        "final_answer_requires_exact_answer_discriminator": true
+        "final_answer_requires_exact_answer_discriminator": true,
+        "no_answer_requires_exact_bytes": true
       },
       "verifier_policy": {
         "FINAL_ANSWER": "RUN_EXACTLY_ONE_FINAL_LEAN_VERIFIER_ON_THE_BOUND_FINAL_CONSTRUCTED_SOURCE_AND_NEVER_FEED_RESULT_FORWARD",
-        "PRODUCT_CANDIDATE": "NO_LEAN_INVOCATION_BEFORE_ADMISSION_RECORD_TYPED_NOT_INVOKED",
+        "PRODUCT_CANDIDATE": "RUN_THE_IDENTICAL_BOUND_PRODUCT_HARNESS_LEAN_VERIFIER_THEN_QUARANTINE_ITS_RESULT_WITH_NO_EFFECT_ON_ADMISSION_VISIBILITY_OR_LATER_MODEL_BYTES",
         "NO_ANSWER": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
         "ERROR": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
         "any_verifier_or_predecessor_completion_metadata_visible_to_later_model_attempt": "BLOCKED"
@@ -253,7 +347,8 @@
           "-- supernova-schema: supernova.final-answer-emission.v1"
         ],
         "classification": "EXACT_FIRST_TWO_VISIBLE_LINES",
-        "missing_duplicate_or_ambiguous_discriminator": "BLOCKED"
+        "missing_duplicate_or_ambiguous_discriminator": "BLOCKED",
+        "no_answer_exact_utf8": "-- supernova-kind: NO_ANSWER\n-- supernova-schema: supernova.no-answer-emission.v1\n"
       },
       "product_declaration_policy": {
         "required_name_template": "SupernovaProduct.P_{FULL_PROBLEM_SHA256}.a{ATTEMPT_INDEX_TWO_DIGITS}",
@@ -315,13 +410,13 @@
           "product_and_final_harness_construction",
           "terminal_result_rule"
         ],
-        "sole_permitted_difference": "PRODUCT_ADMISSION_RULE_AND_ITS_FULLY_CHARGED_ADMISSION_EVENT_UNVERIFIED_SYNTAX_ADMISSION_VERSUS_LEAN_PASS_ADMISSION",
+        "sole_permitted_difference": "USE_OF_THE_IDENTICAL_PRODUCT_VERIFIER_RESULT_FOR_ADMISSION_PRODUCT_ONLY_IGNORES_IT_VERIFIED_CHAIN_REQUIRES_ADMISSIBLE_PASS",
         "mismatch": "BLOCKED",
         "admission_cost_treatment": {
-          "product_only": "CHARGE_DETERMINISTIC_SYNTAX_ADMISSION_EVENT_AND_NO_LEAN_PRODUCT_VERIFIER",
-          "verified_chain": "CHARGE_ONE_LEAN_PRODUCT_VERIFIER_EVENT_FOR_EVERY_PRODUCT_CANDIDATE",
-          "matching": "G1_126_MUST_RECONCILE_THE_DIFFERENT_EVENT_MIX_UNDER_ONE_COMMON_COMPLETE_COST_RULE",
-          "free_or_omitted_verification_cost": "BLOCKED"
+          "product_only": "CHARGE_ONE_IDENTICAL_LEAN_PRODUCT_VERIFIER_EVENT_BUT_QUARANTINE_AND_IGNORE_ITS_RESULT",
+          "verified_chain": "CHARGE_ONE_IDENTICAL_LEAN_PRODUCT_VERIFIER_EVENT_AND_REQUIRE_ADMISSIBLE_PASS_FOR_PRODUCT_VISIBILITY",
+          "matching": "IDENTICAL_PRODUCT_VERIFIER_INVOCATION_AND_G1_126_COMMON_COMPLETE_COST_RULE",
+          "free_omitted_or_model_visible_verification_cost_or_result": "BLOCKED"
         }
       }
     },
@@ -552,7 +647,7 @@
         "count": 1
       }
     ],
-    "product_only_verifier_event": "ONE_RECONCILED_SLOT_PER_ATTEMPT_TYPED_AS_INVOKED_OR_NOT_INVOKED",
+    "product_only_verifier_event": "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_FOR_EVERY_PRODUCT_CANDIDATE_OR_FINAL_ANSWER_AND_ONE_TYPED_NOT_INVOKED_SLOT_FOR_NO_ANSWER_OR_ERROR",
     "multi_fidelity_verifier_calls": 16,
     "model_calls_per_arm": 16,
     "orchestration_events_per_arm": 16,
