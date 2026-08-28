@@ -70,7 +70,7 @@
     {
       "id": "G1-123",
       "owner": "MF04",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/CONFIRMATORY_BASELINES.json",
         "tests/test_confirmatory_baselines.py"
@@ -81,7 +81,11 @@
         "Both baseline contracts are machine-readable and closed.",
         "Attempt quotas and cost events are explicit.",
         "Unregistered retries or prompt changes are rejected."
-      ]
+      ],
+      "completion": {
+        "pull_request": 59,
+        "merge_commit": "04f4f03c2ed1279727d7be22678c53f158625880"
+      }
     },
     {
       "id": "G1-124",
