@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "goal1" / "CONFIRMATORY_PRODUCT_CONTROLS.json"
-EXPECTED_GIT_BLOB_SHA1 = "25839995ea09d43045bcacdc4b710cec87ee9f1e"
+EXPECTED_GIT_BLOB_SHA1 = "eeceab0d674529123db1d91f8ce8ff60422264d0"
 EXPECTED_RECEIPT_FIELDS = [
     "receipt_schema",
     "issuer_id",
@@ -57,6 +57,10 @@ EXPECTED_ANSWER_PREFIX = [
     "-- supernova-kind: FINAL_ANSWER",
     "-- supernova-schema: supernova.final-answer-emission.v1",
 ]
+EXPECTED_NO_ANSWER = (
+    "-- supernova-kind: NO_ANSWER\n"
+    "-- supernova-schema: supernova.no-answer-emission.v1\n"
+)
 
 
 def load_contract() -> dict:
@@ -224,6 +228,7 @@ def validate_contract(contract: object) -> None:
         "final_answer_prefix_lines": EXPECTED_ANSWER_PREFIX,
         "classification": "EXACT_FIRST_TWO_VISIBLE_LINES",
         "missing_duplicate_or_ambiguous_discriminator": "BLOCKED",
+        "no_answer_exact_utf8": EXPECTED_NO_ANSWER,
     }:
         raise ValueError("response discriminator changed")
 
@@ -297,6 +302,7 @@ def validate_contract(contract: object) -> None:
         "product_candidate_requires_syntax_and_name_policy": True,
         "product_candidate_is_never_lean_verified_before_admission": True,
         "final_answer_requires_exact_answer_discriminator": True,
+        "no_answer_requires_exact_bytes": True,
     }:
         raise ValueError("product output contract changed")
     construction = product["construction_policy"]
@@ -326,7 +332,7 @@ def validate_contract(contract: object) -> None:
             "RUN_EXACTLY_ONE_FINAL_LEAN_VERIFIER_ON_THE_BOUND_FINAL_CONSTRUCTED_SOURCE_AND_NEVER_FEED_RESULT_FORWARD"
         ),
         "PRODUCT_CANDIDATE": (
-            "NO_LEAN_INVOCATION_BEFORE_ADMISSION_RECORD_TYPED_NOT_INVOKED"
+            "RUN_THE_IDENTICAL_BOUND_PRODUCT_HARNESS_LEAN_VERIFIER_THEN_QUARANTINE_ITS_RESULT_WITH_NO_EFFECT_ON_ADMISSION_VISIBILITY_OR_LATER_MODEL_BYTES"
         ),
         "NO_ANSWER": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
         "ERROR": "NO_LEAN_INVOCATION_RECORD_TYPED_NOT_INVOKED",
@@ -334,12 +340,85 @@ def validate_contract(contract: object) -> None:
     }:
         raise ValueError("product verifier policy changed")
     parity = product["verified_chain_surface_parity"]
+    if parity["must_match_verified_chain"] != [
+        "attempt_slots",
+        "fresh_context_rule",
+        "model_visible_prompt_template",
+        "response_discriminators",
+        "product_declaration_policy",
+        "predecessor_completion_requirement",
+        "common_complete_cost_ceiling_and_matching_rule",
+        "product_and_final_harness_construction",
+        "terminal_result_rule",
+    ]:
+        raise ValueError("surface parity field list changed")
     if parity["sole_permitted_difference"] != (
-        "PRODUCT_ADMISSION_RULE_UNVERIFIED_SYNTACTIC_ADMISSION_VERSUS_LEAN_PASS_ADMISSION"
+        "USE_OF_THE_IDENTICAL_PRODUCT_VERIFIER_RESULT_FOR_ADMISSION_PRODUCT_ONLY_IGNORES_IT_VERIFIED_CHAIN_REQUIRES_ADMISSIBLE_PASS"
     ):
         raise ValueError("product-chain causal contrast changed")
+    if parity["admission_cost_treatment"] != {
+        "product_only": (
+            "CHARGE_ONE_IDENTICAL_LEAN_PRODUCT_VERIFIER_EVENT_BUT_QUARANTINE_AND_IGNORE_ITS_RESULT"
+        ),
+        "verified_chain": (
+            "CHARGE_ONE_IDENTICAL_LEAN_PRODUCT_VERIFIER_EVENT_AND_REQUIRE_ADMISSIBLE_PASS_FOR_PRODUCT_VISIBILITY"
+        ),
+        "matching": (
+            "IDENTICAL_PRODUCT_VERIFIER_INVOCATION_AND_G1_126_COMMON_COMPLETE_COST_RULE"
+        ),
+        "free_omitted_or_model_visible_verification_cost_or_result": "BLOCKED",
+    }:
+        raise ValueError("admission cost treatment changed")
     if parity["mismatch"] != "BLOCKED":
         raise ValueError("surface parity mismatch handling changed")
+
+    surface = shared["product_chain_shared_surface"]
+    projection = surface["projection"]
+    expected_projection = {
+        "schema": "supernova.product-chain-shared-surface.v1",
+        "attempt_indices": shared["attempt_indices"],
+        "completion_policy": shared["completion_policy"],
+        "context_scope": isolation["required_scope"],
+        "predecessor_rule": binding["predecessor_rule"],
+        "predecessor_metadata_model_visible": binding["model_visible"],
+        "model_visible_prompt_template": shared["product_chain_prompt_template"],
+        "response_discriminator": product["response_discriminator"],
+        "product_declaration_policy": product["product_declaration_policy"],
+        "product_harness": construction["product_harness"],
+        "final_harness": construction["final_harness"],
+        "construction_transformation": construction["transformation"],
+        "required_construction_bindings": construction["required_bindings"],
+        "product_verifier_invocation": (
+            "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_PER_PRODUCT_CANDIDATE"
+        ),
+        "final_verifier_invocation": (
+            "ONE_IDENTICAL_BOUND_LEAN_VERIFIER_EVENT_PER_FINAL_ANSWER"
+        ),
+        "common_complete_cost_rule": contract["cost_event_contract"][
+            "common_complete_cost_ceiling_and_matching_rule"
+        ],
+        "terminal_result_rule": shared["terminal_result_rule"],
+    }
+    if projection != expected_projection:
+        raise ValueError("shared surface projection changed")
+    canonical_projection = json.dumps(
+        projection,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    if surface["projection_sha256"] != hashlib.sha256(
+        canonical_projection
+    ).hexdigest():
+        raise ValueError("shared surface projection digest changed")
+    if surface["projection_sha256"] != (
+        "78cd516ce0f5e908c60f1e58c8b00bbd8c27ac0d50d8fc588c6e52d521df8d92"
+    ):
+        raise ValueError("shared surface identity changed")
+    if surface["g1_125_requirement"] != (
+        "MUST_REFERENCE_AND_MATCH_THIS_EXACT_PROJECTION_SHA256"
+    ):
+        raise ValueError("G1-125 surface binding changed")
 
     multi = arms["multi_fidelity"]
     if multi["attempt_relationship"] != (
@@ -439,7 +518,7 @@ class ConfirmatoryProductControlContractTests(unittest.TestCase):
             product["prompt_delta"],
         )
         self.assertEqual(
-            "PRODUCT_ADMISSION_RULE_UNVERIFIED_SYNTACTIC_ADMISSION_VERSUS_LEAN_PASS_ADMISSION",
+            "USE_OF_THE_IDENTICAL_PRODUCT_VERIFIER_RESULT_FOR_ADMISSION_PRODUCT_ONLY_IGNORES_IT_VERIFIED_CHAIN_REQUIRES_ADMISSIBLE_PASS",
             product["verified_chain_surface_parity"]["sole_permitted_difference"],
         )
         self.assertEqual(
@@ -465,11 +544,54 @@ class ConfirmatoryProductControlContractTests(unittest.TestCase):
             EXPECTED_ANSWER_PREFIX,
             product["response_discriminator"]["final_answer_prefix_lines"],
         )
+        self.assertEqual(
+            EXPECTED_NO_ANSWER,
+            product["response_discriminator"]["no_answer_exact_utf8"],
+        )
         self.assertIn("axiom", product["product_declaration_policy"]["forbidden_syntax"])
         self.assertEqual(
             "BLOCKED",
             product["construction_policy"]["target_statement_or_import_mutation"],
         )
+
+    def test_shared_surface_projection_and_harnesses_are_immutable(self) -> None:
+        surface = self.contract["shared"]["product_chain_shared_surface"]
+        self.assertEqual(
+            "78cd516ce0f5e908c60f1e58c8b00bbd8c27ac0d50d8fc588c6e52d521df8d92",
+            surface["projection_sha256"],
+        )
+        changed = copy.deepcopy(self.contract)
+        changed["arms"]["product_only"]["construction_policy"]["product_harness"] = (
+            "CALLER_SELECTED"
+        )
+        with self.assertRaisesRegex(ValueError, "shared surface projection"):
+            validate_contract(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["arms"]["product_only"]["construction_policy"]["final_harness"] = (
+            "REGENERATE_TARGET"
+        )
+        with self.assertRaisesRegex(ValueError, "shared surface projection"):
+            validate_contract(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["arms"]["product_only"]["verified_chain_surface_parity"][
+            "must_match_verified_chain"
+        ] = []
+        with self.assertRaisesRegex(ValueError, "surface parity field list"):
+            validate_contract(changed)
+
+    def test_no_answer_representation_is_closed(self) -> None:
+        changed = copy.deepcopy(self.contract)
+        changed["arms"]["product_only"]["response_discriminator"][
+            "no_answer_exact_utf8"
+        ] = ""
+        with self.assertRaisesRegex(ValueError, "response discriminator"):
+            validate_contract(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["arms"]["product_only"]["output_contract"][
+            "no_answer_requires_exact_bytes"
+        ] = False
+        with self.assertRaisesRegex(ValueError, "output contract"):
+            validate_contract(changed)
 
     def test_multi_fidelity_is_metadata_only_successive_halving(self) -> None:
         multi = self.contract["arms"]["multi_fidelity"]
