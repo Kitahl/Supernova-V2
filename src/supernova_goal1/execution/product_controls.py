@@ -7,7 +7,7 @@ import json
 from typing import Callable
 
 from ..contracts import Arm
-from ..dispatch import DispatchAuthority, DispatchManifest
+from ..dispatch import CompletionRecord, DispatchAuthority, DispatchManifest
 from .baselines import (
     BaselineDispatch,
     BaselineExecution,
@@ -51,30 +51,40 @@ def _canonical_bytes(value: object) -> bytes:
 
 @dataclass(frozen=True)
 class VisibleProduct:
-    """One immutable unverified product that is visible to a later prompt."""
+    """One immutable unverified product bound to its signed producer completion."""
 
-    producer_frozen_request_sha256: str
-    producer_attempt: int
+    producer_completion: CompletionRecord
     content_utf8: bytes
 
     def __post_init__(self) -> None:
-        if (
-            type(self.producer_frozen_request_sha256) is not str
-            or len(self.producer_frozen_request_sha256) != 64
-            or any(
-                char not in "0123456789abcdef"
-                for char in self.producer_frozen_request_sha256
-            )
-        ):
-            raise ValueError(
-                "producer_frozen_request_sha256 must be 64 lowercase hexadecimal characters"
-            )
-        if type(self.producer_attempt) is not int or self.producer_attempt < 0:
-            raise ValueError("producer_attempt must be a non-negative integer")
+        if type(self.producer_completion) is not CompletionRecord:
+            raise TypeError("producer_completion must be an exact CompletionRecord")
+        completion = CompletionRecord.from_mapping(
+            self.producer_completion.to_mapping()
+        )
         content = _utf8(self.content_utf8, "content_utf8")
         if not content:
             raise ValueError("visible product content must not be empty")
+        payload = completion.payload
+        result = payload.attempt_result
+        if payload.request.arm is not Arm.PRODUCT_ONLY:
+            raise ValueError("visible products require product-only producer completions")
+        if result.status is not AttemptStatus.NO_ANSWER:
+            raise ValueError("visible product producer must be a non-terminal product step")
+        if payload.verifier_receipt is not None:
+            raise ValueError("visible products must be unverified")
+        if not result.response_artifact.verifies(content):
+            raise ValueError("visible product bytes do not match producer completion")
+        object.__setattr__(self, "producer_completion", completion)
         object.__setattr__(self, "content_utf8", bytes(content))
+
+    @property
+    def producer_frozen_request_sha256(self) -> str:
+        return self.producer_completion.payload.request.frozen_request_sha256
+
+    @property
+    def producer_attempt(self) -> int:
+        return self.producer_completion.payload.request.attempt
 
     @property
     def product_id(self) -> str:
@@ -85,6 +95,8 @@ class VisibleProduct:
             "content_utf8": self.content_utf8.decode("utf-8"),
             "product_id": self.product_id,
             "producer_attempt": self.producer_attempt,
+            "producer_completion_sha256": self.producer_completion.record_sha256,
+            "producer_dispatch_id": self.producer_completion.dispatch_id,
             "producer_frozen_request_sha256": self.producer_frozen_request_sha256,
             "verification": "UNVERIFIED",
         }
@@ -226,8 +238,7 @@ def render_product_only_request(
     retry = _attempt(retry_of_attempt, "retry_of_attempt")
     snapshots = tuple(
         VisibleProduct(
-            product.producer_frozen_request_sha256,
-            product.producer_attempt,
+            product.producer_completion,
             product.content_utf8,
         )
         for product in visible_products
@@ -306,6 +317,28 @@ def execute_product_only_step(
     for product in visible_products:
         if product.producer_attempt >= request.attempt:
             raise ValueError("visible products must come from an earlier frozen attempt")
+        producer = product.producer_completion
+        matches = [
+            entry
+            for entry in manifest.entries
+            if (
+                entry.dispatch_id == producer.dispatch_id
+                and entry.entry_sha256 == producer.entry_sha256
+            )
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                "visible product producer completion is absent from the supplied manifest"
+            )
+        producer_request = producer.payload.request
+        if (
+            producer_request.run_id != request.run_id
+            or producer_request.problem_id != request.problem_id
+            or producer_request.arm is not Arm.PRODUCT_ONLY
+        ):
+            raise ValueError(
+                "visible product producer is outside the current product-only cell"
+            )
     if not request.request_artifact.verifies(canonical_request):
         raise ValueError(
             "frozen request artifact does not match explicit product visibility"
@@ -351,11 +384,16 @@ def execute_product_only_step(
     )
     emitted_product = None
     if captured and captured[0].kind is ProductObservationKind.PRODUCT:
-        emitted_product = VisibleProduct(
-            request.frozen_request_sha256,
-            request.attempt,
-            captured[0].response_utf8,
-        )
+        result = baseline.completion.payload.attempt_result
+        if (
+            result.status is AttemptStatus.NO_ANSWER
+            and captured[0].dispatch_id == baseline.completion.dispatch_id
+            and result.response_artifact.verifies(captured[0].response_utf8)
+        ):
+            emitted_product = VisibleProduct(
+                baseline.completion,
+                captured[0].response_utf8,
+            )
     return ProductOnlyStepExecution(
         baseline,
         tuple(product.product_id for product in visible_products),
