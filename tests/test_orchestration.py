@@ -103,6 +103,9 @@ class OrchestrationTests(unittest.TestCase):
         self.assertTrue(current_ids.isdisjoint(archived_ids))
         for ticket in archived:
             self.assertIn(ticket["owner"], EXPECTED_ROLES)
+            self.assertIsInstance(ticket["paths"], list)
+            self.assertTrue(ticket["paths"])
+            self.assertTrue(all(isinstance(path, str) and path for path in ticket["paths"]))
             completion = ticket["completion"]
             self.assertIsInstance(completion["pull_request"], int)
             self.assertGreater(completion["pull_request"], 0)
