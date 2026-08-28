@@ -69,14 +69,16 @@ class BenchmarkProblemIdentity(_BenchmarkProblemIdentityTuple):
     def __eq__(self, other: object) -> bool:
         if type(other) is not BenchmarkProblemIdentity:
             return False
-        return tuple.__eq__(self, other)
+        try:
+            return self._validated_fields() == other._validated_fields()
+        except (TypeError, ValueError):
+            return False
 
     def __ne__(self, other: object) -> bool:
-        if type(other) is not BenchmarkProblemIdentity:
-            return True
-        return tuple.__ne__(self, other)
+        return not self == other
 
-    __hash__ = tuple.__hash__
+    def __hash__(self) -> int:
+        return hash(self._validated_fields())
 
     @classmethod
     def _make(cls, iterable: object) -> "BenchmarkProblemIdentity":
@@ -173,14 +175,16 @@ class SplitContract(_SplitContractTuple):
     def __eq__(self, other: object) -> bool:
         if type(other) is not SplitContract:
             return False
-        return tuple.__eq__(self, other)
+        try:
+            return self._validated_fields() == other._validated_fields()
+        except (TypeError, ValueError):
+            return False
 
     def __ne__(self, other: object) -> bool:
-        if type(other) is not SplitContract:
-            return True
-        return tuple.__ne__(self, other)
+        return not self == other
 
-    __hash__ = tuple.__hash__
+    def __hash__(self) -> int:
+        return hash(self._validated_fields())
 
     @classmethod
     def _make(cls, iterable: object) -> "SplitContract":
