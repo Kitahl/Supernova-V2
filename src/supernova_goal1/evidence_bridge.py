@@ -231,6 +231,7 @@ class ProtocolDispatchReceipt:
 class ContextIsolationReceipt:
     issuer_id: str
     run_id: str
+    dispatch_id: str
     problem_id: str
     arm: str
     attempt: int
@@ -244,6 +245,7 @@ class ContextIsolationReceipt:
     def __post_init__(self) -> None:
         _token(self.issuer_id, "issuer_id")
         _token(self.run_id, "run_id")
+        _sha256(self.dispatch_id, "dispatch_id")
         _token(self.problem_id, "problem_id")
         _arm(self.arm)
         _natural(self.attempt, "attempt")
@@ -264,6 +266,7 @@ class ContextIsolationReceipt:
             "arm": self.arm,
             "attempt": self.attempt,
             "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "dispatch_id": self.dispatch_id,
             "issuer_id": self.issuer_id,
             "mode": self.mode,
             "problem_id": self.problem_id,
@@ -286,6 +289,7 @@ class ContextIsolationReceipt:
 class PredecessorReconciliationReceipt:
     issuer_id: str
     run_id: str
+    dispatch_id: str
     problem_id: str
     arm: str
     attempt: int
@@ -301,6 +305,7 @@ class PredecessorReconciliationReceipt:
     def __post_init__(self) -> None:
         _token(self.issuer_id, "issuer_id")
         _token(self.run_id, "run_id")
+        _sha256(self.dispatch_id, "dispatch_id")
         _token(self.problem_id, "problem_id")
         _arm(self.arm)
         _natural(self.attempt, "attempt")
@@ -343,6 +348,7 @@ class PredecessorReconciliationReceipt:
             "arm": self.arm,
             "attempt": self.attempt,
             "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "dispatch_id": self.dispatch_id,
             "eligible_predecessor_dispatch_ids": list(
                 self.eligible_predecessor_dispatch_ids
             ),
@@ -916,6 +922,7 @@ class ExecutionLedgerAuthority:
             "arm": request.arm.value,
             "attempt": request.attempt,
             "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "dispatch_id": completion.dispatch_id,
             "issuer_id": self.issuer_id,
             "mode": "NON_CREDIT_SIMULATED_EMPTY_CONTEXT",
             "problem_id": request.problem.native_id,
@@ -938,6 +945,7 @@ class ExecutionLedgerAuthority:
         return ContextIsolationReceipt(
             issuer_id=str(body["issuer_id"]),
             run_id=str(body["run_id"]),
+            dispatch_id=str(body["dispatch_id"]),
             problem_id=str(body["problem_id"]),
             arm=str(body["arm"]),
             attempt=int(body["attempt"]),
@@ -963,6 +971,7 @@ class ExecutionLedgerAuthority:
             "arm": request.arm.value,
             "attempt": request.attempt,
             "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
+            "dispatch_id": completion.dispatch_id,
             "eligible_predecessor_dispatch_ids": list(eligible),
             "issuer_id": self.issuer_id,
             "predecessor_policy": slot["predecessor_policy"],
@@ -991,6 +1000,7 @@ class ExecutionLedgerAuthority:
         return PredecessorReconciliationReceipt(
             issuer_id=str(body["issuer_id"]),
             run_id=str(body["run_id"]),
+            dispatch_id=str(body["dispatch_id"]),
             problem_id=str(body["problem_id"]),
             arm=str(body["arm"]),
             attempt=int(body["attempt"]),
