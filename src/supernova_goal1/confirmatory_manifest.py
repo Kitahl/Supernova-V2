@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from hashlib import sha256
+import hmac
 import json
 import unicodedata
 from typing import Any, Mapping, Sequence
@@ -222,12 +223,27 @@ def _validate_protocol(protocol: Mapping[str, Any]) -> Mapping[str, Any]:
     return rules
 
 
+def _operator_seed(value: object) -> bytes:
+    if type(value) is not bytes or len(value) != 32:
+        raise ValueError("operator_seed must be exactly 32 bytes")
+    return value
+
+
+def _secret_digest_id(domain: str, seed: bytes, *parts: str) -> str:
+    material = bytearray()
+    for value in (domain, *parts):
+        encoded = value.encode("utf-8")
+        material.extend(len(encoded).to_bytes(8, "big"))
+        material.extend(encoded)
+    return hmac.new(seed, bytes(material), sha256).hexdigest()
+
+
 def _build_records(
     protocol_rules_sha256: str,
     problem_ids: Sequence[str],
     family_by_problem: Mapping[str, str],
+    operator_seed: bytes,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    public_records: list[dict[str, object]] = []
     operator_records: list[dict[str, object]] = []
     dispatch_by_slot: dict[tuple[str, str, int], str] = {}
 
@@ -244,8 +260,9 @@ def _build_records(
                     arm,
                     str(attempt_index),
                 )
-                evaluation_id = "eval-" + _digest_id(
-                    "supernova.confirmatory-evaluation.v1",
+                evaluation_id = "eval-" + _secret_digest_id(
+                    "supernova.confirmatory-evaluation.v2",
+                    operator_seed,
                     protocol_rules_sha256,
                     dispatch_id,
                 )
@@ -258,17 +275,6 @@ def _build_records(
                     ]
                 dispatch_by_slot[(problem_id, arm, attempt_index)] = dispatch_id
 
-                public_records.append(
-                    {
-                        "budget_attempt_index": attempt_index,
-                        "evaluation_id": evaluation_id,
-                        "evaluation_index": dispatch_index,
-                        "family_id": family_by_problem[problem_id],
-                        "problem_id": problem_id,
-                        "registered_model_call_slots": 1,
-                        "retry_allowance": 0,
-                    }
-                )
                 operator_records.append(
                     {
                         "arm": arm,
@@ -286,15 +292,48 @@ def _build_records(
                         "retry_allowance": 0,
                     }
                 )
-    return public_records, operator_records
 
+    ranked = sorted(
+        operator_records,
+        key=lambda entry: (
+            _secret_digest_id(
+                "supernova.confirmatory-evaluation-order.v1",
+                operator_seed,
+                protocol_rules_sha256,
+                str(entry["dispatch_id"]),
+            ),
+            str(entry["dispatch_id"]),
+        ),
+    )
+    public_records: list[dict[str, object]] = []
+    evaluation_index_by_id: dict[str, int] = {}
+    for evaluation_index, entry in enumerate(ranked):
+        evaluation_id = str(entry["evaluation_id"])
+        evaluation_index_by_id[evaluation_id] = evaluation_index
+        public_records.append(
+            {
+                "budget_attempt_index": entry["budget_attempt_index"],
+                "evaluation_id": evaluation_id,
+                "evaluation_index": evaluation_index,
+                "family_id": entry["family_id"],
+                "problem_id": entry["problem_id"],
+                "registered_model_call_slots": 1,
+                "retry_allowance": 0,
+            }
+        )
+    for entry in operator_records:
+        entry["evaluation_index"] = evaluation_index_by_id[str(entry["evaluation_id"])]
+    return public_records, operator_records
 
 def build_non_credit_draft(
     protocol: Mapping[str, Any],
+    *,
+    operator_seed: bytes,
 ) -> ConfirmatoryManifestBundle:
     """Expand sealed rules into a deterministic draft without opening dispatch."""
 
     rules = _validate_protocol(protocol)
+    operator_seed = _operator_seed(operator_seed)
     protocol_rules_sha256 = protocol["sealed_rules_sha256"]
     selection = rules["benchmark_selection"]
     problem_ids = tuple(selection["report_split"]["problem_ids"])
@@ -303,9 +342,17 @@ def build_non_credit_draft(
         item["problem_id"]: item["family_id"] for item in family_map
     }
     public_records, operator_records = _build_records(
-        protocol_rules_sha256, problem_ids, family_by_problem
+        protocol_rules_sha256,
+        problem_ids,
+        family_by_problem,
+        operator_seed,
     )
     operator_plan_sha256 = canonical_sha256(operator_records)
+    operator_seed_commitment_sha256 = _digest_id(
+        "supernova.confirmatory-operator-seed-commitment.v1",
+        protocol_rules_sha256,
+        operator_seed.hex(),
+    )
 
     frozen = rules["frozen_authorities"]
     bindings = {
@@ -323,9 +370,17 @@ def build_non_credit_draft(
     public_identity: dict[str, object] = {
         "bindings": bindings,
         "blinding": {
-            "classification": "STRUCTURAL_PAYLOAD_SEPARATION_NOT_CRYPTOGRAPHIC",
-            "public_records_contain_arm": False,
+            "classification": "OPAQUE_IDS_AND_ORDER_BOUND_TO_OPERATOR_ONLY_256_BIT_SEED",
             "operator_plan_required_for_arm_join": True,
+            "operator_seed_commitment_sha256": operator_seed_commitment_sha256,
+            "public_records_contain_arm": False,
+            "public_records_contain_dispatch_index": False,
+        },
+        "derivation": {
+            "blinding_labels_and_evaluator_order": (
+                "OPERATOR_ONLY_256_BIT_SEED_COMMITTED_BEFORE_DISPATCH"
+            ),
+            "scientific_dispatch_plan": "SEALED_PROTOCOL_RULES_ONLY",
         },
         "counts": {
             "attempts_per_problem_arm": len(ATTEMPTS),
@@ -353,6 +408,7 @@ def build_non_credit_draft(
     public_manifest["manifest_sha256"] = manifest_sha256
     operator_plan = {
         "entries": operator_records,
+        "operator_seed_hex": operator_seed.hex(),
         "manifest_sha256": manifest_sha256,
         "operator_plan_sha256": operator_plan_sha256,
         "protocol_rules_sha256": protocol_rules_sha256,
@@ -367,6 +423,7 @@ def build_non_credit_draft(
 def build_confirmatory_manifest(
     protocol: Mapping[str, Any],
     *,
+    operator_seed: bytes,
     execution_authority: Mapping[str, Any] | None = None,
 ) -> ConfirmatoryManifestBundle:
     """Build a draft now; production construction opens only with G1-121 phase two."""
@@ -376,7 +433,7 @@ def build_confirmatory_manifest(
             "production manifest construction is blocked until the G1-121 "
             "execution-authority validator is merged"
         )
-    return build_non_credit_draft(protocol)
+    return build_non_credit_draft(protocol, operator_seed=operator_seed)
 
 
 def validate_draft_bundle(
@@ -390,7 +447,20 @@ def validate_draft_bundle(
         raise ValueError("public_manifest must be an object")
     if not isinstance(operator_plan, Mapping):
         raise ValueError("operator_plan must be an object")
-    expected = build_non_credit_draft(protocol)
+    seed_hex = operator_plan.get("operator_seed_hex")
+    _sha256_hex(seed_hex, "operator_seed_hex")
+    operator_seed = bytes.fromhex(seed_hex)
+    expected_commitment = _digest_id(
+        "supernova.confirmatory-operator-seed-commitment.v1",
+        str(protocol.get("sealed_rules_sha256")),
+        seed_hex,
+    )
+    blinding = public_manifest.get("blinding")
+    if not isinstance(blinding, Mapping):
+        raise ValueError("public manifest blinding must be an object")
+    if blinding.get("operator_seed_commitment_sha256") != expected_commitment:
+        raise ValueError("operator seed does not match the public commitment")
+    expected = build_non_credit_draft(protocol, operator_seed=operator_seed)
     if canonical_sha256(public_manifest) != canonical_sha256(
         expected.public_manifest
     ):
