@@ -180,11 +180,15 @@
     {
       "id": "G1-113",
       "owner": "MM06",
-      "status": "WAITING",
+      "status": "DONE",
       "paths": [
         "reviews/"
       ],
-      "objective": "Review execution-tranche PRs against exact ticket paths, local tests, real CI, benchmark lineage, and unresolved scientific assumptions; never author or merge reviewed code."
+      "objective": "Review execution-tranche PRs against exact ticket paths, local tests, real CI, benchmark lineage, and unresolved scientific assumptions; never author or merge reviewed code.",
+      "completion": {
+        "pull_request": 49,
+        "merge_commit": "c9ef62234b7ddab89e926503d84a9c2f5134cb90"
+      }
     },
     {
       "id": "G1-114",
