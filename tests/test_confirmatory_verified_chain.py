@@ -398,7 +398,7 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
     def test_nonpassing_product_cannot_be_admitted(self) -> None:
         changed = copy.deepcopy(self.contract)
         changed["product_admission"]["required_result"] = "ANY_TERMINAL_RESULT"
-        with self.assertRaisesRegex(ValueError, "admission result"):
+        with self.assertRaisesRegex(ValueError, "product admission contract"):
             validate_contract(changed, self.controls, self.runtime)
         changed = copy.deepcopy(self.contract)
         changed["product_admission"]["admission_requires"].remove(
@@ -462,7 +462,7 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
     def test_product_pass_cannot_solve_and_all_slots_must_complete(self) -> None:
         changed = copy.deepcopy(self.contract)
         changed["product_admission"]["product_pass_is_terminal_solution"] = True
-        with self.assertRaisesRegex(ValueError, "product terminal role"):
+        with self.assertRaisesRegex(ValueError, "product admission contract"):
             validate_contract(changed, self.controls, self.runtime)
         changed = copy.deepcopy(self.contract)
         changed["execution"]["completion_policy"] = "STOP_AFTER_FIRST_PASS"
@@ -472,7 +472,7 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
     def test_axiom_and_statement_boundaries_cannot_be_weakened(self) -> None:
         changed = copy.deepcopy(self.contract)
         changed["product_admission"]["required_axiom_allowlist_exact"].append("sorryAx")
-        with self.assertRaisesRegex(ValueError, "axiom allowlist"):
+        with self.assertRaisesRegex(ValueError, "product admission contract"):
             validate_contract(changed, self.controls, self.runtime)
         changed = copy.deepcopy(self.contract)
         changed["harness_construction"]["target_statement_or_import_mutation"] = (
@@ -492,7 +492,7 @@ class ConfirmatoryVerifiedChainContractTests(unittest.TestCase):
         changed["cost_boundary"]["product_candidate_and_final_answer"] = (
             "NO_VERIFIER_COST"
         )
-        with self.assertRaisesRegex(ValueError, "verifier cost"):
+        with self.assertRaisesRegex(ValueError, "cost boundary"):
             validate_contract(changed, self.controls, self.runtime)
         changed = copy.deepcopy(self.contract)
         changed["cost_boundary"]["unknown_or_unreconciled_event"] = "ZERO"
