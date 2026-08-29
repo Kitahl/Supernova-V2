@@ -10,6 +10,19 @@
     "records": 244,
     "source_split": "test"
   },
+  "benchmark_binding": {
+    "path": "goal1/CONFIRMATORY_BENCHMARK.json",
+    "git_blob_sha1": "ade21f86d9566ce863ac09acd4c9103a48080ef4",
+    "freeze_id": "goal1-confirmatory-benchmark-v1",
+    "scientific_input_mutation": "NONE"
+  },
+  "protocol_rules_binding": {
+    "path": "goal1/CONFIRMATORY_PROTOCOL.json",
+    "git_blob_sha1": "65d65e36a32aa1a73de44b1d2443c9587a14dacb",
+    "protocol_id": "goal1-confirmatory-protocol-rules-v1",
+    "sealed_rules_sha256": "f1e650bc1f33d083c92f4df2a314bef79f8f646fa23431e39a2ebb83b28212e9",
+    "scientific_rule_mutation": "NONE"
+  },
   "public_reconstructibility": {
     "claim": "PUBLICLY_RECONSTRUCTIBLE_FROM_PINNED_UPSTREAM_SOURCES_BEFORE_AND_AFTER_ANY_PROTOCOL_OR_DISPATCH_SEAL",
     "secrecy_or_non_public_data_claim": "NONE",
@@ -46,6 +59,16 @@
     "confirmatory_runtime_injection": "BLOCKED_UNTIL_PROTOCOL_RULES_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_ALL_SEALED",
     "required_exact_report_sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a"
   },
+  "legacy_terminology_interpretation": {
+    "scope": [
+      "goal1/CONFIRMATORY_BENCHMARK.json:contamination_and_duplicate_exclusions.report_file_may_be_released_only_after_protocol_and_dispatch_seal",
+      "goal1/CONFIRMATORY_PROTOCOL.json:sealed_rules.benchmark_selection.report_problem_bytes_release",
+      "goal1/CONFIRMATORY_PROTOCOL.json:sealed_rules.confirmatory_manifest_interface.seal_before"
+    ],
+    "meaning": "CONTROLLED_EXPERIMENT_TIME_RUNTIME_INJECTION_GATE_ONLY",
+    "public_data_disclosure_or_secrecy_claim": "NONE",
+    "rule": "THE_FROZEN_RELEASE_TERMINOLOGY_DOES_NOT_ASSERT_THAT_THE_PUBLIC_BENCHMARK_BYTES_ARE_SECRET_OR_NON_PUBLIC"
+  },
   "repository_scan": {
     "algorithm_id": "git_tracked_regular_file_exact_sha256_v1",
     "scope": "ALL_GIT_TRACKED_REGULAR_FILES_IN_THE_REVISION_CONTAINING_THIS_ATTESTATION",
@@ -53,5 +76,5 @@
     "expected_exact_payload_matches": [],
     "interpretation": "NO_TRACKED_REGULAR_FILE_EQUALS_THE_EXACT_ASSEMBLED_REPORT_PAYLOAD_THIS_IS_NOT_A_SECRECY_CLAIM_AND_DOES_NOT_DENY_PUBLIC_SOURCE_RECONSTRUCTIBILITY"
   },
-  "benchmark_freeze_id": "goal1-confirmatory-benchmark-v2"
+  "benchmark_freeze_id": "goal1-confirmatory-benchmark-v1"
 }
