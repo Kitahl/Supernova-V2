@@ -252,6 +252,162 @@
       "paths": [
         "reports/STATUS.md"
       ]
+    },
+    {
+      "id": "G1-120",
+      "owner": "MF01",
+      "status": "DONE",
+      "paths": [
+        "goal1/CONFIRMATORY_BENCHMARK.json",
+        "tests/test_confirmatory_benchmark.py"
+      ],
+      "depends_on": [],
+      "objective": "Freeze the exact benchmark bytes, development and held-out split, problem identities, and contamination exclusions from the existing content-addressed benchmark lock.",
+      "acceptance": [
+        "Every selected problem is a member of the locked root.",
+        "Development and report sets are disjoint and immutable.",
+        "The checker rejects changed bytes, split leakage, duplicates, and post-freeze edits."
+      ],
+      "completion": {
+        "pull_request": 55,
+        "merge_commit": "092de0ee8287414e746a8dbf74c46585bb9eccdc"
+      }
+    },
+    {
+      "id": "G1-121",
+      "owner": "MF02",
+      "status": "DONE",
+      "paths": [
+        "orchestration/BOARD.json",
+        ".github/workflows/ci.yml",
+        ".github/workflows/goal1_hermetic_executor.yml",
+        "runtime/goal1_hermetic_executor/",
+        "pyproject.toml",
+        "goal1/CONFIRMATORY_PROTOCOL.json",
+        "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+        "goal1/CONFIRMATORY_EXECUTOR_LAUNCHER.json",
+        "goal1/CONFIRMATORY_CAPACITY_BINDING.json",
+        "goal1/CONFIRMATORY_TRUST_ROOT.json",
+        "src/supernova_goal1/activation.py",
+        "src/supernova_goal1/confirmatory_manifest.py",
+        "src/supernova_goal1/confirmatory_supervisor.py",
+        "src/supernova_goal1/evaluate_confirmatory.py",
+        "src/supernova_goal1/evidence_bridge.py",
+        "src/supernova_goal1/execution_authority.py",
+        "tests/test_confirmatory_protocol.py",
+        "tests/test_confirmatory_execution_authority.py",
+        "tests/test_goal1_hermetic_executor.py",
+        "tests/test_confirmatory_supervisor.py",
+        "tests/test_confirmatory_manifest.py",
+        "tests/test_evaluate_confirmatory.py"
+      ],
+      "depends_on": [
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126"
+      ],
+      "objective": "Complete one two-phase MF02 ticket: first seal powered family-aware protocol rules and a fail-closed execution interface; then, without mutating those rules, add the immutable exact model/executor/fresh-context authority bundle required to mark G1-121 DONE.",
+      "acceptance": [
+        "All declared freeze dependencies are DONE at the bound revisions.",
+        "A prospective 244-problem family-aware selection and power basis are frozen before held-out release.",
+        "One canonical protocol-rules digest binds every presently available scientific rule and interface.",
+        "Before execution authority exists, the protocol returns BLOCKED_NO_EXECUTION_AUTHORITY and G1-121 remains not DONE.",
+        "Completion additionally requires an immutable bundle binding exact model/version/settings, executor digest, receipt issuer and verification key, authentic fresh-empty-context preflight receipt, scheduling, and serving-pool policy.",
+        "The trusted host supervisor is implemented and frozen before authority signature; G1-132 may execute only that exact reviewed artifact.",
+        "The dedicated build workflow builds only the declared executor context and records immutable image/build provenance; it receives no signing keys and cannot open held-out dispatch.",
+        "The exact launcher and capacity binding remain public, reproducible artifacts committed before authority activation.",
+        "No second simultaneous MF02 ticket or replacement scheduled task is created."
+      ],
+      "phase_one": {
+        "state": "MERGED_FAIL_CLOSED_INTERFACE",
+        "pull_request": 78,
+        "merge_commit": "15ad43de5ec65c29a2d6b912b8af2c69be8c4482",
+        "remaining_requirement": "TRUSTED_HOST_SUPERVISOR_IMMUTABLE_HERMETIC_EXECUTION_AUTHORITY_BUNDLE_AND_AUTHENTIC_PREFLIGHT"
+      },
+      "phase_two": {
+        "state": "AUTHENTIC_PREFLIGHT_PASSED_PUBLIC_EXECUTION_AUTHORITY_PUBLISHED",
+        "supervisor_pull_request": 81,
+        "supervisor_reviewed_head": "ed992d63a6f55b63275884a1a01a9276fff6d4b0",
+        "supervisor_merge_commit": "13f3cd145d05679bba9162fc2cb14c087fcdc7ea",
+        "provisioner_pull_request": 82,
+        "provisioner_reviewed_head": "51ac2778b0b8cf449ce620bcf772cbba5bbdb58f",
+        "provisioner_merge_commit": "57666d4214cbf0422f151888a14f2114015fffe3",
+        "executor_pull_request": 83,
+        "executor_reviewed_head": "b0cdc5b3f7ad0fc639e4f5ff4c7206e3b5191eb9",
+        "executor_merge_commit": "7cd2f582904cd82eb19a655bd575f29ab8415518",
+        "executor_workflow_run": 33231696180,
+        "executor_image_ref": "ghcr.io/kitahl/supernova-goal1-executor@sha256:db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
+        "bindings_pull_request": 84,
+        "bindings_merge_commit": "b57ebbd1a378810bd2dd2fc4207f46729a9b0676",
+        "uts_compatibility_pull_request": 85,
+        "uts_compatibility_reviewed_head": "f815c2ea133fe1e3d6e6336f437602d1bbf90b4f",
+        "uts_compatibility_merge_commit": "e909bf51413fd6bbba903d6e4f39b8f193187e8d",
+        "trust_root_sha256": "3fe6c46373a7fdda2875d9814508fdad68cc9dd30bddcfbb7bed9523e4e3fc5d",
+        "execution_authority_sha256": "bd44e2f0b396b5eb0f9a4cdd5ff2960aa12041e1df7fa14fc033af87aca174c4",
+        "preflight_receipt_sha256": "ca61fa9c19f98e395a9fab5d5858d51907592458b547d3d46a411d253e9b17dc",
+        "preflight_validation_record_sha256": "46897d4bc4dde697d8d0c09db206a7228fd97afd4f43872930a2bdf975c7ad9d",
+        "preflight_validation_verdict": "PASS",
+        "remaining_requirement": null,
+        "next_assignment": "G1-131 independent review is READY from the exact merged activation chain and public authority digests."
+      },
+      "completion": {
+        "pull_request": 86,
+        "merge_commit": "fda4286d21b3544469d0c901f95639ba807b5904"
+      }
+    },
+    {
+      "id": "G1-127",
+      "owner": "MM03",
+      "status": "DONE",
+      "paths": [
+        "src/supernova_goal1/evidence_bridge.py",
+        "tests/test_evidence_bridge.py"
+      ],
+      "depends_on": [
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126",
+        "G1-128"
+      ],
+      "objective": "Build the typed authority-to-evaluator bridge so only a closed dispatch joined to authenticated completions, verifier evidence, execution-ledger evidence, and reconciled costs can produce evaluator inputs.",
+      "acceptance": [
+        "Raw caller-supplied solved or cost booleans are not accepted.",
+        "Every evaluator record binds the protocol, manifest, completion, verifier, and cost evidence.",
+        "Partial, replayed, cross-run, or unaccounted evidence is rejected."
+      ],
+      "completion": {
+        "pull_request": 74,
+        "merge_commit": "5d4bc9775e485b17e6ff91faadb8379a725a622b"
+      }
+    },
+    {
+      "id": "G1-130",
+      "owner": "MM07",
+      "status": "DONE",
+      "paths": [
+        "tests/test_confirmatory_adversarial.py"
+      ],
+      "depends_on": [
+        "G1-127",
+        "G1-129"
+      ],
+      "objective": "Add adversarial confirmatory tests that try stale protocols, benchmark leakage, unregistered retries, fabricated outcomes, missing costs, verifier substitution, and partial cohorts.",
+      "acceptance": [
+        "Each named attack is deterministically rejected.",
+        "No error path can yield scientific PASS.",
+        "The tests exercise the real bridge and evaluator boundary.",
+        "Draft protocols, simulation issuers, recurring-chat receipts, and absent or invalid execution-authority bundles are blocked from confirmatory credit."
+      ],
+      "completion": {
+        "pull_request": 79,
+        "merge_commit": "2a77711741dc42eb4d635a328fe30ebb722eb2e2"
+      }
     }
   ]
 }

@@ -152,7 +152,14 @@ class HermeticExecutorBuildTests(unittest.TestCase):
 
     def test_board_declares_every_new_path(self) -> None:
         board = json.loads((ROOT / "orchestration" / "BOARD.json").read_text(encoding="utf-8"))
-        ticket = next(item for item in board["tickets"] if item["id"] == "G1-121")
+        archive = json.loads(
+            (ROOT / "orchestration" / "ARCHIVE.json").read_text(encoding="utf-8")
+        )
+        ticket = next(
+            item
+            for item in board["tickets"] + archive["completed_tickets"]
+            if item["id"] == "G1-121"
+        )
         for path in (
             ".github/workflows/goal1_hermetic_executor.yml",
             "runtime/goal1_hermetic_executor/",
