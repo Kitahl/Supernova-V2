@@ -221,7 +221,7 @@ class _FakeDocker:
             "NanoCpus": self.launcher.nano_cpus,
             "IpcMode": "none",
             "PidMode": "",
-            "UTSMode": "private",
+            "UTSMode": "",
             "UsernsMode": "",
             "CgroupnsMode": "private",
             "PublishAllPorts": False,
@@ -385,6 +385,7 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
         self.assertIn("ALL", create)
         self.assertIn("no-new-privileges:true", create)
         self.assertNotIn("--env", create)
+        self.assertNotIn("--uts", create)
         self.assertNotIn("--mount", create)
         self.assertNotIn("--volume", create)
         self.assertTrue(fake.removed)

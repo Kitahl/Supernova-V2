@@ -446,8 +446,6 @@ def _create_argv(launcher: HermeticLauncher) -> list[str]:
         "256",
         "--ipc",
         "none",
-        "--uts",
-        "private",
         "--user",
         launcher.container_user,
         "--runtime",
@@ -509,7 +507,10 @@ def _clean_snapshot(
         or host.get("NanoCpus") != launcher.nano_cpus
         or host.get("IpcMode") != "none"
         or host.get("PidMode") != ""
-        or host.get("UTSMode") != "private"
+        # Docker isolates the UTS namespace by default. Its inspect API reports
+        # that secure default as an empty string; the only explicit CLI mode is
+        # "host", which shares the host namespace and must remain rejected.
+        or host.get("UTSMode") != ""
         or host.get("UsernsMode") not in {None, ""}
         or host.get("CgroupnsMode") not in {None, "", "private"}
         or host.get("PublishAllPorts") is not False
