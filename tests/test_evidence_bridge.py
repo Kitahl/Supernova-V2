@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import inspect
 from dataclasses import replace
 import json
+import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -48,6 +53,18 @@ from supernova_goal1.execution.common import (
 )
 from supernova_goal1.problem import BenchmarkProblemIdentity
 from supernova_goal1.verifier import VerifierResult, VerifierStatus
+import supernova_goal1.evidence_bridge as evidence_bridge_module
+import supernova_goal1.verifier_evidence as verifier_evidence_module
+from supernova_goal1.verifier_evidence import (
+    HostVerifierSigner,
+    TerminationCause,
+    VerifierBinding,
+    VerifierEvidenceRecord,
+    VerifierEvidenceStore,
+    VerifierSandboxLauncher,
+    VerifierSupervisor,
+    VerifierVerdict,
+)
 
 
 def sha(value: str) -> str:
@@ -741,6 +758,502 @@ class EvidenceBridgeTests(unittest.TestCase):
                 predecessor_reconciliation_receipt=forged,
                 orchestration_milliseconds=1,
             )
+
+
+class VerifierEvidenceSecurityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.source = b"import Mathlib\n\ntheorem alpha : True := by\n"
+        self.candidate = b"  exact True.intro\n"
+        self.launcher = VerifierSandboxLauncher(
+            image_ref=f"example.invalid/supernova-verifier@sha256:{sha('image')}",
+            command=("/usr/local/bin/supernova-verify",),
+            image_environment=(),
+            container_user="65532:65532",
+            memory_bytes=256 * 1024 * 1024,
+            nano_cpus=1_000_000_000,
+            pids_limit=32,
+            timeout_seconds=10,
+            max_output_bytes=4096,
+            tmpfs_size_bytes=8 * 1024 * 1024,
+            toolchain_lock_sha256=sha("toolchain-lock"),
+            project_dependency_lock_sha256=sha("project-lock"),
+            checker_configuration_sha256=sha("comparator-plus-nanoda"),
+            immutable_inputs_sha256=sha("immutable-inputs"),
+        )
+        self.signer = HostVerifierSigner(
+            issuer_id="trusted-test-host",
+            signing_key_id="goal1-verifier-test-key",
+            private_key=b"k" * 32,
+        )
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def binding(self, **changes: object) -> VerifierBinding:
+        raw: dict[str, object] = {
+            "run_spec_id": sha("run-spec"),
+            "run_id": "run-one",
+            "experiment_id": "goal1-confirmatory-v1",
+            "execution_authority_sha256": sha("execution-authority"),
+            "confirmatory_manifest_sha256": sha("manifest"),
+            "protocol_rules_sha256": sha("rules"),
+            "protocol_dispatch_id": "dispatch-" + sha("protocol-dispatch"),
+            "actual_dispatch_id": sha("actual-dispatch"),
+            "dispatch_entry_sha256": sha("dispatch-entry"),
+            "frozen_request_sha256": sha("frozen-request"),
+            "normalized_request_sha256": sha("frozen-request"),
+            "attempt_result_sha256": sha("attempt-result"),
+            "problem_id": "sha256:" + sha("problem-id"),
+            "problem_identity": "sha256:" + sha("problem-id"),
+            "arm_id": Arm.ORDINARY.value,
+            "attempt_id": 0,
+            "candidate_id": "sha256:" + hashlib.sha256(self.candidate).hexdigest(),
+            "candidate_source_sha256": hashlib.sha256(self.candidate).hexdigest(),
+            "theorem_statement_sha256": sha("statement"),
+            "source_construction_sha256": hashlib.sha256(self.source).hexdigest(),
+            "requested_runtime_sha256": sha("requested-runtime"),
+            "actual_runtime_sha256": sha("actual-runtime"),
+            "immutable_configuration_sha256": sha("immutable-config"),
+        }
+        raw.update(changes)
+        return VerifierBinding(**raw)  # type: ignore[arg-type]
+
+    def store(
+        self,
+        name: str = "verifier.sqlite",
+        *,
+        verification_key: bytes | None = None,
+    ) -> VerifierEvidenceStore:
+        return VerifierEvidenceStore(
+            (self.root / name).resolve(),
+            verification_key=(
+                self.signer.public_key
+                if verification_key is None
+                else verification_key
+            ),
+            expected_signing_key_id=self.signer.signing_key_id,
+            expected_identity=self.launcher.identity,
+        )
+
+    def observation(
+        self,
+        binding: VerifierBinding | None = None,
+        *,
+        verdict: VerifierVerdict = VerifierVerdict.UNKNOWN,
+        cause: TerminationCause = TerminationCause.INDETERMINATE,
+        checker_exit_status: int | None = 0,
+        timed_out: bool = False,
+        oom_killed: bool = False,
+        resource_limited: bool = False,
+        sandbox_policy_violated: bool = False,
+        stdout: bytes = b"",
+        stderr: bytes = b"",
+    ) -> verifier_evidence_module.ObservedVerifierRun:
+        return verifier_evidence_module.ObservedVerifierRun(
+            binding=self.binding() if binding is None else binding,
+            verifier_identity=self.launcher.identity,
+            source_bytes=self.source,
+            candidate_bytes=self.candidate,
+            exported_artifact=b"",
+            checker_output=b"",
+            stdout=stdout,
+            stderr=stderr,
+            verdict=verdict,
+            termination_cause=cause,
+            elaborator_exit_status=checker_exit_status,
+            elaborator_signal=None,
+            checker_exit_status=checker_exit_status,
+            checker_signal=None,
+            timed_out=timed_out,
+            oom_killed=oom_killed,
+            resource_limited=resource_limited,
+            sandbox_policy_violated=sandbox_policy_violated,
+            started_at_utc="2026-08-29T00:00:00Z",
+            ended_at_utc="2026-08-29T00:00:01Z",
+            elapsed_milliseconds=1000,
+            resource_measurements={"cpu_milliseconds": 1, "peak_bytes": 2},
+            teardown_observed=True,
+        )
+
+    def issue_unpersisted(
+        self,
+        binding: VerifierBinding | None = None,
+        **observation: object,
+    ) -> VerifierEvidenceRecord:
+        observed = self.observation(binding, **observation)
+        return self.signer._issue(
+            observed,
+            _factory=verifier_evidence_module._SUPERVISOR_FACTORY,
+        )
+
+    def append(
+        self,
+        store: VerifierEvidenceStore,
+        record: VerifierEvidenceRecord,
+        binding: VerifierBinding,
+        *,
+        stdout: bytes = b"",
+        stderr: bytes = b"",
+    ) -> None:
+        store.append(
+            record,
+            expected_binding=binding,
+            source=self.source,
+            candidate=self.candidate,
+            exported_artifact=b"",
+            checker_output=b"",
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    def test_caller_cannot_issue_valid_or_submit_verifier_result(self) -> None:
+        with self.assertRaisesRegex(PermissionError, "INDEPENDENT_CHECKER"):
+            self.observation(
+                verdict=VerifierVerdict.VALID,
+                cause=TerminationCause.ACCEPTED,
+                checker_exit_status=0,
+            )
+        caller_result = VerifierResult(
+            VerifierStatus.PASS,
+            ("lake", "build"),
+            0,
+            "PASS",
+            "",
+            1,
+        )
+        with self.assertRaisesRegex(TypeError, "ObservedVerifierRun"):
+            self.signer._issue(  # type: ignore[arg-type]
+                caller_result,
+                _factory=verifier_evidence_module._SUPERVISOR_FACTORY,
+            )
+        with self.assertRaisesRegex(TypeError, "only by VerifierSupervisor"):
+            self.signer._issue(self.observation(), _factory=object())
+
+    def test_atomic_store_readback_and_substitution_rejection(self) -> None:
+        binding = self.binding()
+        record = self.issue_unpersisted(binding)
+        store = self.store()
+        with self.assertRaisesRegex(ValueError, "missing"):
+            store.read_complete((binding,))
+        self.append(store, record, binding)
+        self.assertEqual(record.record_sha256, store.read(binding).record_sha256)
+        with self.assertRaisesRegex(ValueError, "extra"):
+            store.read_complete(())
+        with self.assertRaisesRegex(ValueError, "candidate blob"):
+            store.append(
+                record,
+                expected_binding=binding,
+                source=self.source,
+                candidate=b"changed after verification",
+                exported_artifact=b"",
+                checker_output=b"",
+                stdout=b"",
+                stderr=b"",
+            )
+
+        variants = (
+            replace(binding, run_spec_id=sha("other-run-spec")),
+            replace(binding, run_id="other-run"),
+            replace(binding, arm_id=Arm.PORTFOLIO.value),
+            replace(binding, attempt_id=1),
+            replace(binding, candidate_id="sha256:" + sha("other-candidate")),
+            replace(binding, candidate_source_sha256=sha("other-candidate-source")),
+            replace(binding, theorem_statement_sha256=sha("other-statement")),
+            replace(binding, frozen_request_sha256=sha("other-request")),
+            replace(binding, actual_runtime_sha256=sha("other-runtime")),
+            replace(binding, actual_dispatch_id=sha("other-dispatch")),
+            replace(
+                binding,
+                protocol_dispatch_id="dispatch-" + sha("other-protocol-dispatch"),
+            ),
+        )
+        for changed in variants:
+            with self.subTest(field=changed):
+                with self.assertRaises((KeyError, ValueError, sqlite3.IntegrityError)):
+                    self.append(store, record, changed)
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.append(store, record, binding)
+
+    def test_invalid_signature_wrong_key_and_corrupt_readback_fail_closed(self) -> None:
+        binding = self.binding()
+        record = self.issue_unpersisted(binding)
+        forged = VerifierEvidenceRecord(
+            record.body_json,
+            base64.b64encode(b"\0" * 64).decode("ascii"),
+        )
+        with self.assertRaisesRegex(ValueError, "signature is invalid"):
+            self.append(self.store("forged.sqlite"), forged, binding)
+        wrong_key = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+        with self.assertRaisesRegex(ValueError, "signature is invalid"):
+            self.append(
+                self.store("wrong-key.sqlite", verification_key=wrong_key),
+                record,
+                binding,
+            )
+        wrong_identity = replace(
+            self.launcher.identity,
+            external_checker_image_digest="sha256:" + sha("other-checker-image"),
+        )
+        wrong_identity_store = VerifierEvidenceStore(
+            (self.root / "wrong-identity.sqlite").resolve(),
+            verification_key=self.signer.public_key,
+            expected_signing_key_id=self.signer.signing_key_id,
+            expected_identity=wrong_identity,
+        )
+        with self.assertRaisesRegex(ValueError, "identity changed"):
+            self.append(wrong_identity_store, record, binding)
+
+        store = self.store("corrupt.sqlite")
+        self.append(store, record, binding)
+        connection = sqlite3.connect(store.path)
+        try:
+            connection.execute("DROP TRIGGER verifier_evidence_no_update")
+            connection.execute(
+                "UPDATE verifier_evidence SET body_json=?",
+                (b"{}",),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        with self.assertRaises(ValueError):
+            store.read(binding)
+
+    def test_partial_transaction_and_append_only_triggers(self) -> None:
+        binding = self.binding()
+        record = self.issue_unpersisted(binding)
+        store = self.store("rollback.sqlite")
+        with patch.object(store, "_read_row", side_effect=RuntimeError("forced")):
+            with self.assertRaisesRegex(RuntimeError, "forced"):
+                self.append(store, record, binding)
+        connection = sqlite3.connect(store.path)
+        try:
+            self.assertEqual(
+                0,
+                connection.execute(
+                    "SELECT COUNT(*) FROM verifier_evidence"
+                ).fetchone()[0],
+            )
+        finally:
+            connection.close()
+
+        store = self.store("append-only.sqlite")
+        self.append(store, record, binding)
+        connection = sqlite3.connect(store.path)
+        try:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute("DELETE FROM verifier_evidence")
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "UPDATE verifier_evidence SET nonce=?", (sha("changed"),)
+                )
+        finally:
+            connection.close()
+
+    def test_sandbox_policy_has_no_mount_network_key_database_or_mutable_tag(self) -> None:
+        policy = self.launcher.sandbox_policy
+        self.assertEqual("none", policy["network"])
+        self.assertEqual([], policy["host_mounts"])
+        self.assertEqual([], policy["devices"])
+        self.assertEqual(["ALL"], policy["cap_drop"])
+        self.assertTrue(policy["no_new_privileges"])
+        argv = verifier_evidence_module._create_argv(self.launcher)
+        self.assertIn("--network", argv)
+        self.assertIn("none", argv)
+        self.assertNotIn("--volume", argv)
+        self.assertNotIn("--mount", argv)
+        self.assertNotIn("--privileged", argv)
+        self.assertNotIn(str(self.root / "verifier.sqlite"), argv)
+        self.assertNotIn(base64.b64encode(b"k" * 32).decode("ascii"), " ".join(argv))
+        with self.assertRaisesRegex(ValueError, "repository@sha256"):
+            replace(self.launcher, image_ref="example.invalid/verifier:latest")
+
+    def _mocked_supervisor_run(
+        self,
+        *,
+        stdout: bytes,
+        exit_code: int = 0,
+        oom_killed: bool = False,
+        timeout: bool = False,
+        create_failure: bool = False,
+        policy_failure: bool = False,
+        name: str,
+    ) -> VerifierEvidenceRecord:
+        binding = self.binding(actual_dispatch_id=sha("dispatch:" + name))
+        store = self.store(name + ".sqlite")
+        supervisor = VerifierSupervisor(self.launcher, self.signer, store)
+        captured_request: list[bytes] = []
+
+        def invoke(argv: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+            args = list(argv)  # type: ignore[arg-type]
+            if args[1] == "version":
+                return subprocess.CompletedProcess(args, 0, b'{"Server":{"Version":"test"}}', b"")
+            if args[1] == "create":
+                if create_failure:
+                    return subprocess.CompletedProcess(args, 1, b"", b"create denied")
+                return subprocess.CompletedProcess(args, 0, b"a" * 64 + b"\n", b"")
+            if args[1] == "start":
+                captured_request.append(kwargs["input_bytes"])  # type: ignore[arg-type]
+                if timeout:
+                    raise subprocess.TimeoutExpired(args, 10, output=b"", stderr=b"timeout")
+                return subprocess.CompletedProcess(args, exit_code, stdout, b"")
+            raise AssertionError(args)
+
+        state = {
+            "State": {
+                "Dead": False,
+                "Error": "",
+                "ExitCode": exit_code,
+                "OOMKilled": oom_killed,
+                "Status": "exited",
+            }
+        }
+        policy_effect = (
+            verifier_evidence_module._SandboxPolicyError("policy drift")
+            if policy_failure
+            else {"policy": self.launcher.sandbox_policy}
+        )
+        with (
+            patch.object(verifier_evidence_module, "_invoke", side_effect=invoke),
+            patch.object(
+                verifier_evidence_module,
+                "_image_identity",
+                return_value=self.launcher.image_digest,
+            ),
+            patch.object(
+                verifier_evidence_module,
+                "_docker_object",
+                side_effect=[{}, state],
+            ),
+            patch.object(
+                verifier_evidence_module,
+                "_security_snapshot",
+                side_effect=policy_effect if policy_failure else None,
+                return_value=None if policy_failure else policy_effect,
+            ),
+            patch.object(verifier_evidence_module, "_remove_observed"),
+        ):
+            record = supervisor.run_and_record(
+                binding, source=self.source, candidate=self.candidate
+            )
+        if not create_failure and not policy_failure:
+            request = captured_request[0]
+            self.assertNotIn(b"k" * 32, request)
+            self.assertNotIn(str(store.path).encode("utf-8"), request)
+        return record
+
+    def test_fake_success_early_exit_timeout_oom_and_policy_failure_never_validate(self) -> None:
+        cases = (
+            ({"stdout": b"PASS\nVALID\n", "name": "fake"}, TerminationCause.INDETERMINATE),
+            ({"stdout": b"", "name": "early"}, TerminationCause.INCOMPLETE_EXPORT),
+            ({"stdout": b"", "timeout": True, "name": "timeout"}, TerminationCause.TIMEOUT),
+            ({"stdout": b"", "oom_killed": True, "exit_code": 137, "name": "oom"}, TerminationCause.OOM),
+            ({"stdout": b"", "create_failure": True, "name": "start"}, TerminationCause.SANDBOX_START_FAILURE),
+            ({"stdout": b"", "policy_failure": True, "name": "policy"}, TerminationCause.SANDBOX_POLICY_VIOLATION),
+        )
+        for arguments, expected_cause in cases:
+            with self.subTest(cause=expected_cause):
+                record = self._mocked_supervisor_run(**arguments)
+                observed = record.body["observations"]
+                self.assertEqual(VerifierVerdict.UNKNOWN.value, observed["verdict"])
+                self.assertEqual(expected_cause.value, observed["termination_cause"])
+
+    def test_real_bridge_blocks_authenticated_unknown_before_evaluator_projection(self) -> None:
+        completion = EvidenceBridgeTests.completions[0]
+        request = completion.payload.request
+        binding = evidence_bridge_module._expected_verifier_binding(
+            completion,
+            run_spec_id=EvidenceBridgeTests.manifest_bundle.public_manifest[
+                "manifest_sha256"
+            ],
+            execution_authority_sha256=EvidenceBridgeTests.ledger.execution_authority_sha256,
+            protocol_rules_sha256=EvidenceBridgeTests.protocol["sealed_rules_sha256"],
+            confirmatory_manifest_sha256=(
+                EvidenceBridgeTests.manifest_bundle.public_manifest[
+                    "manifest_sha256"
+                ]
+            ),
+        )
+        source = f"problem:{request.problem.native_id}".encode("utf-8")
+        candidate = (
+            f"by\n  exact proof_{request.arm.value}_{request.attempt}"
+        ).encode("utf-8")
+        self.assertEqual(binding.source_construction_sha256, hashlib.sha256(source).hexdigest())
+        self.assertEqual(binding.candidate_source_sha256, hashlib.sha256(candidate).hexdigest())
+        store = self.store("bridge.sqlite")
+        observed = verifier_evidence_module.ObservedVerifierRun(
+            binding=binding,
+            verifier_identity=self.launcher.identity,
+            source_bytes=source,
+            candidate_bytes=candidate,
+            exported_artifact=b"",
+            checker_output=b"",
+            stdout=b"",
+            stderr=b"timeout",
+            verdict=VerifierVerdict.UNKNOWN,
+            termination_cause=TerminationCause.TIMEOUT,
+            elaborator_exit_status=None,
+            elaborator_signal=None,
+            checker_exit_status=None,
+            checker_signal=None,
+            timed_out=True,
+            oom_killed=False,
+            resource_limited=False,
+            sandbox_policy_violated=False,
+            started_at_utc="2026-08-29T00:00:00Z",
+            ended_at_utc="2026-08-29T00:00:01Z",
+            elapsed_milliseconds=1,
+            resource_measurements={"timeout": True},
+            teardown_observed=True,
+        )
+        record = self.signer._issue(
+            observed,
+            _factory=verifier_evidence_module._SUPERVISOR_FACTORY,
+        )
+        store.append(
+            record,
+            expected_binding=binding,
+            source=source,
+            candidate=candidate,
+            exported_artifact=b"",
+            checker_output=b"",
+            stdout=b"",
+            stderr=b"timeout",
+        )
+        with self.assertRaisesRegex(PermissionError, "BLOCKED_UNKNOWN"):
+            evidence_bridge_module._production_verifier_records(
+                (completion,),
+                store=store,
+                run_spec_id=binding.run_spec_id,
+                execution_authority_sha256=binding.execution_authority_sha256,
+                protocol_rules_sha256=binding.protocol_rules_sha256,
+                confirmatory_manifest_sha256=binding.confirmatory_manifest_sha256,
+            )
+
+    def test_draft_bridge_rejects_production_store_boundary_bypass(self) -> None:
+        store = self.store("draft-bypass.sqlite")
+        with patch(
+            "supernova_goal1.evidence_bridge.validate_draft_bundle",
+            return_value=None,
+        ):
+            with self.assertRaisesRegex(ValueError, "draft bridge cannot consume"):
+                bridge_closed_evidence(
+                    dispatch_authority=EvidenceBridgeTests.authority,
+                    execution_ledger=EvidenceBridgeTests.ledger,
+                    closed_join=EvidenceBridgeTests.closed,
+                    protocol=EvidenceBridgeTests.protocol,
+                    public_manifest=(
+                        EvidenceBridgeTests.manifest_bundle.public_manifest
+                    ),
+                    operator_plan=EvidenceBridgeTests.fixture_operator_plan,
+                    cost_reports_by_problem={
+                        EvidenceBridgeTests.native_problem_id:
+                            EvidenceBridgeTests.report
+                    },
+                    verifier_evidence_store=store,
+                )
 
 
 if __name__ == "__main__":

@@ -42,7 +42,15 @@ from .dispatch import (
     DispatchAuthority,
     DispatchEntry,
 )
-from .execution.common import FrozenProblemRequest
+from .execution.common import AttemptStatus, FrozenProblemRequest
+from .verifier_evidence import (
+    TerminationCause,
+    VerifierBinding,
+    VerifierEvidenceRecord,
+    VerifierEvidenceStore,
+    VerifierVerdict,
+    canonical_bytes as verifier_canonical_bytes,
+)
 
 ATTEMPTS_PER_CELL = 16
 _TYPED_ABSENCE = "NOT_INVOKED"
@@ -2016,6 +2024,126 @@ def _reconcile_trace(
             )
 
 
+def _expected_verifier_binding(
+    completion: CompletionRecord,
+    *,
+    run_spec_id: str,
+    execution_authority_sha256: str,
+    protocol_rules_sha256: str,
+    confirmatory_manifest_sha256: str,
+) -> VerifierBinding:
+    completion = _snapshot_completion(completion)
+    request = completion.payload.request
+    result = completion.payload.attempt_result
+    immutable_configuration_sha256 = canonical_sha256(
+        {
+            "confirmatory_manifest_sha256": confirmatory_manifest_sha256,
+            "execution_authority_sha256": execution_authority_sha256,
+            "protocol_rules_sha256": protocol_rules_sha256,
+            "runtime_sha256": request.runtime_sha256,
+        }
+    )
+    return VerifierBinding(
+        run_spec_id=run_spec_id,
+        run_id=request.run_id,
+        experiment_id=request.experiment_id,
+        execution_authority_sha256=execution_authority_sha256,
+        confirmatory_manifest_sha256=confirmatory_manifest_sha256,
+        protocol_rules_sha256=protocol_rules_sha256,
+        protocol_dispatch_id=request.protocol_dispatch_id,
+        actual_dispatch_id=completion.dispatch_id,
+        dispatch_entry_sha256=completion.entry_sha256,
+        frozen_request_sha256=request.frozen_request_sha256,
+        normalized_request_sha256=request.frozen_request_sha256,
+        attempt_result_sha256=result.attempt_result_sha256,
+        problem_id=request.problem_id,
+        problem_identity=request.problem_id,
+        arm_id=request.arm.value,
+        attempt_id=request.attempt,
+        candidate_id=result.response_artifact.artifact_id,
+        candidate_source_sha256=result.response_artifact.sha256_hex,
+        theorem_statement_sha256=request.problem_sha256,
+        source_construction_sha256=request.problem_sha256,
+        requested_runtime_sha256=request.runtime_sha256,
+        actual_runtime_sha256=request.runtime_sha256,
+        immutable_configuration_sha256=immutable_configuration_sha256,
+    )
+
+
+def _production_verifier_records(
+    completions: tuple[CompletionRecord, ...],
+    *,
+    store: VerifierEvidenceStore,
+    run_spec_id: str,
+    execution_authority_sha256: str,
+    protocol_rules_sha256: str,
+    confirmatory_manifest_sha256: str,
+) -> dict[str, VerifierEvidenceRecord]:
+    expected: list[VerifierBinding] = []
+    completion_by_dispatch: dict[str, CompletionRecord] = {}
+    for completion in completions:
+        completion = _snapshot_completion(completion)
+        if completion.payload.attempt_result.status is not AttemptStatus.ANSWERED:
+            continue
+        binding = _expected_verifier_binding(
+            completion,
+            run_spec_id=run_spec_id,
+            execution_authority_sha256=execution_authority_sha256,
+            protocol_rules_sha256=protocol_rules_sha256,
+            confirmatory_manifest_sha256=confirmatory_manifest_sha256,
+        )
+        expected.append(binding)
+        completion_by_dispatch[completion.dispatch_id] = completion
+    records = store.read_complete(tuple(expected))
+    by_dispatch = {
+        binding.actual_dispatch_id: record
+        for binding, record in zip(expected, records, strict=True)
+    }
+    for dispatch_id, record in by_dispatch.items():
+        completion = completion_by_dispatch[dispatch_id]
+        legacy = completion.payload.verifier_receipt
+        if legacy is None:
+            raise ValueError("answered production attempt lacks compatibility receipt")
+        body = record.body
+        observed = body["observations"]
+        artifacts = body["artifacts"]
+        verdict = VerifierVerdict(observed["verdict"])
+        cause = TerminationCause(observed["termination_cause"])
+        if verdict is VerifierVerdict.UNKNOWN:
+            raise PermissionError(
+                "BLOCKED_UNKNOWN_VERIFIER_EVIDENCE: " + cause.value
+            )
+        expected_status = (
+            CompletionStatus.SUCCEEDED
+            if verdict is VerifierVerdict.VALID
+            else CompletionStatus.FAILED
+        )
+        if completion.status is not expected_status:
+            raise ValueError("caller completion status differs from authenticated verdict")
+        command_sha = hashlib.sha256(
+            verifier_canonical_bytes(list(legacy.command))
+        ).hexdigest()
+        identity = body["verifier_identity"]
+        if (
+            legacy.runtime_sha256
+            != body["binding"]["actual_runtime_sha256"]
+            or legacy.candidate_artifact_id
+            != body["binding"]["candidate_id"]
+            or legacy.frozen_request_sha256
+            != body["binding"]["frozen_request_sha256"]
+            or legacy.attempt_result_sha256
+            != body["binding"]["attempt_result_sha256"]
+            or legacy.elapsed_milliseconds != observed["elapsed_milliseconds"]
+            or legacy.stdout_sha256 != artifacts["stdout_sha256"]
+            or legacy.stderr_sha256 != artifacts["stderr_sha256"]
+            or command_sha != identity["verification_command_sha256"]
+        ):
+            raise ValueError(
+                "caller compatibility receipt differs from authenticated host evidence"
+            )
+    return by_dispatch
+
+
 def bridge_closed_evidence(
     *,
     dispatch_authority: DispatchAuthority,
@@ -2025,6 +2153,7 @@ def bridge_closed_evidence(
     public_manifest: Mapping[str, object],
     operator_plan: Mapping[str, object],
     cost_reports_by_problem: Mapping[str, CompleteCostReport],
+    verifier_evidence_store: VerifierEvidenceStore | None = None,
     production_receipt_issuer: (
         Callable[[str], EvidenceBridgeReceipt] | None
     ) = None,
@@ -2045,6 +2174,8 @@ def bridge_closed_evidence(
     ):
         if type(value) is not dict:
             raise TypeError(f"{field} must be an exact dict")
+    if verifier_evidence_store is not None and type(verifier_evidence_store) is not VerifierEvidenceStore:
+        raise TypeError("verifier_evidence_store must be an exact VerifierEvidenceStore")
 
     requested_credit_status = public_manifest.get("credit_status")
     if requested_credit_status == NON_CREDIT_DRAFT:
@@ -2072,9 +2203,13 @@ def bridge_closed_evidence(
     if manifest_credit_status == NON_CREDIT_DRAFT:
         if execution_ledger.production_authority is not None:
             raise ValueError("production authority cannot authenticate a draft bridge")
+        if verifier_evidence_store is not None:
+            raise ValueError("draft bridge cannot consume production verifier evidence")
     elif manifest_credit_status == PRODUCTION_CREDIT_STATUS:
         if execution_ledger.production_authority is None:
             raise ValueError("production bridge lacks validated execution authority")
+        if verifier_evidence_store is None:
+            raise PermissionError("production bridge requires authenticated verifier evidence")
     else:
         raise ValueError(
             "unsupported manifest credit status"
@@ -2117,6 +2252,21 @@ def bridge_closed_evidence(
         raise ValueError("dispatch and execution authorities have different run_id values")
     execution_receipts = execution_ledger.verify_complete_join(authoritative_join)
     receipt_by_dispatch = {r.dispatch_id: r for r in execution_receipts}
+    production_verifier_by_dispatch: dict[str, VerifierEvidenceRecord] = {}
+    if manifest_credit_status == PRODUCTION_CREDIT_STATUS:
+        if verifier_evidence_store is None:
+            raise PermissionError("production bridge requires authenticated verifier evidence")
+        production_verifier_by_dispatch = _production_verifier_records(
+            tuple(
+                _snapshot_completion(joined.completion)
+                for joined in authoritative_join.joined
+            ),
+            store=verifier_evidence_store,
+            run_spec_id=confirmatory_manifest_sha256,
+            execution_authority_sha256=execution_ledger.execution_authority_sha256,
+            protocol_rules_sha256=protocol_rules_sha256,
+            confirmatory_manifest_sha256=confirmatory_manifest_sha256,
+        )
 
     joined_by_cell: dict[
         tuple[str, Arm],
@@ -2262,7 +2412,13 @@ def bridge_closed_evidence(
                         (
                             f"{_TYPED_ABSENCE}:{c.record_sha256}"
                             if c.payload.verifier_receipt is None
-                            else c.payload.verifier_receipt.receipt_sha256
+                            else (
+                                c.payload.verifier_receipt.receipt_sha256
+                                if manifest_credit_status == NON_CREDIT_DRAFT
+                                else production_verifier_by_dispatch[
+                                    c.dispatch_id
+                                ].record_sha256
+                            )
                         )
                         for c in completions
                     ),
