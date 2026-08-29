@@ -1,0 +1,766 @@
+from __future__ import annotations
+
+from base64 import b64encode
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from hashlib import sha256
+import json
+from pathlib import Path
+import secrets
+import subprocess
+from typing import Any, Mapping, Sequence
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+
+from .evidence_bridge import HermeticContextReceipt
+from .execution_authority import (
+    AUTHORITY_SCHEMA,
+    HERMETIC_CONTEXT_MODE,
+    PRODUCTION_RECEIPT_SCHEMA,
+    ValidatedExecutionAuthority,
+    _PREFLIGHT_CHECKS,
+    _validate_authority_artifact,
+    canonical_sha256,
+    signed_bytes,
+)
+
+
+PREFLIGHT_SCHEMA = "supernova.hermetic-preflight-receipt.v1"
+PREFLIGHT_RESPONSE_SCHEMA = "supernova.hermetic-preflight-response.v1"
+PREFLIGHT_VALIDATION_SCHEMA = "supernova.preflight-validation-record.v1"
+TRUST_ROOT_SCHEMA = "supernova.confirmatory-trust-root.v1"
+LAUNCHER_SCHEMA = "supernova.hermetic-launcher.v1"
+EMPTY_CONTEXT_SHA256 = sha256(b"").hexdigest()
+_TMPFS = {
+    "/run": "rw,noexec,nosuid,size=16777216",
+    "/tmp": "rw,noexec,nosuid,size=536870912",
+}
+
+
+class SupervisorError(RuntimeError):
+    """The host could not prove the required hermetic lifecycle."""
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace(
+        "+00:00", "Z"
+    )
+
+
+def _private_key(raw: bytes, field: str) -> Ed25519PrivateKey:
+    if type(raw) is not bytes or len(raw) != 32:
+        raise ValueError(f"{field} must be one raw 32-byte Ed25519 private key")
+    return Ed25519PrivateKey.from_private_bytes(raw)
+
+
+def _public_bytes(key: Ed25519PrivateKey) -> bytes:
+    return key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+
+def _b64(value: bytes) -> str:
+    return b64encode(value).decode("ascii")
+
+
+def _sha256_hex(value: object, field: str) -> str:
+    if type(value) is not str or len(value) != 64:
+        raise ValueError(f"{field} must be 64 lowercase hexadecimal characters")
+    if any(char not in "0123456789abcdef" for char in value):
+        raise ValueError(f"{field} must be 64 lowercase hexadecimal characters")
+    return value
+
+
+def _token(value: object, field: str) -> str:
+    if type(value) is not str or not value or value != value.strip():
+        raise ValueError(f"{field} must be a non-empty trimmed string")
+    return value
+
+
+def _json_object(value: bytes, field: str) -> dict[str, Any]:
+    try:
+        decoded = json.loads(value.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SupervisorError(f"{field} is not one UTF-8 JSON object") from exc
+    if type(decoded) is not dict:
+        raise SupervisorError(f"{field} is not one exact JSON object")
+    return decoded
+
+
+@dataclass(frozen=True)
+class HermeticLauncher:
+    """Immutable host-side description of one local model executor."""
+
+    container_image_ref: str
+    command: tuple[str, ...]
+    inference_runtime_sha256: str
+    model_weights_sha256: str
+    tokenizer_sha256: str
+    exact_model_version: str
+    model_provider: str
+    generation_settings: dict[str, Any]
+    memory_bytes: int
+    nano_cpus: int
+    timeout_seconds: int
+    max_output_bytes: int
+
+    def __post_init__(self) -> None:
+        ref = _token(self.container_image_ref, "container_image_ref")
+        if "@sha256:" not in ref:
+            raise ValueError("container_image_ref must be pinned by repo@sha256 digest")
+        _sha256_hex(ref.rsplit("@sha256:", 1)[1], "container_image_ref digest")
+        if type(self.command) is not tuple or not self.command:
+            raise ValueError("command must be one non-empty tuple")
+        for index, value in enumerate(self.command):
+            _token(value, f"command[{index}]")
+        for field in (
+            "inference_runtime_sha256",
+            "model_weights_sha256",
+            "tokenizer_sha256",
+        ):
+            _sha256_hex(getattr(self, field), field)
+        _token(self.exact_model_version, "exact_model_version")
+        _token(self.model_provider, "model_provider")
+        if type(self.generation_settings) is not dict:
+            raise ValueError("generation_settings must be one exact object")
+        frozen_settings = json.loads(
+            json.dumps(self.generation_settings, allow_nan=False, sort_keys=True)
+        )
+        object.__setattr__(self, "generation_settings", frozen_settings)
+        for field in (
+            "memory_bytes",
+            "nano_cpus",
+            "timeout_seconds",
+            "max_output_bytes",
+        ):
+            if type(getattr(self, field)) is not int or getattr(self, field) <= 0:
+                raise ValueError(f"{field} must be a positive integer")
+
+    @property
+    def container_image_digest(self) -> str:
+        return "sha256:" + self.container_image_ref.rsplit("@sha256:", 1)[1]
+
+    @property
+    def launcher_artifact_sha256(self) -> str:
+        return canonical_sha256(
+            {
+                "cap_drop": ["ALL"],
+                "command": list(self.command),
+                "image_ref": self.container_image_ref,
+                "max_output_bytes": self.max_output_bytes,
+                "memory_bytes": self.memory_bytes,
+                "nano_cpus": self.nano_cpus,
+                "network": "none",
+                "pids_limit": 256,
+                "read_only_root": True,
+                "schema": LAUNCHER_SCHEMA,
+                "security_opt": ["no-new-privileges:true"],
+                "timeout_seconds": self.timeout_seconds,
+                "tmpfs": _TMPFS,
+                "transport": "STDIN_STDOUT",
+            }
+        )
+
+    @property
+    def executor_artifact(self) -> dict[str, object]:
+        return {
+            "container_image_digest": self.container_image_digest,
+            "fresh_process_per_attempt": True,
+            "inference_runtime_sha256": self.inference_runtime_sha256,
+            "launcher_artifact_sha256": self.launcher_artifact_sha256,
+            "model_weights_sha256": self.model_weights_sha256,
+            "network_policy": "NONE",
+            "persistent_writable_state": "DISABLED",
+            "raw_credentials_exposed_to_child": False,
+            "tokenizer_sha256": self.tokenizer_sha256,
+        }
+
+    @property
+    def executor_artifact_sha256(self) -> str:
+        return canonical_sha256(self.executor_artifact)
+
+    @property
+    def generation_settings_sha256(self) -> str:
+        return canonical_sha256(self.generation_settings)
+
+    @property
+    def model_identity_sha256(self) -> str:
+        return canonical_sha256(
+            {
+                "exact_model_version": self.exact_model_version,
+                "generation_settings_sha256": self.generation_settings_sha256,
+                "model_provider": self.model_provider,
+            }
+        )
+
+
+@dataclass(frozen=True)
+class PreflightEvidence:
+    receipt: dict[str, object]
+    validation: dict[str, object]
+    receipt_public_key: bytes
+
+
+@dataclass(frozen=True)
+class SealedExecutionAuthority:
+    trust_root: dict[str, object]
+    authority: dict[str, object]
+
+
+@dataclass(frozen=True)
+class SupervisedAttempt:
+    response: bytes
+    context_receipt: HermeticContextReceipt
+    elapsed_milliseconds: int
+
+
+@dataclass(frozen=True)
+class _Lifecycle:
+    response: bytes
+    clean_image_sha256: str
+    instance_nonce: str
+    opened_at: str
+    closed_at: str
+    elapsed_milliseconds: int
+
+
+def _invoke(
+    argv: Sequence[str], *, input_bytes: bytes | None = None, timeout: int | None = None
+) -> subprocess.CompletedProcess[bytes]:
+    try:
+        return subprocess.run(
+            list(argv),
+            input=input_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            shell=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SupervisorError(f"host command failed: {argv[0]}") from exc
+
+
+def _require_success(
+    result: subprocess.CompletedProcess[bytes], field: str
+) -> bytes:
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace")[:500]
+        raise SupervisorError(f"{field} failed: {detail}")
+    return result.stdout
+
+
+def _docker_runtime_identity() -> str:
+    result = _invoke(["docker", "version", "--format", "{{json .}}"])
+    payload = _json_object(
+        _require_success(result, "docker version"), "docker version"
+    )
+    return canonical_sha256(payload)
+
+
+def _image_identity(launcher: HermeticLauncher) -> str:
+    result = _invoke(["docker", "image", "inspect", launcher.container_image_ref])
+    try:
+        decoded = json.loads(
+            _require_success(result, "docker image inspect").decode("utf-8")
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SupervisorError("image inspect returned invalid JSON") from exc
+    if type(decoded) is not list or len(decoded) != 1 or type(decoded[0]) is not dict:
+        raise SupervisorError("image inspect returned an unexpected shape")
+    payload = decoded[0]
+    image_id = payload.get("Id")
+    repo_digests = payload.get("RepoDigests")
+    if type(image_id) is not str or not image_id.startswith("sha256:"):
+        raise SupervisorError("image inspect did not return an immutable image id")
+    if type(repo_digests) is not list or launcher.container_image_ref not in repo_digests:
+        raise SupervisorError("local image does not match the pinned repository digest")
+    return image_id
+
+
+def _create_argv(launcher: HermeticLauncher) -> list[str]:
+    return [
+        "docker",
+        "create",
+        "--network",
+        "none",
+        "--read-only",
+        "--init",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges:true",
+        "--pids-limit",
+        "256",
+        "--memory",
+        str(launcher.memory_bytes),
+        "--cpus",
+        format(launcher.nano_cpus / 1_000_000_000, ".9f"),
+        "--tmpfs",
+        f"/tmp:{_TMPFS['/tmp']}",
+        "--tmpfs",
+        f"/run:{_TMPFS['/run']}",
+        "--interactive",
+        launcher.container_image_ref,
+        *launcher.command,
+    ]
+
+
+def _container_object(container_id: str) -> dict[str, Any]:
+    result = _invoke(["docker", "inspect", container_id])
+    raw = _require_success(result, "docker inspect")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SupervisorError("docker inspect returned invalid JSON") from exc
+    if type(payload) is not list or len(payload) != 1 or type(payload[0]) is not dict:
+        raise SupervisorError("docker inspect returned an unexpected shape")
+    return payload[0]
+
+
+def _clean_snapshot(
+    inspection: Mapping[str, Any], launcher: HermeticLauncher, image_id: str,
+    docker_runtime_identity_sha256: str,
+) -> dict[str, object]:
+    host = inspection.get("HostConfig")
+    config = inspection.get("Config")
+    mounts = inspection.get("Mounts")
+    if type(host) is not dict or type(config) is not dict or type(mounts) is not list:
+        raise SupervisorError("container inspection omitted security configuration")
+    security = host.get("SecurityOpt") or []
+    cap_drop = host.get("CapDrop") or []
+    tmpfs = host.get("Tmpfs") or {}
+    binds = host.get("Binds") or []
+    if (
+        host.get("NetworkMode") != "none"
+        or host.get("ReadonlyRootfs") is not True
+        or "ALL" not in cap_drop
+        or "no-new-privileges:true" not in security
+        or host.get("PidsLimit") != 256
+        or host.get("Memory") != launcher.memory_bytes
+        or host.get("NanoCpus") != launcher.nano_cpus
+        or tmpfs != _TMPFS
+        or binds != []
+        or mounts != []
+        or config.get("OpenStdin") is not True
+        or config.get("Tty") is not False
+        or config.get("Cmd") != list(launcher.command)
+        or inspection.get("Image") != image_id
+    ):
+        raise SupervisorError("container security configuration drifted from the launcher")
+    return {
+        "cap_drop": sorted(cap_drop),
+        "command": config.get("Cmd"),
+        "docker_runtime_identity_sha256": docker_runtime_identity_sha256,
+        "entrypoint": config.get("Entrypoint"),
+        "environment": config.get("Env") or [],
+        "image_id": image_id,
+        "image_ref": launcher.container_image_ref,
+        "labels": config.get("Labels") or {},
+        "memory_bytes": host.get("Memory"),
+        "mounts": mounts,
+        "nano_cpus": host.get("NanoCpus"),
+        "network_mode": host.get("NetworkMode"),
+        "pids_limit": host.get("PidsLimit"),
+        "read_only_root": host.get("ReadonlyRootfs"),
+        "security_opt": sorted(security),
+        "tmpfs": tmpfs,
+        "user": config.get("User") or "",
+        "working_dir": config.get("WorkingDir") or "",
+    }
+
+
+def _run_fresh_container(
+    launcher: HermeticLauncher,
+    request: bytes,
+    *,
+    expected_clean_image_sha256: str | None = None,
+) -> _Lifecycle:
+    if type(request) is not bytes:
+        raise TypeError("request must be exact bytes")
+    docker_runtime_identity_sha256 = _docker_runtime_identity()
+    image_id = _image_identity(launcher)
+    created = _invoke(_create_argv(launcher))
+    container_id = _require_success(created, "docker create").decode("ascii").strip()
+    if len(container_id) != 64 or any(char not in "0123456789abcdef" for char in container_id):
+        raise SupervisorError("docker create did not return one full container id")
+    removed = False
+    try:
+        inspection = _container_object(container_id)
+        snapshot = _clean_snapshot(
+            inspection, launcher, image_id, docker_runtime_identity_sha256
+        )
+        clean_sha = canonical_sha256(snapshot)
+        if (
+            expected_clean_image_sha256 is not None
+            and clean_sha != expected_clean_image_sha256
+        ):
+            raise SupervisorError("clean container image/configuration digest drifted")
+        nonce = secrets.token_hex(32)
+        opened_at = _utc_now()
+        started = _invoke(
+            ["docker", "start", "--attach", "--interactive", container_id],
+            input_bytes=request,
+            timeout=launcher.timeout_seconds,
+        )
+        response = _require_success(started, "docker start")
+        closed_at = _utc_now()
+        if len(response) > launcher.max_output_bytes:
+            raise SupervisorError("executor response exceeded the frozen output limit")
+        stopped = _container_object(container_id).get("State")
+        if (
+            type(stopped) is not dict
+            or stopped.get("Status") != "exited"
+            or stopped.get("ExitCode") != 0
+        ):
+            raise SupervisorError("executor did not terminate cleanly")
+        removed_result = _invoke(["docker", "rm", "--force", container_id])
+        _require_success(removed_result, "docker rm")
+        removed = True
+        if _invoke(["docker", "inspect", container_id]).returncode == 0:
+            raise SupervisorError("container teardown was not observed")
+        opened = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
+        closed = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+        elapsed = max(0, int((closed - opened).total_seconds() * 1000))
+        return _Lifecycle(
+            response=response,
+            clean_image_sha256=clean_sha,
+            instance_nonce=nonce,
+            opened_at=opened_at,
+            closed_at=closed_at,
+            elapsed_milliseconds=elapsed,
+        )
+    finally:
+        if not removed:
+            _invoke(["docker", "rm", "--force", container_id])
+
+
+def run_hermetic_preflight(
+    launcher: HermeticLauncher,
+    *,
+    issuer_id: str,
+    validator_id: str,
+    receipt_private_key: bytes,
+) -> PreflightEvidence:
+    """Observe one real empty-context lifecycle and issue its public receipt."""
+
+    issuer_id = _token(issuer_id, "issuer_id")
+    validator_id = _token(validator_id, "validator_id")
+    if "SIMULATION" in issuer_id.upper() or "CHAT" in issuer_id.upper():
+        raise ValueError("simulation and recurring-chat issuers are non-credit")
+    receipt_key = _private_key(receipt_private_key, "receipt_private_key")
+    request = json.dumps(
+        {
+            "context": [],
+            "executor_artifact_sha256": launcher.executor_artifact_sha256,
+            "model_identity_sha256": launcher.model_identity_sha256,
+            "operation": "PREFLIGHT",
+            "schema": "supernova.hermetic-preflight-request.v1",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    lifecycle = _run_fresh_container(launcher, request)
+    response = _json_object(lifecycle.response, "preflight response")
+    if response != {
+        "executor_artifact_sha256": launcher.executor_artifact_sha256,
+        "model_identity_sha256": launcher.model_identity_sha256,
+        "schema": PREFLIGHT_RESPONSE_SCHEMA,
+        "status": "READY",
+    }:
+        raise SupervisorError("executor preflight response did not match the host challenge")
+    body = {
+        "clean_image_sha256": lifecycle.clean_image_sha256,
+        "closed_at": lifecycle.closed_at,
+        "context_mode": HERMETIC_CONTEXT_MODE,
+        "executor_artifact_sha256": launcher.executor_artifact_sha256,
+        "fresh_process_observed": True,
+        "instance_nonce": lifecycle.instance_nonce,
+        "issuer_id": issuer_id,
+        "model_identity_sha256": launcher.model_identity_sha256,
+        "network_policy": "NONE",
+        "opened_at": lifecycle.opened_at,
+        "persistent_writable_state": "DISABLED",
+        "schema": PREFLIGHT_SCHEMA,
+        "teardown_observed": True,
+    }
+    receipt = dict(body)
+    receipt["signature"] = _b64(receipt_key.sign(signed_bytes(PREFLIGHT_SCHEMA, body)))
+    validation = {
+        "checks": list(_PREFLIGHT_CHECKS),
+        "receipt_sha256": canonical_sha256(receipt),
+        "schema": PREFLIGHT_VALIDATION_SCHEMA,
+        "validated_at": _utc_now(),
+        "validator_id": validator_id,
+        "verdict": "PASS",
+    }
+    return PreflightEvidence(
+        receipt=receipt,
+        validation=validation,
+        receipt_public_key=_public_bytes(receipt_key),
+    )
+
+
+def _seal_execution_authority(
+    protocol: Mapping[str, Any],
+    goal1: Mapping[str, Any],
+    launcher: HermeticLauncher,
+    preflight: PreflightEvidence,
+    *,
+    authority_id: str,
+    root_key_id: str,
+    root_private_key: bytes,
+    receipt_issuer_id: str,
+    pool_id: str,
+    capacity_binding_sha256: str,
+) -> SealedExecutionAuthority:
+    """Sign public activation artifacts after a host-observed preflight."""
+
+    if type(protocol) is not dict or type(goal1) is not dict:
+        raise TypeError("protocol and goal1 must be exact dictionaries")
+    if type(preflight) is not PreflightEvidence:
+        raise TypeError("preflight must be exact PreflightEvidence")
+    authority_id = _token(authority_id, "authority_id")
+    root_key_id = _token(root_key_id, "root_key_id")
+    receipt_issuer_id = _token(receipt_issuer_id, "receipt_issuer_id")
+    pool_id = _token(pool_id, "pool_id")
+    _sha256_hex(capacity_binding_sha256, "capacity_binding_sha256")
+    if preflight.receipt.get("issuer_id") != receipt_issuer_id:
+        raise ValueError("preflight issuer differs from execution receipt issuer")
+    if preflight.receipt.get("executor_artifact_sha256") != launcher.executor_artifact_sha256:
+        raise ValueError("preflight binds a different executor")
+    if preflight.receipt.get("model_identity_sha256") != launcher.model_identity_sha256:
+        raise ValueError("preflight binds a different model identity")
+    signature = preflight.receipt.get("signature")
+    if type(signature) is not str:
+        raise ValueError("preflight signature is absent")
+    try:
+        Ed25519PublicKey.from_public_bytes(preflight.receipt_public_key).verify(
+            __import__("base64").b64decode(signature, validate=True),
+            signed_bytes(
+                PREFLIGHT_SCHEMA,
+                {key: preflight.receipt[key] for key in preflight.receipt if key != "signature"},
+            ),
+        )
+    except Exception as exc:
+        raise ValueError("preflight signature is invalid") from exc
+    if preflight.validation != {
+        "checks": list(_PREFLIGHT_CHECKS),
+        "receipt_sha256": canonical_sha256(preflight.receipt),
+        "schema": PREFLIGHT_VALIDATION_SCHEMA,
+        "validated_at": preflight.validation.get("validated_at"),
+        "validator_id": preflight.validation.get("validator_id"),
+        "verdict": "PASS",
+    }:
+        raise ValueError("preflight validation record is not the complete PASS record")
+    _token(preflight.validation.get("validated_at"), "validated_at")
+    _token(preflight.validation.get("validator_id"), "validator_id")
+
+    root_key = _private_key(root_private_key, "root_private_key")
+    root_public = _public_bytes(root_key)
+    trust_root = {
+        "ed25519_public_key_b64": _b64(root_public),
+        "root_key_id": root_key_id,
+        "schema": TRUST_ROOT_SCHEMA,
+    }
+    schedule = json.loads(json.dumps(protocol["sealed_rules"]["deterministic_schedule"]))
+    pool = {
+        "capacity_binding_sha256": capacity_binding_sha256,
+        "policy": "PINNED_SINGLE_HERMETIC_POOL",
+        "pool_id": pool_id,
+        "selection_after_manifest": "BLOCKED",
+    }
+    body = {
+        "authority_id": authority_id,
+        "context_mode": HERMETIC_CONTEXT_MODE,
+        "exact_model_version": launcher.exact_model_version,
+        "executor_artifact": launcher.executor_artifact,
+        "executor_artifact_sha256": launcher.executor_artifact_sha256,
+        "generation_settings": launcher.generation_settings,
+        "generation_settings_sha256": launcher.generation_settings_sha256,
+        "goal1_authority_sha256": canonical_sha256(goal1),
+        "model_provider": launcher.model_provider,
+        "preflight_receipt": preflight.receipt,
+        "preflight_receipt_sha256": canonical_sha256(preflight.receipt),
+        "preflight_validation_record": preflight.validation,
+        "preflight_validation_record_sha256": canonical_sha256(preflight.validation),
+        "protocol_rules_sha256": protocol["sealed_rules_sha256"],
+        "provider_attested_fresh_empty_context_capability": False,
+        "receipt_issuer_id": receipt_issuer_id,
+        "receipt_schema": PRODUCTION_RECEIPT_SCHEMA,
+        "receipt_verification_key_sha256": sha256(preflight.receipt_public_key).hexdigest(),
+        "receipt_verification_public_key_b64": _b64(preflight.receipt_public_key),
+        "root_key_id": root_key_id,
+        "scheduling_policy": schedule,
+        "scheduling_policy_sha256": canonical_sha256(schedule),
+        "schema": AUTHORITY_SCHEMA,
+        "serving_pool_policy": pool,
+        "serving_pool_policy_sha256": canonical_sha256(pool),
+    }
+    authority = dict(body)
+    authority["signature"] = _b64(root_key.sign(signed_bytes(AUTHORITY_SCHEMA, body)))
+    _validate_authority_artifact(
+        authority,
+        protocol=protocol,
+        goal1=goal1,
+        root_key_id=root_key_id,
+        root_public_key=root_public,
+    )
+    return SealedExecutionAuthority(trust_root=trust_root, authority=authority)
+
+
+def provision_execution_authority(
+    protocol: Mapping[str, Any],
+    goal1: Mapping[str, Any],
+    launcher: HermeticLauncher,
+    *,
+    authority_id: str,
+    root_key_id: str,
+    root_private_key: bytes,
+    receipt_issuer_id: str,
+    receipt_private_key: bytes,
+    validator_id: str,
+    pool_id: str,
+    capacity_binding_sha256: str,
+) -> SealedExecutionAuthority:
+    """Run the production Docker preflight and then seal only its observation."""
+
+    preflight = run_hermetic_preflight(
+        launcher,
+        issuer_id=receipt_issuer_id,
+        validator_id=validator_id,
+        receipt_private_key=receipt_private_key,
+    )
+    return _seal_execution_authority(
+        protocol,
+        goal1,
+        launcher,
+        preflight,
+        authority_id=authority_id,
+        root_key_id=root_key_id,
+        root_private_key=root_private_key,
+        receipt_issuer_id=receipt_issuer_id,
+        pool_id=pool_id,
+        capacity_binding_sha256=capacity_binding_sha256,
+    )
+
+
+def run_supervised_attempt(
+    launcher: HermeticLauncher,
+    authority: ValidatedExecutionAuthority,
+    request: bytes,
+    *,
+    receipt_private_key: bytes,
+    confirmatory_manifest_sha256: str,
+    run_id: str,
+    protocol_dispatch_id: str,
+    dispatch_id: str,
+    problem_id: str,
+    arm: str,
+    attempt_index: int,
+    sequence: int,
+) -> SupervisedAttempt:
+    """Execute one fresh, networkless attempt and sign the observed lifecycle."""
+
+    if type(authority) is not ValidatedExecutionAuthority:
+        raise TypeError("authority must be a validated fixed-checkout capability")
+    if launcher.executor_artifact_sha256 != authority.executor_artifact_sha256:
+        raise PermissionError("launcher differs from the validated executor artifact")
+    if launcher.model_identity_sha256 != authority.model_identity_sha256:
+        raise PermissionError("launcher differs from the validated model identity")
+    receipt_key = _private_key(receipt_private_key, "receipt_private_key")
+    if _public_bytes(receipt_key) != authority.receipt_public_key:
+        raise PermissionError("receipt private key does not match execution authority")
+    lifecycle = _run_fresh_container(
+        launcher,
+        request,
+        expected_clean_image_sha256=authority.clean_image_sha256,
+    )
+    body = {
+        "arm": arm,
+        "attempt_index": attempt_index,
+        "clean_image_sha256": lifecycle.clean_image_sha256,
+        "closed_at": lifecycle.closed_at,
+        "confirmatory_manifest_sha256": confirmatory_manifest_sha256,
+        "dispatch_id": dispatch_id,
+        "execution_authority_sha256": authority.authority_sha256,
+        "executor_artifact_sha256": authority.executor_artifact_sha256,
+        "initial_context_sha256": EMPTY_CONTEXT_SHA256,
+        "instance_nonce": lifecycle.instance_nonce,
+        "issuer_id": authority.issuer_id,
+        "model_identity_sha256": authority.model_identity_sha256,
+        "network_policy": "NONE",
+        "opened_at": lifecycle.opened_at,
+        "persistent_writable_state": "DISABLED",
+        "problem_id": problem_id,
+        "protocol_dispatch_id": protocol_dispatch_id,
+        "request_artifact_sha256": sha256(request).hexdigest(),
+        "response_artifact_sha256": sha256(lifecycle.response).hexdigest(),
+        "run_id": run_id,
+        "schema": PRODUCTION_RECEIPT_SCHEMA,
+        "sequence": sequence,
+        "teardown_observed": True,
+    }
+    signed = _b64(receipt_key.sign(signed_bytes(PRODUCTION_RECEIPT_SCHEMA, body)))
+    receipt = HermeticContextReceipt(
+        issuer_id=authority.issuer_id,
+        execution_authority_sha256=authority.authority_sha256,
+        confirmatory_manifest_sha256=confirmatory_manifest_sha256,
+        model_identity_sha256=authority.model_identity_sha256,
+        executor_artifact_sha256=authority.executor_artifact_sha256,
+        run_id=run_id,
+        protocol_dispatch_id=protocol_dispatch_id,
+        dispatch_id=dispatch_id,
+        problem_id=problem_id,
+        arm=arm,
+        attempt_index=attempt_index,
+        sequence=sequence,
+        instance_nonce=lifecycle.instance_nonce,
+        clean_image_sha256=lifecycle.clean_image_sha256,
+        initial_context_sha256=EMPTY_CONTEXT_SHA256,
+        request_artifact_sha256=sha256(request).hexdigest(),
+        response_artifact_sha256=sha256(lifecycle.response).hexdigest(),
+        opened_at=lifecycle.opened_at,
+        closed_at=lifecycle.closed_at,
+        network_policy="NONE",
+        persistent_writable_state="DISABLED",
+        teardown_observed=True,
+        signature=signed,
+    )
+    authority.verify_receipt_signature(
+        receipt.signature, domain=PRODUCTION_RECEIPT_SCHEMA, body=receipt.body()
+    )
+    return SupervisedAttempt(
+        response=lifecycle.response,
+        context_receipt=receipt,
+        elapsed_milliseconds=lifecycle.elapsed_milliseconds,
+    )
+
+
+def load_private_key_file(path: Path) -> bytes:
+    """Read one raw host key without accepting text, environment, or child exposure."""
+
+    if type(path) is not Path:
+        raise TypeError("path must be exact pathlib.Path")
+    raw = path.read_bytes()
+    _private_key(raw, "private key file")
+    return raw
+
+
+__all__ = [
+    "EMPTY_CONTEXT_SHA256",
+    "HermeticLauncher",
+    "PreflightEvidence",
+    "SealedExecutionAuthority",
+    "SupervisedAttempt",
+    "SupervisorError",
+    "load_private_key_file",
+    "provision_execution_authority",
+    "run_hermetic_preflight",
+    "run_supervised_attempt",
+]
