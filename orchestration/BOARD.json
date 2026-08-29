@@ -256,7 +256,7 @@
     {
       "id": "G1-130",
       "owner": "MM07",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "tests/test_confirmatory_adversarial.py"
       ],
@@ -270,7 +270,11 @@
         "No error path can yield scientific PASS.",
         "The tests exercise the real bridge and evaluator boundary.",
         "Draft protocols, simulation issuers, recurring-chat receipts, and absent or invalid execution-authority bundles are blocked from confirmatory credit."
-      ]
+      ],
+      "completion": {
+        "pull_request": 79,
+        "merge_commit": "2a77711741dc42eb4d635a328fe30ebb722eb2e2"
+      }
     },
     {
       "id": "G2-001",
