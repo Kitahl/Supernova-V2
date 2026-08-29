@@ -70,6 +70,14 @@
         "pull_request": 78,
         "merge_commit": "15ad43de5ec65c29a2d6b912b8af2c69be8c4482",
         "remaining_requirement": "TRUSTED_HOST_SUPERVISOR_IMMUTABLE_HERMETIC_EXECUTION_AUTHORITY_BUNDLE_AND_AUTHENTIC_PREFLIGHT"
+      },
+      "phase_two": {
+        "state": "MERGED_TRUSTED_HERMETIC_HOST_SUPERVISOR",
+        "pull_request": 81,
+        "reviewed_head": "ed992d63a6f55b63275884a1a01a9276fff6d4b0",
+        "merge_commit": "13f3cd145d05679bba9162fc2cb14c087fcdc7ea",
+        "remaining_requirement": "REAL_IMMUTABLE_CPU_EXECUTOR_AUTHENTIC_PREFLIGHT_AND_PUBLIC_AUTHORITY_ARTIFACTS",
+        "next_assignment": "Add an operator-only provisioning entrypoint in the declared supervisor and test paths. It must read launcher configuration and two raw private-key files by path, reject keys stored inside the repository, perform the authentic Docker preflight, atomically create only the fixed public trust-root and authority artifacts, and refuse overwrite. Do not fabricate or fixture-seal either artifact."
       }
     },
     {

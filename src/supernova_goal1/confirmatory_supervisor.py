@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import argparse
 from base64 import b64encode
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import secrets
 import subprocess
+import sys
 from typing import Any, Mapping, Sequence
 
 from cryptography.hazmat.primitives import serialization
@@ -23,6 +26,7 @@ from .execution_authority import (
     PRODUCTION_RECEIPT_SCHEMA,
     ValidatedExecutionAuthority,
     _PREFLIGHT_CHECKS,
+    _repository_root,
     _validate_authority_artifact,
     canonical_sha256,
     signed_bytes,
@@ -39,6 +43,25 @@ _TMPFS = {
     "/run": "rw,noexec,nosuid,size=16777216",
     "/tmp": "rw,noexec,nosuid,size=536870912",
 }
+_LAUNCHER_CONFIG_FIELDS = frozenset(
+    {
+        "command",
+        "container_image_ref",
+        "container_user",
+        "exact_model_version",
+        "generation_settings",
+        "image_environment",
+        "inference_runtime_sha256",
+        "max_output_bytes",
+        "memory_bytes",
+        "model_provider",
+        "model_weights_sha256",
+        "nano_cpus",
+        "schema",
+        "timeout_seconds",
+        "tokenizer_sha256",
+    }
+)
 
 
 class SupervisorError(RuntimeError):
@@ -839,11 +862,235 @@ def run_supervised_attempt(
 def load_private_key_file(path: Path) -> bytes:
     """Read one raw host key without accepting text, environment, or child exposure."""
 
-    if type(path) is not Path:
+    if not isinstance(path, Path):
         raise TypeError("path must be exact pathlib.Path")
     raw = path.read_bytes()
     _private_key(raw, "private key file")
     return raw
+
+
+
+def load_launcher_file(path: Path) -> HermeticLauncher:
+    """Load one exact operator-supplied launcher configuration."""
+
+    if not isinstance(path, Path):
+        raise TypeError("path must be exact pathlib.Path")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("launcher file must be one readable UTF-8 JSON object") from exc
+    if type(value) is not dict:
+        raise ValueError("launcher file must be one exact JSON object")
+    if set(value) != _LAUNCHER_CONFIG_FIELDS:
+        raise ValueError("launcher file fields differ from the exact launcher schema")
+    if value["schema"] != LAUNCHER_SCHEMA:
+        raise ValueError("launcher schema is not supported")
+    if type(value["command"]) is not list:
+        raise ValueError("launcher command must be one exact JSON array")
+    if type(value["image_environment"]) is not list:
+        raise ValueError("launcher image_environment must be one exact JSON array")
+    return HermeticLauncher(
+        container_image_ref=value["container_image_ref"],
+        command=tuple(value["command"]),
+        inference_runtime_sha256=value["inference_runtime_sha256"],
+        model_weights_sha256=value["model_weights_sha256"],
+        tokenizer_sha256=value["tokenizer_sha256"],
+        exact_model_version=value["exact_model_version"],
+        model_provider=value["model_provider"],
+        generation_settings=value["generation_settings"],
+        image_environment=tuple(value["image_environment"]),
+        container_user=value["container_user"],
+        memory_bytes=value["memory_bytes"],
+        nano_cpus=value["nano_cpus"],
+        timeout_seconds=value["timeout_seconds"],
+        max_output_bytes=value["max_output_bytes"],
+    )
+
+
+def _canonical_public_bytes(value: Mapping[str, object]) -> bytes:
+    return (
+        json.dumps(value, allow_nan=False, separators=(",", ":"), sort_keys=True)
+        + "\n"
+    ).encode("utf-8")
+
+
+def _write_public_activation_artifacts(
+    sealed: SealedExecutionAuthority,
+    trust_root_path: Path,
+    authority_path: Path,
+) -> None:
+    """Publish both public artifacts without ever replacing an existing file."""
+
+    if type(sealed) is not SealedExecutionAuthority:
+        raise TypeError("sealed must be exact SealedExecutionAuthority")
+    if not isinstance(trust_root_path, Path) or not isinstance(authority_path, Path):
+        raise TypeError("activation output paths must be exact pathlib.Path values")
+    if trust_root_path.resolve(strict=False) == authority_path.resolve(strict=False):
+        raise ValueError("activation output paths must be distinct")
+    for path in (trust_root_path, authority_path):
+        if not path.parent.is_dir():
+            raise FileNotFoundError(f"activation output directory is absent: {path.parent}")
+        if path.exists():
+            raise FileExistsError(f"refusing to overwrite activation artifact: {path}")
+
+    # Authority is staged first; the trust root is the loader-visible commit marker.
+    # An interruption before the final link therefore remains fail-closed.
+    outputs = (
+        (authority_path, _canonical_public_bytes(sealed.authority)),
+        (trust_root_path, _canonical_public_bytes(sealed.trust_root)),
+    )
+    staged: list[Path] = []
+    published: list[Path] = []
+    try:
+        for output, payload in outputs:
+            temporary = output.with_name(
+                f".{output.name}.{secrets.token_hex(16)}.tmp"
+            )
+            with temporary.open("xb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            staged.append(temporary)
+        for (output, _payload), temporary in zip(outputs, staged, strict=True):
+            os.link(temporary, output)
+            published.append(output)
+    except BaseException:
+        for output in reversed(published):
+            output.unlink(missing_ok=True)
+        raise
+    finally:
+        for temporary in staged:
+            temporary.unlink(missing_ok=True)
+
+
+def provision_repository_execution_authority(
+    launcher_path: Path,
+    root_key_path: Path,
+    receipt_key_path: Path,
+    *,
+    authority_id: str,
+    root_key_id: str,
+    receipt_issuer_id: str,
+    validator_id: str,
+    pool_id: str,
+    capacity_binding_sha256: str,
+) -> SealedExecutionAuthority:
+    """Run authentic preflight in the fixed checkout and publish public artifacts."""
+
+    for value, field in (
+        (launcher_path, "launcher_path"),
+        (root_key_path, "root_key_path"),
+        (receipt_key_path, "receipt_key_path"),
+    ):
+        if not isinstance(value, Path):
+            raise TypeError(f"{field} must be pathlib.Path")
+    root = _repository_root().resolve(strict=True)
+    resolved_keys: dict[str, Path] = {}
+    for key_path, field in (
+        (root_key_path, "root_key_path"),
+        (receipt_key_path, "receipt_key_path"),
+    ):
+        resolved = key_path.resolve(strict=True)
+        if resolved == root or root in resolved.parents:
+            raise PermissionError(f"{field} must be stored outside the repository")
+        resolved_keys[field] = resolved
+    if (
+        resolved_keys["root_key_path"] == resolved_keys["receipt_key_path"]
+        or root_key_path.samefile(receipt_key_path)
+    ):
+        raise PermissionError("root and receipt key files must be distinct")
+
+    goal_directory = root / "goal1"
+    trust_root_path = goal_directory / "CONFIRMATORY_TRUST_ROOT.json"
+    authority_path = goal_directory / "CONFIRMATORY_EXECUTION_AUTHORITY.json"
+    for path in (trust_root_path, authority_path):
+        if path.exists():
+            raise FileExistsError(f"refusing to overwrite activation artifact: {path}")
+
+    launcher = load_launcher_file(launcher_path)
+    protocol = json.loads(
+        (goal_directory / "CONFIRMATORY_PROTOCOL.json").read_text(encoding="utf-8")
+    )
+    goal1 = json.loads((goal_directory / "GOAL1.json").read_text(encoding="utf-8"))
+    if type(protocol) is not dict or type(goal1) is not dict:
+        raise ValueError("protocol and Goal-1 authority must be exact JSON objects")
+
+    receipt_private_key = load_private_key_file(receipt_key_path)
+    preflight = run_hermetic_preflight(
+        launcher,
+        issuer_id=receipt_issuer_id,
+        validator_id=validator_id,
+        receipt_private_key=receipt_private_key,
+    )
+    root_private_key = load_private_key_file(root_key_path)
+    if _public_bytes(_private_key(root_private_key, "root_private_key")) == _public_bytes(
+        _private_key(receipt_private_key, "receipt_private_key")
+    ):
+        raise PermissionError("root and receipt signing identities must be distinct")
+    sealed = _seal_execution_authority(
+        protocol,
+        goal1,
+        launcher,
+        preflight,
+        authority_id=authority_id,
+        root_key_id=root_key_id,
+        root_private_key=root_private_key,
+        receipt_issuer_id=receipt_issuer_id,
+        pool_id=pool_id,
+        capacity_binding_sha256=capacity_binding_sha256,
+    )
+    _write_public_activation_artifacts(sealed, trust_root_path, authority_path)
+    return sealed
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the authentic hermetic preflight and create the fixed public Goal-1 "
+            "execution-authority artifacts. Existing artifacts are never overwritten."
+        )
+    )
+    parser.add_argument("--launcher", type=Path, required=True)
+    parser.add_argument("--root-key", type=Path, required=True)
+    parser.add_argument("--receipt-key", type=Path, required=True)
+    parser.add_argument("--authority-id", required=True)
+    parser.add_argument("--root-key-id", required=True)
+    parser.add_argument("--receipt-issuer-id", required=True)
+    parser.add_argument("--validator-id", required=True)
+    parser.add_argument("--pool-id", required=True)
+    parser.add_argument("--capacity-binding-sha256", required=True)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    try:
+        sealed = provision_repository_execution_authority(
+            args.launcher,
+            args.root_key,
+            args.receipt_key,
+            authority_id=args.authority_id,
+            root_key_id=args.root_key_id,
+            receipt_issuer_id=args.receipt_issuer_id,
+            validator_id=args.validator_id,
+            pool_id=args.pool_id,
+            capacity_binding_sha256=args.capacity_binding_sha256,
+        )
+    except Exception as exc:
+        print(f"activation refused: {exc}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "authority_sha256": canonical_sha256(sealed.authority),
+                "status": "PUBLIC_EXECUTION_AUTHORITY_CREATED",
+                "trust_root_sha256": canonical_sha256(sealed.trust_root),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 __all__ = [
@@ -853,8 +1100,15 @@ __all__ = [
     "SealedExecutionAuthority",
     "SupervisedAttempt",
     "SupervisorError",
+    "load_launcher_file",
     "load_private_key_file",
+    "main",
     "provision_execution_authority",
+    "provision_repository_execution_authority",
     "run_hermetic_preflight",
     "run_supervised_attempt",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
