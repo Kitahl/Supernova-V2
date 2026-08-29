@@ -34,13 +34,16 @@
         "pyproject.toml",
         "goal1/CONFIRMATORY_PROTOCOL.json",
         "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+        "goal1/CONFIRMATORY_TRUST_ROOT.json",
         "src/supernova_goal1/activation.py",
         "src/supernova_goal1/confirmatory_manifest.py",
+        "src/supernova_goal1/confirmatory_supervisor.py",
         "src/supernova_goal1/evaluate_confirmatory.py",
         "src/supernova_goal1/evidence_bridge.py",
         "src/supernova_goal1/execution_authority.py",
         "tests/test_confirmatory_protocol.py",
         "tests/test_confirmatory_execution_authority.py",
+        "tests/test_confirmatory_supervisor.py",
         "tests/test_confirmatory_manifest.py",
         "tests/test_evaluate_confirmatory.py"
       ],
@@ -59,8 +62,15 @@
         "One canonical protocol-rules digest binds every presently available scientific rule and interface.",
         "Before execution authority exists, the protocol returns BLOCKED_NO_EXECUTION_AUTHORITY and G1-121 remains not DONE.",
         "Completion additionally requires an immutable bundle binding exact model/version/settings, executor digest, receipt issuer and verification key, authentic fresh-empty-context preflight receipt, scheduling, and serving-pool policy.",
+        "The trusted host supervisor is implemented and frozen before authority signature; G1-132 may execute only that exact reviewed artifact.",
         "No second simultaneous MF02 ticket or replacement scheduled task is created."
-      ]
+      ],
+      "phase_one": {
+        "state": "MERGED_FAIL_CLOSED_INTERFACE",
+        "pull_request": 78,
+        "merge_commit": "15ad43de5ec65c29a2d6b912b8af2c69be8c4482",
+        "remaining_requirement": "TRUSTED_HOST_SUPERVISOR_IMMUTABLE_HERMETIC_EXECUTION_AUTHORITY_BUNDLE_AND_AUTHENTIC_PREFLIGHT"
+      }
     },
     {
       "id": "G1-122",
