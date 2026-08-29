@@ -47,7 +47,16 @@ jobs:
           set -euo pipefail
           challenge='{"context":[],"executor_artifact_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","model_identity_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","operation":"PREFLIGHT","schema":"supernova.hermetic-preflight-request.v1"}'
           expected='{"executor_artifact_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","model_identity_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","schema":"supernova.hermetic-preflight-response.v1","status":"READY"}'
-          response="$(printf '%s' "$challenge" | timeout --signal=KILL 180s docker run --rm -i \
+          cidfile="$RUNNER_TEMP/goal1-preflight.cid"
+          rm -f "$cidfile"
+          cleanup() {
+            if test -s "$cidfile"; then
+              docker rm -f "$(cat "$cidfile")" >/dev/null 2>&1 || true
+            fi
+            rm -f "$cidfile"
+          }
+          trap cleanup EXIT
+          response="$(printf '%s' "$challenge" | timeout --signal=KILL 180s docker run --cidfile "$cidfile" --rm -i \
             --network none --read-only --runtime runc --init \
             --cap-drop ALL --security-opt no-new-privileges:true \
             --pids-limit 256 --memory 4g --cpus 2 \
@@ -56,6 +65,8 @@ jobs:
             --tmpfs /run:rw,noexec,nosuid,size=16777216 \
             "$CANDIDATE_TAG")"
           test "$response" = "$expected"
+          cleanup
+          trap - EXIT
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3

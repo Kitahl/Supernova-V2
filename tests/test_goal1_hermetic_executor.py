@@ -49,6 +49,8 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         for fragment in expected_fragments:
             self.assertIn(fragment, wrapper)
         self.assertGreaterEqual(wrapper.count('"--single-turn"'), 2)
+        self.assertEqual(wrapper.count('"--prompt"'), 1)
+        self.assertIn('"--prompt", "PREFLIGHT"', wrapper)
         self.assertNotIn('"-no-cnv"', wrapper)
 
     def test_dockerfile_has_no_mutable_runtime_or_secret_input(self) -> None:
@@ -73,6 +75,9 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn("platforms: linux/amd64", workflow)
         self.assertIn("--network none", workflow)
         self.assertIn("timeout --signal=KILL 180s docker run", workflow)
+        self.assertIn('--cidfile "$cidfile"', workflow)
+        self.assertIn("trap cleanup EXIT", workflow)
+        self.assertIn('docker rm -f "$(cat "$cidfile")"', workflow)
         self.assertIn("push: false", workflow)
         self.assertIn("github.event_name != 'pull_request'", workflow)
         self.assertEqual(workflow.count("docker/build-push-action@"), 1)

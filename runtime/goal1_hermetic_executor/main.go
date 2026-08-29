@@ -151,7 +151,6 @@ func handlePreflight(raw []byte) error {
 		"--no-display-prompt",
 		"--no-show-timings",
 		"--log-disable",
-		"--prompt", "",
 	); err != nil {
 		return fmt.Errorf("empty-context model load: %w", err)
 	}
