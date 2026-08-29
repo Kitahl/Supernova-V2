@@ -163,12 +163,10 @@ class HermeticExecutorBuildTests(unittest.TestCase):
             "tests/test_goal1_hermetic_executor.py",
         ):
             self.assertIn(path, ticket["paths"])
-        self.assertEqual(ticket["status"], "READY")
+        self.assertEqual(ticket["status"], "DONE")
         self.assertEqual(ticket["phase_two"]["preflight_validation_verdict"], "PASS")
-        self.assertEqual(
-            ticket["phase_two"]["remaining_requirement"],
-            "MERGE_PUBLIC_AUTHORITY_ARTIFACTS_AND_RECORD_EXACT_COMPLETION",
-        )
+        self.assertIsNone(ticket["phase_two"]["remaining_requirement"])
+        self.assertEqual(ticket["completion"]["pull_request"], 86)
 
 
 if __name__ == "__main__":
