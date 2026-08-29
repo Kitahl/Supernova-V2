@@ -1,0 +1,6 @@
+*
+!Dockerfile
+!BUILD_LOCK.json
+!go.mod
+!main.go
+!main_test.go
