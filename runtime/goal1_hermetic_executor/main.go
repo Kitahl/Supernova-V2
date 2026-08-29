@@ -23,7 +23,7 @@ const (
 	modelPath               = "/opt/supernova/model.gguf"
 	componentsPath          = "/opt/supernova/components.json"
 	buildLockPath           = "/opt/supernova/BUILD_LOCK.json"
-	completionPath          = "/app/llama-completion"
+	llamaCLIPath            = "/app/llama-cli"
 )
 
 type preflightRequest struct {
@@ -42,11 +42,11 @@ type preflightResponse struct {
 }
 
 type componentManifest struct {
-	BuildLockSHA256       string `json:"build_lock_sha256"`
-	ExecutorSHA256        string `json:"executor_sha256"`
-	LlamaCompletionSHA256 string `json:"llama_completion_sha256"`
-	ModelSHA256           string `json:"model_sha256"`
-	Schema                string `json:"schema"`
+	BuildLockSHA256 string `json:"build_lock_sha256"`
+	ExecutorSHA256  string `json:"executor_sha256"`
+	LlamaCLISHA256  string `json:"llama_cli_sha256"`
+	ModelSHA256     string `json:"model_sha256"`
+	Schema          string `json:"schema"`
 }
 
 var runCommand = func(path string, args ...string) error {
@@ -133,11 +133,11 @@ func handlePreflight(raw []byte) error {
 	if err != nil {
 		return fmt.Errorf("resolve executor path: %w", err)
 	}
-	if err := validateComponents(componentsPath, buildLockPath, executable, completionPath, modelPath); err != nil {
+	if err := validateComponents(componentsPath, buildLockPath, executable, llamaCLIPath, modelPath); err != nil {
 		return err
 	}
 	if err := runCommand(
-		completionPath,
+		llamaCLIPath,
 		"-m", modelPath,
 		"-no-cnv",
 		"-n", "0",
@@ -190,7 +190,7 @@ func handleGeneration(prompt []byte) error {
 		return fmt.Errorf("close prompt file: %w", err)
 	}
 	cmd := exec.Command(
-		completionPath,
+		llamaCLIPath,
 		"-m", modelPath,
 		"--file", name,
 		"-no-cnv",
@@ -234,7 +234,7 @@ func validateComponents(manifestPath, lockPath, executorPath, llamaPath, weights
 	checks := []struct{ path, expected, name string }{
 		{lockPath, manifest.BuildLockSHA256, "build lock"},
 		{executorPath, manifest.ExecutorSHA256, "executor"},
-		{llamaPath, manifest.LlamaCompletionSHA256, "llama-completion"},
+		{llamaPath, manifest.LlamaCLISHA256, "llama-cli"},
 		{weightsPath, manifest.ModelSHA256, "model"},
 	}
 	for _, check := range checks {

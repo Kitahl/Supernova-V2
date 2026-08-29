@@ -44,11 +44,11 @@ func TestValidateComponents(t *testing.T) {
 		hashes[index] = hex.EncodeToString(sum[:])
 	}
 	manifest := componentManifest{
-		BuildLockSHA256:       hashes[0],
-		ExecutorSHA256:        hashes[1],
-		LlamaCompletionSHA256: hashes[2],
-		ModelSHA256:           hashes[3],
-		Schema:                componentsSchema,
+		BuildLockSHA256: hashes[0],
+		ExecutorSHA256:  hashes[1],
+		LlamaCLISHA256:  hashes[2],
+		ModelSHA256:     hashes[3],
+		Schema:          componentsSchema,
 	}
 	raw, _ := json.Marshal(manifest)
 	manifestPath := filepath.Join(dir, "components.json")

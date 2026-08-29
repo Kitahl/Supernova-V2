@@ -21,7 +21,7 @@
     "context_tokens": 4096,
     "cpu_threads": 1,
     "device": "none",
-    "engine": "llama-completion",
+    "engine": "llama-cli",
     "max_output_tokens": 1024,
     "seed": -1,
     "temperature": 0.8,

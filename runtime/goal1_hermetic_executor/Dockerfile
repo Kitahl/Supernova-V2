@@ -17,11 +17,11 @@ COPY --from=wrapper-builder /out/executor /opt/supernova/executor
 COPY --from=model-fetch /opt/supernova/model.gguf /opt/supernova/model.gguf
 COPY BUILD_LOCK.json /opt/supernova/BUILD_LOCK.json
 RUN executor_sha="$(sha256sum /opt/supernova/executor | cut -d' ' -f1)" && \
-    llama_sha="$(sha256sum /app/llama-completion | cut -d' ' -f1)" && \
+    llama_cli_sha="$(sha256sum /app/llama-cli | cut -d' ' -f1)" && \
     model_sha="$(sha256sum /opt/supernova/model.gguf | cut -d' ' -f1)" && \
     lock_sha="$(sha256sum /opt/supernova/BUILD_LOCK.json | cut -d' ' -f1)" && \
-    printf '{"build_lock_sha256":"%s","executor_sha256":"%s","llama_completion_sha256":"%s","model_sha256":"%s","schema":"supernova.hermetic-executor-components.v1"}\n' \
-      "$lock_sha" "$executor_sha" "$llama_sha" "$model_sha" > /opt/supernova/components.json && \
+    printf '{"build_lock_sha256":"%s","executor_sha256":"%s","llama_cli_sha256":"%s","model_sha256":"%s","schema":"supernova.hermetic-executor-components.v1"}\n' \
+      "$lock_sha" "$executor_sha" "$llama_cli_sha" "$model_sha" > /opt/supernova/components.json && \
     chmod 0555 /opt/supernova/executor && \
     chmod 0444 /opt/supernova/BUILD_LOCK.json /opt/supernova/model.gguf /opt/supernova/components.json
 LABEL org.opencontainers.image.source="https://github.com/Kitahl/Supernova-V2" \
