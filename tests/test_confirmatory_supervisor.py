@@ -64,6 +64,8 @@ def _launcher(settings: dict[str, object] | None = None) -> HermeticLauncher:
             "sampling": "GREEDY",
             "temperature": 0,
         },
+        image_environment=(),
+        container_user="65532:65532",
         memory_bytes=8_589_934_592,
         nano_cpus=2_000_000_000,
         timeout_seconds=600,
@@ -79,29 +81,56 @@ class _FakeDocker:
         network_mode: str = "none",
         environment: list[str] | None = None,
         teardown_failure: bool = False,
+        remove_failure: bool = False,
+        start_failure: bool = False,
+        host_overrides: dict[str, object] | None = None,
     ) -> None:
         self.launcher = launcher
         self.network_mode = network_mode
         self.environment = environment or []
         self.teardown_failure = teardown_failure
+        self.remove_failure = remove_failure
+        self.start_failure = start_failure
+        self.host_overrides = host_overrides or {}
         self.calls: list[tuple[list[str], bytes | None, int | None]] = []
         self.started = False
         self.removed = False
 
     def inspection(self) -> dict[str, object]:
+        host = {
+            "NetworkMode": self.network_mode,
+            "ReadonlyRootfs": True,
+            "Privileged": False,
+            "CapDrop": ["ALL"],
+            "CapAdd": None,
+            "Devices": None,
+            "DeviceRequests": None,
+            "SecurityOpt": ["no-new-privileges:true"],
+            "PidsLimit": 256,
+            "Memory": self.launcher.memory_bytes,
+            "NanoCpus": self.launcher.nano_cpus,
+            "IpcMode": "none",
+            "PidMode": "private",
+            "UTSMode": "private",
+            "UsernsMode": "",
+            "CgroupnsMode": "private",
+            "PublishAllPorts": False,
+            "PortBindings": {},
+            "Links": None,
+            "ExtraHosts": None,
+            "GroupAdd": None,
+            "VolumesFrom": None,
+            "AutoRemove": False,
+            "OomKillDisable": False,
+            "Init": True,
+            "RestartPolicy": {"MaximumRetryCount": 0, "Name": "no"},
+            "Tmpfs": dict(TMPFS),
+            "Binds": None,
+        }
+        host.update(self.host_overrides)
         return {
             "Image": IMAGE_ID,
-            "HostConfig": {
-                "NetworkMode": self.network_mode,
-                "ReadonlyRootfs": True,
-                "CapDrop": ["ALL"],
-                "SecurityOpt": ["no-new-privileges:true"],
-                "PidsLimit": 256,
-                "Memory": self.launcher.memory_bytes,
-                "NanoCpus": self.launcher.nano_cpus,
-                "Tmpfs": dict(TMPFS),
-                "Binds": None,
-            },
+            "HostConfig": host,
             "Config": {
                 "OpenStdin": True,
                 "Tty": False,
@@ -109,7 +138,7 @@ class _FakeDocker:
                 "Entrypoint": ["/usr/bin/tini", "--"],
                 "Env": list(self.environment),
                 "Labels": {"org.opencontainers.image.revision": "fixture"},
-                "User": "65532",
+                "User": self.launcher.container_user,
                 "WorkingDir": "/work",
             },
             "Mounts": [],
@@ -157,6 +186,8 @@ class _FakeDocker:
             )
         if argv[:2] == ["docker", "start"]:
             self.started = True
+            if self.start_failure:
+                return _completed(argv, returncode=1, stderr=b"executor failed")
             request = json.loads((input_bytes or b"{}").decode("utf-8"))
             if request.get("operation") == "PREFLIGHT":
                 response = {
@@ -173,6 +204,8 @@ class _FakeDocker:
                 )
             return _completed(argv, stdout=b"opaque-model-response")
         if argv[:3] == ["docker", "rm", "--force"]:
+            if self.remove_failure:
+                return _completed(argv, returncode=1, stderr=b"remove failed")
             self.removed = True
             return _completed(argv, stdout=CONTAINER_ID.encode("ascii"))
         raise AssertionError(f"unexpected command: {argv}")
@@ -304,7 +337,9 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
             "supernova_goal1.confirmatory_supervisor._invoke",
             side_effect=drifted,
         ):
-            with self.assertRaisesRegex(SupervisorError, "digest drifted"):
+            with self.assertRaisesRegex(
+                SupervisorError, "security configuration drifted"
+            ):
                 run_supervised_attempt(
                     self.launcher,
                     capability,
@@ -324,7 +359,7 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
 
     def test_teardown_failure_cannot_emit_a_receipt(self) -> None:
         fake = _FakeDocker(self.launcher, teardown_failure=True)
-        with self.assertRaisesRegex(SupervisorError, "teardown was not observed"):
+        with self.assertRaisesRegex(SupervisorError, "cleanup was not observed"):
             self._preflight(fake)
 
     def test_wrong_receipt_key_blocks_before_execution(self) -> None:
@@ -350,6 +385,89 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                     sequence=0,
                 )
         self.assertEqual(fake.calls, [])
+
+    def test_launcher_rejects_credentials_and_root_identity(self) -> None:
+        with self.assertRaisesRegex(ValueError, "not allowed"):
+            HermeticLauncher(
+                container_image_ref=self.launcher.container_image_ref,
+                command=self.launcher.command,
+                inference_runtime_sha256=self.launcher.inference_runtime_sha256,
+                model_weights_sha256=self.launcher.model_weights_sha256,
+                tokenizer_sha256=self.launcher.tokenizer_sha256,
+                exact_model_version=self.launcher.exact_model_version,
+                model_provider=self.launcher.model_provider,
+                generation_settings=self.launcher.generation_settings,
+                image_environment=("AWS_SECRET_ACCESS_KEY=leaked",),
+                container_user="65532:65532",
+                memory_bytes=self.launcher.memory_bytes,
+                nano_cpus=self.launcher.nano_cpus,
+                timeout_seconds=self.launcher.timeout_seconds,
+                max_output_bytes=self.launcher.max_output_bytes,
+            )
+        with self.assertRaisesRegex(ValueError, "non-root"):
+            HermeticLauncher(
+                container_image_ref=self.launcher.container_image_ref,
+                command=self.launcher.command,
+                inference_runtime_sha256=self.launcher.inference_runtime_sha256,
+                model_weights_sha256=self.launcher.model_weights_sha256,
+                tokenizer_sha256=self.launcher.tokenizer_sha256,
+                exact_model_version=self.launcher.exact_model_version,
+                model_provider=self.launcher.model_provider,
+                generation_settings=self.launcher.generation_settings,
+                image_environment=(),
+                container_user="0:0",
+                memory_bytes=self.launcher.memory_bytes,
+                nano_cpus=self.launcher.nano_cpus,
+                timeout_seconds=self.launcher.timeout_seconds,
+                max_output_bytes=self.launcher.max_output_bytes,
+            )
+
+    def test_privilege_device_and_namespace_drift_are_rejected(self) -> None:
+        attacks = {
+            "privileged": {"Privileged": True},
+            "capability": {"CapAdd": ["SYS_ADMIN"]},
+            "device": {"Devices": [{"PathOnHost": "/dev/sda"}]},
+            "device_request": {"DeviceRequests": [{"Capabilities": [["gpu"]]}]},
+            "host_pid": {"PidMode": "host"},
+            "host_ipc": {"IpcMode": "host"},
+            "host_uts": {"UTSMode": "host"},
+            "host_userns": {"UsernsMode": "host"},
+        }
+        for name, override in attacks.items():
+            with self.subTest(name=name):
+                fake = _FakeDocker(self.launcher, host_overrides=override)
+                with self.assertRaisesRegex(
+                    SupervisorError, "security configuration drifted"
+                ):
+                    self._preflight(fake)
+                self.assertFalse(fake.started)
+                self.assertTrue(fake.removed)
+
+    def test_cleanup_failure_overrides_start_failure_with_specific_error(self) -> None:
+        fake = _FakeDocker(
+            self.launcher, start_failure=True, remove_failure=True
+        )
+        with self.assertRaisesRegex(
+            SupervisorError, "cleanup was not observed"
+        ) as captured:
+            self._preflight(fake)
+        self.assertIsNotNone(captured.exception.__cause__)
+        self.assertTrue(fake.started)
+        self.assertFalse(fake.removed)
+
+    def test_cleanup_failure_overrides_prestart_drift_with_specific_error(self) -> None:
+        fake = _FakeDocker(
+            self.launcher,
+            network_mode="bridge",
+            remove_failure=True,
+        )
+        with self.assertRaisesRegex(
+            SupervisorError, "cleanup was not observed"
+        ) as captured:
+            self._preflight(fake)
+        self.assertIsNotNone(captured.exception.__cause__)
+        self.assertFalse(fake.started)
+        self.assertFalse(fake.removed)
 
     def test_launcher_copies_mutable_generation_settings(self) -> None:
         source = {"temperature": 0}

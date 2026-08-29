@@ -104,6 +104,8 @@ class HermeticLauncher:
     exact_model_version: str
     model_provider: str
     generation_settings: dict[str, Any]
+    image_environment: tuple[str, ...]
+    container_user: str
     memory_bytes: int
     nano_cpus: int
     timeout_seconds: int
@@ -132,6 +134,27 @@ class HermeticLauncher:
             json.dumps(self.generation_settings, allow_nan=False, sort_keys=True)
         )
         object.__setattr__(self, "generation_settings", frozen_settings)
+        if type(self.image_environment) is not tuple:
+            raise ValueError("image_environment must be one exact tuple")
+        allowed_environment_names = {
+            "HOME", "LANG", "LC_ALL", "OMP_NUM_THREADS", "PATH",
+            "PYTHONPATH", "PYTHONUNBUFFERED", "RUST_BACKTRACE", "TZ",
+            "TOKENIZERS_PARALLELISM",
+        }
+        names: list[str] = []
+        for index, entry in enumerate(self.image_environment):
+            entry = _token(entry, f"image_environment[{index}]")
+            if "=" not in entry:
+                raise ValueError("each image environment entry must be NAME=value")
+            name, _value = entry.split("=", 1)
+            if name not in allowed_environment_names:
+                raise ValueError(f"image environment name is not allowed: {name}")
+            names.append(name)
+        if len(names) != len(set(names)):
+            raise ValueError("image_environment contains a duplicate name")
+        user = _token(self.container_user, "container_user")
+        if user.split(":", 1)[0].lower() in {"0", "root"}:
+            raise ValueError("container_user must be a non-root identity")
         for field in (
             "memory_bytes",
             "nano_cpus",
@@ -151,7 +174,9 @@ class HermeticLauncher:
             {
                 "cap_drop": ["ALL"],
                 "command": list(self.command),
+                "image_environment": list(self.image_environment),
                 "image_ref": self.container_image_ref,
+                "container_user": self.container_user,
                 "max_output_bytes": self.max_output_bytes,
                 "memory_bytes": self.memory_bytes,
                 "nano_cpus": self.nano_cpus,
@@ -297,6 +322,14 @@ def _create_argv(launcher: HermeticLauncher) -> list[str]:
         "no-new-privileges:true",
         "--pids-limit",
         "256",
+        "--ipc",
+        "none",
+        "--pid",
+        "private",
+        "--uts",
+        "private",
+        "--user",
+        launcher.container_user,
         "--memory",
         str(launcher.memory_bytes),
         "--cpus",
@@ -334,45 +367,99 @@ def _clean_snapshot(
         raise SupervisorError("container inspection omitted security configuration")
     security = host.get("SecurityOpt") or []
     cap_drop = host.get("CapDrop") or []
+    cap_add = host.get("CapAdd") or []
+    devices = host.get("Devices") or []
+    device_requests = host.get("DeviceRequests") or []
     tmpfs = host.get("Tmpfs") or {}
     binds = host.get("Binds") or []
+    restart = host.get("RestartPolicy") or {}
     if (
         host.get("NetworkMode") != "none"
         or host.get("ReadonlyRootfs") is not True
-        or "ALL" not in cap_drop
-        or "no-new-privileges:true" not in security
+        or host.get("Privileged") is not False
+        or sorted(cap_drop) != ["ALL"]
+        or cap_add != []
+        or devices != []
+        or device_requests != []
+        or sorted(security) != ["no-new-privileges:true"]
         or host.get("PidsLimit") != 256
         or host.get("Memory") != launcher.memory_bytes
         or host.get("NanoCpus") != launcher.nano_cpus
+        or host.get("IpcMode") != "none"
+        or host.get("PidMode") != "private"
+        or host.get("UTSMode") != "private"
+        or host.get("UsernsMode") not in {None, ""}
+        or host.get("CgroupnsMode") not in {None, "", "private"}
+        or host.get("PublishAllPorts") is not False
+        or (host.get("PortBindings") or {}) != {}
+        or (host.get("Links") or []) != []
+        or (host.get("ExtraHosts") or []) != []
+        or (host.get("GroupAdd") or []) != []
+        or (host.get("VolumesFrom") or []) != []
+        or host.get("AutoRemove") is not False
+        or host.get("OomKillDisable") not in {None, False}
+        or host.get("Init") is not True
+        or restart != {"MaximumRetryCount": 0, "Name": "no"}
         or tmpfs != _TMPFS
         or binds != []
         or mounts != []
         or config.get("OpenStdin") is not True
         or config.get("Tty") is not False
         or config.get("Cmd") != list(launcher.command)
+        or (config.get("Env") or []) != list(launcher.image_environment)
+        or config.get("User") != launcher.container_user
         or inspection.get("Image") != image_id
     ):
         raise SupervisorError("container security configuration drifted from the launcher")
     return {
+        "auto_remove": host.get("AutoRemove"),
+        "cap_add": cap_add,
         "cap_drop": sorted(cap_drop),
+        "cgroupns_mode": host.get("CgroupnsMode") or "",
         "command": config.get("Cmd"),
+        "device_requests": device_requests,
+        "devices": devices,
         "docker_runtime_identity_sha256": docker_runtime_identity_sha256,
         "entrypoint": config.get("Entrypoint"),
         "environment": config.get("Env") or [],
         "image_id": image_id,
         "image_ref": launcher.container_image_ref,
+        "ipc_mode": host.get("IpcMode"),
         "labels": config.get("Labels") or {},
         "memory_bytes": host.get("Memory"),
         "mounts": mounts,
         "nano_cpus": host.get("NanoCpus"),
         "network_mode": host.get("NetworkMode"),
+        "pid_mode": host.get("PidMode"),
         "pids_limit": host.get("PidsLimit"),
+        "privileged": host.get("Privileged"),
         "read_only_root": host.get("ReadonlyRootfs"),
         "security_opt": sorted(security),
         "tmpfs": tmpfs,
-        "user": config.get("User") or "",
+        "user": config.get("User"),
+        "userns_mode": host.get("UsernsMode") or "",
+        "uts_mode": host.get("UTSMode"),
         "working_dir": config.get("WorkingDir") or "",
     }
+
+
+def _observed_teardown(
+    container_id: str, *, primary_error: BaseException | None = None
+) -> None:
+    try:
+        removed = _invoke(["docker", "rm", "--force", container_id])
+        _require_success(removed, "docker rm")
+        probe = _invoke(["docker", "inspect", container_id])
+        detail = probe.stderr.decode("utf-8", errors="replace").lower()
+        if probe.returncode == 0 or (
+            "no such container" not in detail and "no such object" not in detail
+        ):
+            raise SupervisorError("post-removal absence was not authenticated")
+    except BaseException as cleanup_error:
+        failure = SupervisorError("container cleanup was not observed")
+        if primary_error is not None:
+            raise failure from primary_error
+        raise failure from cleanup_error
 
 
 def _run_fresh_container(
@@ -387,9 +474,10 @@ def _run_fresh_container(
     image_id = _image_identity(launcher)
     created = _invoke(_create_argv(launcher))
     container_id = _require_success(created, "docker create").decode("ascii").strip()
-    if len(container_id) != 64 or any(char not in "0123456789abcdef" for char in container_id):
+    if len(container_id) != 64 or any(
+        char not in "0123456789abcdef" for char in container_id
+    ):
         raise SupervisorError("docker create did not return one full container id")
-    removed = False
     try:
         inspection = _container_object(container_id)
         snapshot = _clean_snapshot(
@@ -419,25 +507,23 @@ def _run_fresh_container(
             or stopped.get("ExitCode") != 0
         ):
             raise SupervisorError("executor did not terminate cleanly")
-        removed_result = _invoke(["docker", "rm", "--force", container_id])
-        _require_success(removed_result, "docker rm")
-        removed = True
-        if _invoke(["docker", "inspect", container_id]).returncode == 0:
-            raise SupervisorError("container teardown was not observed")
         opened = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
         closed = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
-        elapsed = max(0, int((closed - opened).total_seconds() * 1000))
-        return _Lifecycle(
+        lifecycle = _Lifecycle(
             response=response,
             clean_image_sha256=clean_sha,
             instance_nonce=nonce,
             opened_at=opened_at,
             closed_at=closed_at,
-            elapsed_milliseconds=elapsed,
+            elapsed_milliseconds=max(
+                0, int((closed - opened).total_seconds() * 1000)
+            ),
         )
-    finally:
-        if not removed:
-            _invoke(["docker", "rm", "--force", container_id])
+    except BaseException as primary_error:
+        _observed_teardown(container_id, primary_error=primary_error)
+        raise
+    _observed_teardown(container_id)
+    return lifecycle
 
 
 def run_hermetic_preflight(
