@@ -7,7 +7,7 @@
     {
       "id": "G1-134",
       "owner": "MF01",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "goal1/CONFIRMATORY_BENCHMARK.json",
         "goal1/CONFIRMATORY_PROTOCOL.json",
@@ -22,7 +22,11 @@
         "The attestation binds the held-out report digest, record count, access claim, and repository scan.",
         "No artifact makes a false secrecy or non-public-data claim.",
         "The protocol digest is rederived mechanically without changing benchmark membership, arms, prompts, budgets, analysis rules, or outcomes."
-      ]
+      ],
+      "completion": {
+        "pull_request": 90,
+        "merge_commit": "33dc9df5781bcb9599bd9838eb621d0337c13ebf"
+      }
     },
     {
       "id": "G1-136",
