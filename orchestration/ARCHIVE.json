@@ -408,6 +408,204 @@
         "pull_request": 79,
         "merge_commit": "2a77711741dc42eb4d635a328fe30ebb722eb2e2"
       }
+    },
+    {
+      "id": "G1-134",
+      "owner": "MF01",
+      "status": "DONE",
+      "paths": [
+        "goal1/CONFIRMATORY_BENCHMARK.json",
+        "goal1/CONFIRMATORY_PROTOCOL.json",
+        "goal1/CONFIRMATORY_REPORT_ACCESS_ATTESTATION.json",
+        "tests/test_confirmatory_benchmark.py",
+        "tests/test_confirmatory_protocol.py"
+      ],
+      "depends_on": [],
+      "objective": "Correct the confirmatory public-reconstructibility and held-out-report contract, bind a machine-checkable report-access attestation, and preserve every already-frozen scientific input.",
+      "acceptance": [
+        "The benchmark contract distinguishes public reconstructibility from controlled runtime injection.",
+        "The attestation binds the held-out report digest, record count, access claim, and repository scan.",
+        "No artifact makes a false secrecy or non-public-data claim.",
+        "The protocol digest is rederived mechanically without changing benchmark membership, arms, prompts, budgets, analysis rules, or outcomes."
+      ],
+      "completion": {
+        "pull_request": 90,
+        "merge_commit": "33dc9df5781bcb9599bd9838eb621d0337c13ebf"
+      }
+    },
+    {
+      "id": "G1-122",
+      "owner": "MF03",
+      "status": "DONE",
+      "paths": [
+        "goal1/CONFIRMATORY_RUNTIME.json",
+        "tests/test_confirmatory_runtime.py"
+      ],
+      "depends_on": [],
+      "objective": "Freeze the exact Lean and Mathlib runtime, verifier invocation, resource limits, and drift checks used for every confirmatory arm.",
+      "acceptance": [
+        "Runtime and verifier identities are content-addressed.",
+        "Lean 4.33.1 is checked rather than inferred.",
+        "Any version, command, or environment drift blocks execution."
+      ],
+      "completion": {
+        "pull_request": 56,
+        "merge_commit": "e9e4b419da4bac03639f97dbc7dc6f60d9f26795"
+      }
+    },
+    {
+      "id": "G1-123",
+      "owner": "MF04",
+      "status": "DONE",
+      "paths": [
+        "goal1/CONFIRMATORY_BASELINES.json",
+        "tests/test_confirmatory_baselines.py"
+      ],
+      "depends_on": [],
+      "objective": "Freeze ordinary and portfolio prompts, sampling, attempt and retry rules, result handling, and expected cost events at matched complete cost.",
+      "acceptance": [
+        "Both baseline contracts are machine-readable and closed.",
+        "Attempt quotas and cost events are explicit.",
+        "Unregistered retries or prompt changes are rejected."
+      ],
+      "completion": {
+        "pull_request": 59,
+        "merge_commit": "04f4f03c2ed1279727d7be22678c53f158625880"
+      }
+    },
+    {
+      "id": "G1-124",
+      "owner": "MF05",
+      "status": "DONE",
+      "paths": [
+        "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json",
+        "tests/test_confirmatory_product_controls.py"
+      ],
+      "depends_on": [],
+      "objective": "Freeze product-only and multi-fidelity visibility, retry, verifier-call, and cost-event contracts, including predecessor provenance sufficient for paired scientific comparison.",
+      "acceptance": [
+        "Every retry binds an authenticated predecessor completion.",
+        "Product visibility is explicit and arm-local.",
+        "Unregistered products, retries, or cost events are rejected."
+      ],
+      "completion": {
+        "pull_request": 63,
+        "merge_commit": "f433354e2baad88b8931484085e23a3a6abbeb23"
+      }
+    },
+    {
+      "id": "G1-125",
+      "owner": "MM01",
+      "status": "DONE",
+      "paths": [
+        "goal1/CONFIRMATORY_VERIFIED_CHAIN.json",
+        "tests/test_confirmatory_verified_chain.py"
+      ],
+      "depends_on": [],
+      "objective": "Freeze verified-chain admission, verifier, retry, within-problem memory, termination, and complete-cost boundaries.",
+      "acceptance": [
+        "Only kernel-passing products can enter later prompts.",
+        "Every retry and admitted product is authority-bound.",
+        "No cross-problem or cross-arm product reuse is permitted."
+      ],
+      "completion": {
+        "pull_request": 64,
+        "merge_commit": "4bb86e9a33268c77dda18cbafebed3927162d985"
+      }
+    },
+    {
+      "id": "G1-126",
+      "owner": "MM02",
+      "status": "DONE",
+      "paths": [
+        "goal1/CONFIRMATORY_COST_POLICY.json",
+        "tests/test_confirmatory_cost_policy.py"
+      ],
+      "depends_on": [],
+      "objective": "Freeze one observable complete-cost basis, per-arm ceiling, matching rule, retry estimand, and treatment of missing or unknowable usage.",
+      "acceptance": [
+        "One model-usage basis applies to every arm and outcome.",
+        "Every expected event must be reconciled before evaluation.",
+        "Unknown or over-budget cost blocks credit rather than becoming zero."
+      ],
+      "completion": {
+        "pull_request": 66,
+        "merge_commit": "8922f0f6aebf4b0fbd8159f4c46ce649ae73771b"
+      }
+    },
+    {
+      "id": "G1-128",
+      "owner": "MM04",
+      "status": "DONE",
+      "paths": [
+        "src/supernova_goal1/confirmatory_manifest.py",
+        "tests/test_confirmatory_manifest.py"
+      ],
+      "depends_on": [
+        "G1-120",
+        "G1-122",
+        "G1-123",
+        "G1-124",
+        "G1-125",
+        "G1-126"
+      ],
+      "objective": "Expand the frozen protocol rules into one blinded one-shot paired manifest schema with every problem, arm, attempt, retry allowance, and budget preregistered; allow deterministic non-credit draft manifests but block production dispatch until the later execution-authority ticket.",
+      "acceptance": [
+        "The manifest is derived only from the frozen protocol-rules digest.",
+        "All five arms are paired for every selected problem.",
+        "No attempt or retry can be added after dispatch begins.",
+        "Without an admissible execution-authority bundle the manifest is NON_CREDIT_DRAFT and dispatch is BLOCKED."
+      ],
+      "completion": {
+        "pull_request": 72,
+        "merge_commit": "8bd51bf8638d0bf976b3ac85aa529f921ea2b81f",
+        "initial_pull_request": 70,
+        "initial_merge_commit": "13e46e9ea7aa5831efdf843f96479144bb2a2f71",
+        "correction_reason": "MULTI_FIDELITY_PROMOTION_GRAPH"
+      }
+    },
+    {
+      "id": "G1-129",
+      "owner": "MM05",
+      "status": "DONE",
+      "paths": [
+        "src/supernova_goal1/evaluate_confirmatory.py",
+        "tests/test_evaluate_confirmatory.py"
+      ],
+      "depends_on": [
+        "G1-127"
+      ],
+      "objective": "Implement the confirmatory evaluator over evidence-bridge output only, with complete-cohort checks, four paired contrasts, Holm correction, complete-cost matching, and explicit terminal states.",
+      "acceptance": [
+        "Only bridge-produced records are accepted.",
+        "PASS requires superiority over all four controls under the frozen rule.",
+        "BLOCKED and INCOMPLETE never become FAIL or PASS."
+      ],
+      "completion": {
+        "pull_request": 76,
+        "merge_commit": "a230e328b09c859938cdc30f430b372b7f36ef18"
+      }
+    },
+    {
+      "id": "G2-001",
+      "owner": "EXT01",
+      "status": "DONE",
+      "paths": [
+        "goal2/GOAL2.json",
+        "docs/GOAL2_CONTRACT.md",
+        "tests/test_goal2_contract.py"
+      ],
+      "depends_on": [],
+      "objective": "Define Goal 2 as a falsifiable improver-of-improver contract with separated solver, memory, and improver components; matched R&D cost; fresh evaluation; and an explicit Goal-1 gate.",
+      "acceptance": [
+        "The hypothesis and PASS, FAIL, BLOCKED, and INCOMPLETE rules are machine-readable.",
+        "The contract binds untouched-solver comparison, fresh evaluation, and complete R&D cost.",
+        "No Goal-2 execution ticket may open when requires_goal1_pass is true and Goal 1 has no valid PASS."
+      ],
+      "completion": {
+        "pull_request": 54,
+        "merge_commit": "18a9382cdc03b51f5fcf91f556ec4dc3c6f91c97"
+      }
     }
   ]
 }

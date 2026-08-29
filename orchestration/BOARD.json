@@ -1,173 +1,125 @@
 {
   "schema_version": 2,
   "repository": "Kitahl/Supernova-V2",
-  "tranche": "goal1-confirmatory-amendment-v1",
+  "tranche": "goal1-activation-parallel-v1",
   "integration_policy": "pull_request_only",
   "tickets": [
     {
-      "id": "G1-134",
+      "id": "G1-138",
       "owner": "MF01",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "goal1/CONFIRMATORY_BENCHMARK.json",
-        "goal1/CONFIRMATORY_PROTOCOL.json",
-        "goal1/CONFIRMATORY_REPORT_ACCESS_ATTESTATION.json",
-        "tests/test_confirmatory_benchmark.py",
-        "tests/test_confirmatory_protocol.py"
+        "reviews/G1-138_REPORT_BINDING_AUDIT.md"
       ],
       "depends_on": [],
-      "objective": "Correct the confirmatory public-reconstructibility and held-out-report contract, bind a machine-checkable report-access attestation, and preserve every already-frozen scientific input.",
+      "objective": "Trace the merged report-access attestation through the live activation, execution-authority, and manifest boundaries and publish an exact implementation handoff without changing any frozen scientific input.",
       "acceptance": [
-        "The benchmark contract distinguishes public reconstructibility from controlled runtime injection.",
-        "The attestation binds the held-out report digest, record count, access claim, and repository scan.",
-        "No artifact makes a false secrecy or non-public-data claim.",
-        "The protocol digest is rederived mechanically without changing benchmark membership, arms, prompts, budgets, analysis rules, or outcomes."
-      ],
-      "completion": {
-        "pull_request": 90,
-        "merge_commit": "33dc9df5781bcb9599bd9838eb621d0337c13ebf"
-      }
+        "The audit cites exact repository files, symbols, and current digests.",
+        "Every missing report-attestation binding is mapped to a concrete implementation seam and deterministic test.",
+        "Public reconstructibility is kept distinct from integrity and statement-fidelity evidence.",
+        "No production execution or scientific-rule change occurs."
+      ]
     },
     {
       "id": "G1-136",
       "owner": "MF02",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
-        "goal1/CONFIRMATORY_COST_POLICY.json",
-        "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
-        "goal1/CONFIRMATORY_EXECUTOR_LAUNCHER.json",
-        "goal1/CONFIRMATORY_CAPACITY_BINDING.json",
-        "goal1/CONFIRMATORY_TRUST_ROOT.json",
-        "src/supernova_goal1/activation.py",
-        "src/supernova_goal1/confirmatory_manifest.py",
-        "src/supernova_goal1/confirmatory_supervisor.py",
-        "src/supernova_goal1/evaluate_confirmatory.py",
         "src/supernova_goal1/execution_authority.py",
-        "tests/test_confirmatory_cost_policy.py",
-        "tests/test_confirmatory_execution_authority.py",
-        "tests/test_confirmatory_supervisor.py",
-        "tests/test_confirmatory_manifest.py",
-        "tests/test_evaluate_confirmatory.py"
+        "tests/test_confirmatory_execution_authority.py"
       ],
-      "depends_on": [
-        "G1-122",
-        "G1-123",
-        "G1-124",
-        "G1-125",
-        "G1-126",
-        "G1-134",
-        "G1-135"
-      ],
-      "objective": "Amend the confirmatory activation and execution authority so an external trust root, one-shot activation, exact supervisor-source and report-attestation bindings, and pre-dispatch request/response caps are enforced; then reprovision every derived public authority artifact.",
+      "depends_on": [],
+      "objective": "Implement the external runtime trust-root boundary so repository content is evidence but never the root of production authority; expose a narrow validated capability for the later integration ticket.",
       "acceptance": [
-        "The production trust root is external to the repository and cannot be replaced by a repository-only change.",
-        "Production activation is one-shot and a second activation attempt is rejected.",
-        "Execution authority binds the exact reviewed supervisor source and report-access attestation.",
-        "Per-request and per-response byte caps are enforced before dispatch and covered at exact boundaries.",
-        "The cost and evaluator contracts preserve the frozen complete-cost estimand and never convert blocked or incomplete evidence into FAIL or PASS.",
-        "Every derived manifest, launcher, capacity, trust, execution-authority, and preflight digest is mechanically regenerated after G1-134 and G1-135.",
-        "No scientific input changes and no production execution occurs in this ticket."
+        "Production validation requires an independently supplied trusted root identity.",
+        "A repository-only trust-root or key substitution is rejected.",
+        "Draft and test fixtures remain explicitly non-production.",
+        "No authority artifacts are reprovisioned and no production execution occurs."
       ]
     },
     {
-      "id": "G1-122",
+      "id": "G1-139",
       "owner": "MF03",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "goal1/CONFIRMATORY_RUNTIME.json",
-        "tests/test_confirmatory_runtime.py"
+        "src/supernova_goal1/activation.py",
+        "tests/test_confirmatory_activation.py"
       ],
       "depends_on": [],
-      "objective": "Freeze the exact Lean and Mathlib runtime, verifier invocation, resource limits, and drift checks used for every confirmatory arm.",
+      "objective": "Implement durable one-shot production activation as an independently testable component, without dispatching a cohort or changing frozen scientific inputs.",
       "acceptance": [
-        "Runtime and verifier identities are content-addressed.",
-        "Lean 4.33.1 is checked rather than inferred.",
-        "Any version, command, or environment drift blocks execution."
-      ],
-      "completion": {
-        "pull_request": 56,
-        "merge_commit": "e9e4b419da4bac03639f97dbc7dc6f60d9f26795"
-      }
+        "The first valid activation consumes exactly one externally identified activation nonce.",
+        "Replay, concurrent reuse, and a second activation attempt are rejected deterministically.",
+        "Crash-safe state transitions are tested with temporary storage.",
+        "Draft activation remains non-credit and no production dispatch occurs."
+      ]
     },
     {
-      "id": "G1-123",
+      "id": "G1-140",
       "owner": "MF04",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "goal1/CONFIRMATORY_BASELINES.json",
-        "tests/test_confirmatory_baselines.py"
+        "src/supernova_goal1/request_limits.py",
+        "tests/test_confirmatory_request_limits.py"
       ],
       "depends_on": [],
-      "objective": "Freeze ordinary and portfolio prompts, sampling, attempt and retry rules, result handling, and expected cost events at matched complete cost.",
+      "objective": "Build a pure pre-dispatch request and response byte-cap validator from the frozen cost policy so the later supervisor integration cannot send or accept an oversized payload.",
       "acceptance": [
-        "Both baseline contracts are machine-readable and closed.",
-        "Attempt quotas and cost events are explicit.",
-        "Unregistered retries or prompt changes are rejected."
-      ],
-      "completion": {
-        "pull_request": 59,
-        "merge_commit": "04f4f03c2ed1279727d7be22678c53f158625880"
-      }
+        "Exact request and response limits are read from the frozen policy rather than duplicated as new thresholds.",
+        "The validator accepts exactly-at-limit bytes and rejects one-byte-over values.",
+        "Invalid UTF-8 and aggregate-limit violations are fail-closed.",
+        "The component performs no model call and changes no frozen artifact."
+      ]
     },
     {
-      "id": "G1-124",
+      "id": "G1-141",
       "owner": "MF05",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json",
-        "tests/test_confirmatory_product_controls.py"
+        "src/supernova_goal1/confirmatory_supervisor.py",
+        "tests/test_confirmatory_supervisor_bindings.py"
       ],
       "depends_on": [],
-      "objective": "Freeze product-only and multi-fidelity visibility, retry, verifier-call, and cost-event contracts, including predecessor provenance sufficient for paired scientific comparison.",
+      "objective": "Add exact supervisor-source and report-access-attestation bindings to the trusted-host supervisor interface while preserving the already sealed scientific rules.",
       "acceptance": [
-        "Every retry binds an authenticated predecessor completion.",
-        "Product visibility is explicit and arm-local.",
-        "Unregistered products, retries, or cost events are rejected."
-      ],
-      "completion": {
-        "pull_request": 63,
-        "merge_commit": "f433354e2baad88b8931484085e23a3a6abbeb23"
-      }
+        "The supervisor identity binds the exact reviewed source bytes.",
+        "The report-access attestation digest is required and mismatch is rejected.",
+        "Existing preflight and execution-authority behavior remains additive and backward-tested.",
+        "No authority artifact is signed or production cohort dispatched."
+      ]
     },
     {
-      "id": "G1-125",
+      "id": "G1-142",
       "owner": "MM01",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "goal1/CONFIRMATORY_VERIFIED_CHAIN.json",
-        "tests/test_confirmatory_verified_chain.py"
+        "tests/test_confirmatory_cost_invariance.py"
       ],
       "depends_on": [],
-      "objective": "Freeze verified-chain admission, verifier, retry, within-problem memory, termination, and complete-cost boundaries.",
+      "objective": "Attack the frozen complete-cost and terminal-state semantics with additive regression tests before the activation components are integrated.",
       "acceptance": [
-        "Only kernel-passing products can enter later prompts.",
-        "Every retry and admitted product is authority-bound.",
-        "No cross-problem or cross-arm product reuse is permitted."
-      ],
-      "completion": {
-        "pull_request": 64,
-        "merge_commit": "4bb86e9a33268c77dda18cbafebed3927162d985"
-      }
+        "Unknown, missing, or over-budget cost remains BLOCKED or INCOMPLETE and never becomes PASS or FAIL.",
+        "Every arm uses the same frozen observable cost basis.",
+        "Exact budget boundaries and mixed-basis substitutions are probed.",
+        "Any implementation defect is reported without modifying the frozen policy."
+      ]
     },
     {
-      "id": "G1-126",
+      "id": "G1-143",
       "owner": "MM02",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "goal1/CONFIRMATORY_COST_POLICY.json",
-        "tests/test_confirmatory_cost_policy.py"
+        "scripts/reprovision_confirmatory_authority.py",
+        "tests/test_reprovision_confirmatory_authority.py"
       ],
       "depends_on": [],
-      "objective": "Freeze one observable complete-cost basis, per-arm ceiling, matching rule, retry estimand, and treatment of missing or unknowable usage.",
+      "objective": "Build a deterministic dry-run reprovisioner for all derived public authority artifacts so the later integration ticket can regenerate them once from reviewed inputs without exposing keys or executing the cohort.",
       "acceptance": [
-        "One model-usage basis applies to every arm and outcome.",
-        "Every expected event must be reconciled before evaluation.",
-        "Unknown or over-budget cost blocks credit rather than becoming zero."
-      ],
-      "completion": {
-        "pull_request": 66,
-        "merge_commit": "8922f0f6aebf4b0fbd8159f4c46ce649ae73771b"
-      }
+        "The tool derives canonical bytes and digests from explicit reviewed inputs only.",
+        "It refuses missing external trust material, stale source bindings, and partial output sets.",
+        "Dry-run output is deterministic and cannot be mistaken for signed production authority.",
+        "No credential, private key, production signature, or held-out execution is created."
+      ]
     },
     {
       "id": "G1-135",
@@ -189,149 +141,116 @@
       ]
     },
     {
-      "id": "G1-128",
+      "id": "G1-144",
       "owner": "MM04",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
         "src/supernova_goal1/confirmatory_manifest.py",
-        "tests/test_confirmatory_manifest.py"
+        "tests/test_confirmatory_manifest_bindings.py"
       ],
-      "depends_on": [
-        "G1-120",
-        "G1-122",
-        "G1-123",
-        "G1-124",
-        "G1-125",
-        "G1-126"
-      ],
-      "objective": "Expand the frozen protocol rules into one blinded one-shot paired manifest schema with every problem, arm, attempt, retry allowance, and budget preregistered; allow deterministic non-credit draft manifests but block production dispatch until the later execution-authority ticket.",
+      "depends_on": [],
+      "objective": "Make the production manifest require exact external-trust, one-shot-activation, supervisor-source, and report-attestation bindings supplied by the later integrated authority capability.",
       "acceptance": [
-        "The manifest is derived only from the frozen protocol-rules digest.",
-        "All five arms are paired for every selected problem.",
-        "No attempt or retry can be added after dispatch begins.",
-        "Without an admissible execution-authority bundle the manifest is NON_CREDIT_DRAFT and dispatch is BLOCKED."
-      ],
-      "completion": {
-        "pull_request": 72,
-        "merge_commit": "8bd51bf8638d0bf976b3ac85aa529f921ea2b81f",
-        "initial_pull_request": 70,
-        "initial_merge_commit": "13e46e9ea7aa5831efdf843f96479144bb2a2f71",
-        "correction_reason": "MULTI_FIDELITY_PROMOTION_GRAPH"
-      }
+        "Draft manifests remain deterministic and non-credit.",
+        "Production reconstruction rejects any missing or mismatched new binding.",
+        "Problem membership, arm allocation, prompts, attempt quotas, and budgets do not change.",
+        "No production manifest is activated in this ticket."
+      ]
     },
     {
-      "id": "G1-129",
+      "id": "G1-145",
       "owner": "MM05",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "src/supernova_goal1/evaluate_confirmatory.py",
-        "tests/test_evaluate_confirmatory.py"
+        "reviews/G1-145_EVALUATOR_BOUNDARY_AUDIT.md"
       ],
-      "depends_on": [
-        "G1-127"
-      ],
-      "objective": "Implement the confirmatory evaluator over evidence-bridge output only, with complete-cohort checks, four paired contrasts, Holm correction, complete-cost matching, and explicit terminal states.",
+      "depends_on": [],
+      "objective": "Audit the real evidence-bridge-to-evaluator boundary for any path that could turn fabricated, blocked, incomplete, or unmatched evidence into scientific credit, and hand exact findings to implementation owners.",
       "acceptance": [
-        "Only bridge-produced records are accepted.",
-        "PASS requires superiority over all four controls under the frozen rule.",
-        "BLOCKED and INCOMPLETE never become FAIL or PASS."
-      ],
-      "completion": {
-        "pull_request": 76,
-        "merge_commit": "a230e328b09c859938cdc30f430b372b7f36ef18"
-      }
+        "The audit traces concrete call paths and names exact evidence fields.",
+        "Each finding includes a reproducible counterexample or a deterministic negative confirmation.",
+        "PASS, FAIL, BLOCKED, and INCOMPLETE semantics are checked separately.",
+        "The audit makes no scientific result claim."
+      ]
     },
     {
       "id": "G1-137",
       "owner": "MM07",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
-        "tests/test_confirmatory_adversarial.py"
+        "reviews/G1-137_ADVERSARIAL_TEST_PLAN.md"
       ],
-      "depends_on": [
-        "G1-136"
-      ],
-      "objective": "Independently attack the merged confirmatory amendments at the real production boundaries before review or execution can proceed.",
+      "depends_on": [],
+      "objective": "Prepare the independent adversarial attack matrix for the parallel activation components so the final merged suite can be written immediately after integration.",
       "acceptance": [
-        "The suite rejects repository-only external-trust-root substitution.",
-        "The suite rejects a second production activation.",
-        "The suite rejects fabricated host-verifier PASS evidence.",
-        "The suite confirms public report disclosure cannot mutate the frozen protocol or result.",
-        "The suite probes exact request and response byte-cap boundaries.",
-        "The complete relevant test suite passes against the merged amendments."
+        "The plan covers external-root substitution, activation replay, forged verifier PASS, source and attestation substitution, and exact byte-cap boundaries.",
+        "Every attack names the real production entry point and expected fail-closed outcome.",
+        "The plan identifies any attack that cannot yet be executed and the exact missing seam.",
+        "No reviewed implementation code is authored by this ticket."
       ]
     },
     {
-      "id": "G2-001",
+      "id": "G1-146",
       "owner": "EXT01",
-      "status": "DONE",
+      "status": "READY",
       "paths": [
-        "goal2/GOAL2.json",
-        "docs/GOAL2_CONTRACT.md",
-        "tests/test_goal2_contract.py"
+        "docs/GOAL1_ACTIVATION_THREAT_MODEL.md"
       ],
       "depends_on": [],
-      "objective": "Define Goal 2 as a falsifiable improver-of-improver contract with separated solver, memory, and improver components; matched R&D cost; fresh evaluation; and an explicit Goal-1 gate.",
+      "objective": "Produce an external-boundary threat model for the activation path, scoped to credential isolation, repository compromise, replay, sandbox escape, and evidence substitution.",
       "acceptance": [
-        "The hypothesis and PASS, FAIL, BLOCKED, and INCOMPLETE rules are machine-readable.",
-        "The contract binds untouched-solver comparison, fresh evaluation, and complete R&D cost.",
-        "No Goal-2 execution ticket may open when requires_goal1_pass is true and Goal 1 has no valid PASS."
-      ],
-      "completion": {
-        "pull_request": 54,
-        "merge_commit": "18a9382cdc03b51f5fcf91f556ec4dc3c6f91c97"
-      }
+        "Trust assumptions and attacker capabilities are explicit and testable.",
+        "Repository integrity, runtime authority, content authenticity, and scientific validity are separated.",
+        "Every high-impact threat maps to an existing or newly dispatched control and owner.",
+        "Unmitigated threats are labeled blockers rather than assumed away."
+      ]
     },
     {
       "id": "G1-131",
       "owner": "MM06",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
-        "reviews/G1_CONFIRMATORY_REVIEW.md"
+        "reviews/G1-131_PREACTIVATION_REVIEW.md"
       ],
-      "depends_on": [
-        "G1-137"
-      ],
-      "objective": "Independently review the exact amended frozen protocol, implementation, adversarial tests, evidence lineage, and unresolved assumptions without authoring or merging reviewed code.",
+      "depends_on": [],
+      "objective": "Open and maintain a review-only preactivation dossier over the exact parallel tranche; review every contribution but author no reviewed implementation and create no scientific credit.",
       "acceptance": [
-        "The review binds exact commit and protocol digests.",
-        "Every unresolved scientific or integrity finding is blocking.",
-        "The verdict is PASS, AMEND, or KILL and cannot create scientific credit."
+        "The dossier binds every reviewed PR head and relevant test output.",
+        "Path-scope, frozen-input preservation, authority separation, and unresolved integrity findings are explicit.",
+        "The provisional verdict remains AMEND while any required component or evidence is missing.",
+        "A final PASS is impossible until the later integrated adversarial suite is complete."
       ]
     },
     {
       "id": "G1-132",
       "owner": "MF06",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
-        "integration/goal1_confirmatory/"
+        "integration/goal1_confirmatory_rehearsal/"
       ],
-      "depends_on": [
-        "G1-131"
-      ],
-      "objective": "Run exactly one frozen confirmatory Goal-1 cohort and emit authority-backed evidence without changing any scientific input after manifest or dispatch start.",
+      "depends_on": [],
+      "objective": "Build and run a non-credit integration rehearsal against current main to expose activation seams while production dispatch remains forbidden.",
       "acceptance": [
-        "The reviewed protocol and manifest digests are unchanged.",
-        "Every planned completion and cost event is reconciled.",
-        "The integration layer emits evidence only; it does not adjudicate the hypothesis."
+        "The rehearsal uses synthetic or development fixtures only and emits no confirmatory evidence.",
+        "Every missing component is reported as a typed seam failure.",
+        "The harness is idempotent and cannot consume the production activation nonce.",
+        "No held-out problem, model dispatch, or scientific adjudication occurs."
       ]
     },
     {
       "id": "G1-133",
       "owner": "BIL00",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
-        "reports/GOAL1_FINAL.md"
+        "reports/GOAL1_ACTIVATION_STATUS.md"
       ],
-      "depends_on": [
-        "G1-129",
-        "G1-132"
-      ],
-      "objective": "Report the confirmatory evaluator output and evidence digests without making any claim beyond PASS, FAIL, BLOCKED, or INCOMPLETE.",
+      "depends_on": [],
+      "objective": "Publish a status-only map of the parallel activation tranche, exact PR and CI state, remaining integration order, and the explicit continued block on scientific execution.",
       "acceptance": [
-        "The report references exact protocol, cohort, bridge, and evaluator evidence.",
-        "No missing or partial evidence is summarized as a negative result.",
-        "Goal 2 is unblocked only if its contract allows it and the reported result is valid PASS."
+        "The report distinguishes assigned, implemented, merged, reviewed, integrated, and executed states.",
+        "Every claim binds a repository artifact, PR, workflow, or typed absence.",
+        "No missing evidence is summarized as FAIL and no preparatory work is summarized as PASS.",
+        "The next executable manager action is stated without changing project authority."
       ]
     }
   ]
