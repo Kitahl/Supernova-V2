@@ -139,7 +139,6 @@ func handlePreflight(raw []byte) error {
 	if err := runCommand(
 		llamaCLIPath,
 		"-m", modelPath,
-		"-no-cnv",
 		"-n", "0",
 		"--device", "none",
 		"--threads", "1",
@@ -193,7 +192,6 @@ func handleGeneration(prompt []byte) error {
 		llamaCLIPath,
 		"-m", modelPath,
 		"--file", name,
-		"-no-cnv",
 		"-n", "1024",
 		"--device", "none",
 		"--threads", "1",
