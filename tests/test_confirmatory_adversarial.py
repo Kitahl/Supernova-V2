@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from supernova_goal1.activation import activate_confirmatory_execution
-from supernova_goal1.confirmatory_manifest import (
-    NON_CREDIT_DRAFT,
-    assert_dispatch_authorized,
+from supernova_goal1.confirmatory_manifest import assert_dispatch_authorized
+from supernova_goal1.dispatch import CompletionStatus
+from supernova_goal1.evidence_bridge import (
+    EvidenceBridgeBundle,
+    EvaluatorEvidenceRecord,
 )
-from supernova_goal1.contracts import Arm
-from supernova_goal1.evidence_bridge import EvaluatorEvidenceRecord
-from supernova_goal1.evaluate_confirmatory import (
-    _evaluate_non_credit_draft,
-    evaluate_confirmatory,
-)
+from supernova_goal1.evaluate_confirmatory import evaluate_confirmatory
 from supernova_goal1.execution_authority import (
     PRODUCTION_CREDIT_STATUS,
     _issue_validated_authority,
@@ -27,12 +26,26 @@ from tests.test_confirmatory_execution_authority import (
     _public_bytes,
     _signed_fixture,
 )
+import tests.test_evidence_bridge as bridge_test_module
 import tests.test_evaluate_confirmatory as evaluator_test_module
 from tests.test_evaluate_confirmatory import sha
 
 
 class ConfirmatoryAdversarialTests(unittest.TestCase):
     """Attacks must stop before any scientific PASS can be produced."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        bridge_test_module.EvidenceBridgeTests.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        bridge_test_module.EvidenceBridgeTests.tearDownClass()
+
+    def bridge_fixture(self) -> bridge_test_module.EvidenceBridgeTests:
+        return bridge_test_module.EvidenceBridgeTests(
+            methodName="test_bridge_derives_outcomes_and_binds_all_five_evidence_classes"
+        )
 
     def evaluator_fixture(
         self,
@@ -92,7 +105,32 @@ class ConfirmatoryAdversarialTests(unittest.TestCase):
                 execution_authority=capability,
             )
 
-    def test_fabricated_pass_outcomes_cannot_use_caller_hmac(self) -> None:
+    def test_fabricated_pass_outcomes_fail_bridge_authentication(self) -> None:
+        fixture = self.bridge_fixture()
+        bundle = fixture._bridge()
+        record = bundle.records[0]
+        record_values = list(record)
+        record_values[record._fields.index("completion_statuses")] = (
+            CompletionStatus.SUCCEEDED,
+        ) * 16
+        forged_record = tuple.__new__(
+            EvaluatorEvidenceRecord, tuple(record_values)
+        )
+        bundle_values = list(bundle)
+        bundle_values[bundle._fields.index("records")] = (
+            forged_record,
+            *bundle.records[1:],
+        )
+        forged_bundle = tuple.__new__(
+            EvidenceBridgeBundle, tuple(bundle_values)
+        )
+
+        with self.assertRaisesRegex(
+            ValueError, "does not bind|authentication failed"
+        ):
+            fixture.ledger.verify_evidence_bridge_bundle(forged_bundle)
+
+    def test_absent_authority_blocks_caller_hmac_before_statistics(self) -> None:
         fixture = self.evaluator_fixture()
         caller_authority = fixture.authority()
         bundle = fixture.bundle(
@@ -107,80 +145,63 @@ class ConfirmatoryAdversarialTests(unittest.TestCase):
 
         result = evaluate_confirmatory(bundle)
         self.assertEqual("BLOCKED", result["decision"])
+        self.assertEqual(
+            "PRODUCTION_EXECUTION_AUTHORITY_UNAVAILABLE", result["reason"]
+        )
         self.assertFalse(result["decision_eligible"])
         self.assertEqual([], result["contrasts"])
-        self.assertIn(
-            result["reason"],
-            {
-                "PRODUCTION_EXECUTION_AUTHORITY_UNAVAILABLE",
-                "BRIDGE_AUTHENTICATION_FAILED",
-            },
-        )
 
     def test_missing_cost_and_verifier_substitution_never_pass(self) -> None:
-        fixture = self.evaluator_fixture()
-        caller_authority = fixture.authority()
-        record = fixture.record(
-            fixture.RUN_ID,
-            Arm.ORDINARY,
-            credit_status=NON_CREDIT_DRAFT,
-        )
+        fixture = self.bridge_fixture()
 
-        missing_cost_values = list(record)
-        missing_cost_values[record._fields.index("cost")] = None
-        missing_cost = tuple.__new__(
-            EvaluatorEvidenceRecord, tuple(missing_cost_values)
-        )
-        with self.assertRaises((AttributeError, TypeError, ValueError)):
-            fixture.bundle(
-                (missing_cost,),
-                credit_status=NON_CREDIT_DRAFT,
-                authority=caller_authority,
-            )
+        with self.assertRaisesRegex(
+            ValueError, "cost reports do not exactly cover"
+        ):
+            fixture._bridge(cost_reports_by_problem={})
 
-        substituted_values = list(record)
-        substituted_verifier = list(record.verifier_evidence_sha256s)
-        substituted_verifier[0] = sha("substituted-verifier")
-        substituted_values[
+        bundle = fixture._bridge()
+        record = bundle.records[0]
+        record_values = list(record)
+        verifier_digests = list(record.verifier_evidence_sha256s)
+        verifier_digests[0] = sha("substituted-verifier")
+        record_values[
             record._fields.index("verifier_evidence_sha256s")
-        ] = tuple(substituted_verifier)
-        substituted = tuple.__new__(
-            EvaluatorEvidenceRecord, tuple(substituted_values)
+        ] = tuple(verifier_digests)
+        forged_record = tuple.__new__(
+            EvaluatorEvidenceRecord, tuple(record_values)
         )
-        bundle = fixture.bundle(
-            (substituted,),
-            credit_status=NON_CREDIT_DRAFT,
-            authority=caller_authority,
+        bundle_values = list(bundle)
+        bundle_values[bundle._fields.index("records")] = (
+            forged_record,
+            *bundle.records[1:],
         )
-        result = _evaluate_non_credit_draft(
-            bundle,
-            evidence_authority=caller_authority,
+        forged_bundle = tuple.__new__(
+            EvidenceBridgeBundle, tuple(bundle_values)
         )
-        self.assertEqual("BLOCKED", result["decision"])
-        self.assertFalse(result["decision_eligible"])
-        self.assertEqual([], result["contrasts"])
 
-    def test_partial_cohort_is_explicitly_noncredit(self) -> None:
-        fixture = self.evaluator_fixture()
-        caller_authority = fixture.authority()
-        record = fixture.record(
-            fixture.RUN_ID,
-            Arm.ORDINARY,
-            credit_status=NON_CREDIT_DRAFT,
-        )
-        bundle = fixture.bundle(
-            (record,),
-            credit_status=NON_CREDIT_DRAFT,
-            authority=caller_authority,
-        )
-        result = _evaluate_non_credit_draft(
-            bundle,
-            evidence_authority=caller_authority,
-        )
-        self.assertEqual("BLOCKED", result["decision"])
-        self.assertIn("NON_CREDIT_DRAFT", result["blockers"])
-        self.assertIn("MISSING_PAIRED_CELLS", result["incomplete_reasons"])
-        self.assertFalse(result["decision_eligible"])
+        with self.assertRaisesRegex(
+            ValueError, "does not bind|authentication failed"
+        ):
+            fixture.ledger.verify_evidence_bridge_bundle(forged_bundle)
+
+    def test_partial_cohort_is_rejected_by_real_bridge(self) -> None:
+        fixture = self.bridge_fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            authority, ledger, closed, report, _ = fixture._build_run(
+                Path(directory),
+                run_id="adversarial-partial",
+                attempts=(0,),
+                record_all=True,
+            )
+            with self.assertRaisesRegex(ValueError, "do not exactly cover"):
+                fixture._bridge(
+                    dispatch_authority=authority,
+                    execution_ledger=ledger,
+                    closed_join=closed,
+                    cost_reports_by_problem={
+                        fixture.native_problem_id: report
+                    },
+                )
 
     def test_simulation_and_recurring_chat_issuers_are_noncredit(self) -> None:
         artifact, root_private, _ = _signed_fixture()
