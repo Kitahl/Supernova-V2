@@ -143,7 +143,27 @@ class ConfirmatoryAdversarialTests(unittest.TestCase):
             authority=caller_authority,
         )
 
-        result = evaluate_confirmatory(bundle)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            goal = root / "goal1"
+            goal.mkdir()
+            for name in (
+                "CONFIRMATORY_PROTOCOL.json",
+                "CONFIRMATORY_TRUST_ROOT.json",
+                "GOAL1.json",
+            ):
+                fixed = Path(__file__).resolve().parents[1] / "goal1" / name
+                (goal / name).write_bytes(fixed.read_bytes())
+
+            with patch(
+                "supernova_goal1.evaluate_confirmatory._repository_root",
+                return_value=root,
+            ):
+                with patch(
+                    "supernova_goal1.execution_authority._repository_root",
+                    return_value=root,
+                ):
+                    result = evaluate_confirmatory(bundle)
         self.assertEqual("BLOCKED", result["decision"])
         self.assertEqual(
             "PRODUCTION_EXECUTION_AUTHORITY_UNAVAILABLE", result["reason"]

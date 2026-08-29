@@ -156,12 +156,19 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         for path in (
             ".github/workflows/goal1_hermetic_executor.yml",
             "runtime/goal1_hermetic_executor/",
+            "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
             "goal1/CONFIRMATORY_EXECUTOR_LAUNCHER.json",
             "goal1/CONFIRMATORY_CAPACITY_BINDING.json",
+            "goal1/CONFIRMATORY_TRUST_ROOT.json",
             "tests/test_goal1_hermetic_executor.py",
         ):
             self.assertIn(path, ticket["paths"])
         self.assertEqual(ticket["status"], "READY")
+        self.assertEqual(ticket["phase_two"]["preflight_validation_verdict"], "PASS")
+        self.assertEqual(
+            ticket["phase_two"]["remaining_requirement"],
+            "MERGE_PUBLIC_AUTHORITY_ARTIFACTS_AND_RECORD_EXACT_COMPLETION",
+        )
 
 
 if __name__ == "__main__":
