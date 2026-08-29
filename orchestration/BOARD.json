@@ -31,9 +31,13 @@
       "paths": [
         "orchestration/BOARD.json",
         ".github/workflows/ci.yml",
+        ".github/workflows/goal1_hermetic_executor.yml",
+        "runtime/goal1_hermetic_executor/",
         "pyproject.toml",
         "goal1/CONFIRMATORY_PROTOCOL.json",
         "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
+        "goal1/CONFIRMATORY_EXECUTOR_LAUNCHER.json",
+        "goal1/CONFIRMATORY_CAPACITY_BINDING.json",
         "goal1/CONFIRMATORY_TRUST_ROOT.json",
         "src/supernova_goal1/activation.py",
         "src/supernova_goal1/confirmatory_manifest.py",
@@ -43,6 +47,7 @@
         "src/supernova_goal1/execution_authority.py",
         "tests/test_confirmatory_protocol.py",
         "tests/test_confirmatory_execution_authority.py",
+        "tests/test_goal1_hermetic_executor.py",
         "tests/test_confirmatory_supervisor.py",
         "tests/test_confirmatory_manifest.py",
         "tests/test_evaluate_confirmatory.py"
@@ -63,6 +68,8 @@
         "Before execution authority exists, the protocol returns BLOCKED_NO_EXECUTION_AUTHORITY and G1-121 remains not DONE.",
         "Completion additionally requires an immutable bundle binding exact model/version/settings, executor digest, receipt issuer and verification key, authentic fresh-empty-context preflight receipt, scheduling, and serving-pool policy.",
         "The trusted host supervisor is implemented and frozen before authority signature; G1-132 may execute only that exact reviewed artifact.",
+        "The dedicated build workflow builds only the declared executor context and records immutable image/build provenance; it receives no signing keys and cannot open held-out dispatch.",
+        "The exact launcher and capacity binding remain public, reproducible artifacts committed before authority activation.",
         "No second simultaneous MF02 ticket or replacement scheduled task is created."
       ],
       "phase_one": {
@@ -72,12 +79,15 @@
         "remaining_requirement": "TRUSTED_HOST_SUPERVISOR_IMMUTABLE_HERMETIC_EXECUTION_AUTHORITY_BUNDLE_AND_AUTHENTIC_PREFLIGHT"
       },
       "phase_two": {
-        "state": "MERGED_TRUSTED_HERMETIC_HOST_SUPERVISOR",
-        "pull_request": 81,
-        "reviewed_head": "ed992d63a6f55b63275884a1a01a9276fff6d4b0",
-        "merge_commit": "13f3cd145d05679bba9162fc2cb14c087fcdc7ea",
-        "remaining_requirement": "REAL_IMMUTABLE_CPU_EXECUTOR_AUTHENTIC_PREFLIGHT_AND_PUBLIC_AUTHORITY_ARTIFACTS",
-        "next_assignment": "Add an operator-only provisioning entrypoint in the declared supervisor and test paths. It must read launcher configuration and two raw private-key files by path, reject keys stored inside the repository, perform the authentic Docker preflight, atomically create only the fixed public trust-root and authority artifacts, and refuse overwrite. Do not fabricate or fixture-seal either artifact."
+        "state": "MERGED_PROVISIONING_ENTRYPOINT_AWAITING_PINNED_RUNTIME_BUILD",
+        "supervisor_pull_request": 81,
+        "supervisor_reviewed_head": "ed992d63a6f55b63275884a1a01a9276fff6d4b0",
+        "supervisor_merge_commit": "13f3cd145d05679bba9162fc2cb14c087fcdc7ea",
+        "provisioner_pull_request": 82,
+        "provisioner_reviewed_head": "51ac2778b0b8cf449ce620bcf772cbba5bbdb58f",
+        "provisioner_merge_commit": "57666d4214cbf0422f151888a14f2114015fffe3",
+        "remaining_requirement": "PINNED_RUNTIME_EXECUTOR_PUBLIC_LAUNCHER_CAPACITY_BINDING_AUTHENTIC_PREFLIGHT_AND_PUBLIC_AUTHORITY_ARTIFACTS",
+        "next_assignment": "Build and publish the single-platform CPU executor from the declared narrow context without signing keys. After publication, commit the exact digest-bound launcher and capacity artifact, then run the operator provisioner for authentic preflight and public authority activation."
       }
     },
     {

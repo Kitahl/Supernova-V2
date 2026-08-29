@@ -1,0 +1,140 @@
+name: goal1-hermetic-executor
+
+on:
+  pull_request:
+    paths:
+      - "runtime/goal1_hermetic_executor/**"
+      - ".github/workflows/goal1_hermetic_executor.yml"
+      - "tests/test_goal1_hermetic_executor.py"
+  push:
+    branches: [main]
+    paths:
+      - "runtime/goal1_hermetic_executor/**"
+      - ".github/workflows/goal1_hermetic_executor.yml"
+      - "tests/test_goal1_hermetic_executor.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/kitahl/supernova-goal1-executor
+  CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-executor:candidate-${{ github.sha }}
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build one local single-platform image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: runtime/goal1_hermetic_executor
+          file: runtime/goal1_hermetic_executor/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.CANDIDATE_TAG }}
+      - name: Exercise exact networkless preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          challenge='{"context":[],"executor_artifact_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","model_identity_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","operation":"PREFLIGHT","schema":"supernova.hermetic-preflight-request.v1"}'
+          expected='{"executor_artifact_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","model_identity_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","schema":"supernova.hermetic-preflight-response.v1","status":"READY"}'
+          cidfile="$RUNNER_TEMP/goal1-preflight.cid"
+          rm -f "$cidfile"
+          cleanup() {
+            if test -s "$cidfile"; then
+              docker rm -f "$(cat "$cidfile")" >/dev/null 2>&1 || true
+            fi
+            rm -f "$cidfile"
+          }
+          trap cleanup EXIT
+          response="$(printf '%s' "$challenge" | timeout --signal=KILL 180s docker run --cidfile "$cidfile" --rm -i \
+            --network none --read-only --runtime runc --init \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --pids-limit 256 --memory 4g --cpus 2 \
+            --user 65532:65532 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=536870912 \
+            --tmpfs /run:rw,noexec,nosuid,size=16777216 \
+            "$CANDIDATE_TAG")"
+          test "$response" = "$expected"
+          cleanup
+          trap - EXIT
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the exact tested image
+        id: publish
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mutable_ref="${IMAGE_NAME}:${GITHUB_SHA}"
+          candidate_id="$(docker image inspect "$CANDIDATE_TAG" --format '{{.Id}}')"
+          docker tag "$CANDIDATE_TAG" "$mutable_ref"
+          push_output="$(docker push "$mutable_ref")"
+          printf '%s\n' "$push_output"
+          digest="$(printf '%s\n' "$push_output" | sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\).*$/\1/p' | tail -n 1)"
+          test -n "$digest"
+          immutable_ref="${IMAGE_NAME}@${digest}"
+          docker pull "$immutable_ref"
+          published_id="$(docker image inspect "$immutable_ref" --format '{{.Id}}')"
+          test "$candidate_id" = "$published_id"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$immutable_ref" >> "$GITHUB_OUTPUT"
+      - name: Record evidence from the tested image
+        shell: bash
+        env:
+          PUBLISHED_IMAGE_REF: ${{ steps.publish.outputs.image_ref }}
+        run: |
+          set -euo pipefail
+          evidence_image="$CANDIDATE_TAG"
+          publication_status="NON_PUBLISHED_PR_VALIDATION"
+          image_digest="$(docker image inspect "$CANDIDATE_TAG" --format '{{.Id}}')"
+          if test -n "$PUBLISHED_IMAGE_REF"; then
+            evidence_image="$PUBLISHED_IMAGE_REF"
+            publication_status="PUBLISHED_IMMUTABLE"
+            image_digest="${PUBLISHED_IMAGE_REF##*@}"
+          fi
+          docker run --rm --entrypoint cat "$evidence_image" \
+            /opt/supernova/BUILD_LOCK.json > executor-build-lock.json
+          docker run --rm --entrypoint cat "$evidence_image" \
+            /opt/supernova/components.json > executor-components.json
+          docker image inspect "$evidence_image" > executor-image-inspect.json
+          lock_digest="$(sha256sum executor-build-lock.json | cut -d' ' -f1)"
+          jq -n \
+            --arg commit "$GITHUB_SHA" \
+            --arg image "$evidence_image" \
+            --arg digest "$image_digest" \
+            --arg lock_digest "$lock_digest" \
+            --arg status "$publication_status" \
+            '{schema:"supernova.hermetic-executor-build-evidence.v1",source_commit:$commit,image_ref:$image,image_digest:$digest,build_lock_sha256:$lock_digest,platform:"linux/amd64",publication_status:$status}' \
+            > executor-build-evidence.json
+      - name: Attest published image
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+      - name: Upload executor evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: goal1-hermetic-executor-${{ github.sha }}
+          path: |
+            executor-build-evidence.json
+            executor-build-lock.json
+            executor-components.json
+            executor-image-inspect.json
+          if-no-files-found: error

@@ -1,0 +1,31 @@
+{
+  "schema": "supernova.hermetic-executor-build-lock.v1",
+  "platform": "linux/amd64",
+  "builder_image": "golang:1.25.1-bookworm@sha256:299c4191248a84de928626d34afe734505ed7307ed67263b66ce2bc645b51523",
+  "runtime_image": "ghcr.io/ggml-org/llama.cpp:light@sha256:dda507ed4361d468bf06d23d4d2cbe11b66d481355d1a11b4c86250736c0d32e",
+  "runtime_revision": "4e97ac86ebe2c4cb8212d98d2641ad6768810896",
+  "runtime_version": "b10666",
+  "model": {
+    "exact_version": "Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF@bf1da6ca8f02b444067db175f02a14e74f49c5c0#q4_k_m",
+    "file": "qwen2.5-coder-0.5b-instruct-q4_k_m.gguf",
+    "sha256": "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32",
+    "tokenizer_binding": "EMBEDDED_IN_GGUF_BOUND_BY_FULL_FILE_SHA256"
+  },
+  "command": ["/opt/supernova/executor", "--stdio"],
+  "image_environment": [
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  ],
+  "container_user": "65532:65532",
+  "generation_settings": {
+    "batch_size": 512,
+    "context_tokens": 4096,
+    "cpu_threads": 1,
+    "device": "none",
+    "engine": "llama-cli",
+    "max_output_tokens": 1024,
+    "seed": -1,
+    "temperature": 0.8,
+    "top_k": 40,
+    "top_p": 0.95
+  }
+}
