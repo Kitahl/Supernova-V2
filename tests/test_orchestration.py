@@ -63,6 +63,10 @@ EXPECTED_ARCHIVED_IDS = {
     "G1-113",
     "G1-114",
     "G1-115",
+    "G1-120",
+    "G1-121",
+    "G1-127",
+    "G1-130",
 }
 
 
@@ -122,6 +126,9 @@ class OrchestrationTests(unittest.TestCase):
     def test_ticket_shapes_and_dependency_states(self) -> None:
         by_id = {ticket["id"]: ticket for ticket in self.board["tickets"]}
         by_owner = {ticket["owner"]: ticket for ticket in self.board["tickets"]}
+        archived_ids = {
+            ticket["id"] for ticket in self.archive["completed_tickets"]
+        }
         self.assertEqual(len(by_id), len(self.board["tickets"]))
 
         for ticket in self.board["tickets"]:
@@ -134,13 +141,14 @@ class OrchestrationTests(unittest.TestCase):
             self.assertIsInstance(dependencies, list)
             self.assertEqual(len(dependencies), len(set(dependencies)))
             self.assertNotIn(ticket["id"], dependencies)
-            self.assertTrue(set(dependencies) <= set(by_id))
+            self.assertTrue(set(dependencies) <= (set(by_id) | archived_ids))
 
         for ticket in self.board["tickets"]:
             unresolved = [
                 dependency
                 for dependency in ticket["depends_on"]
-                if by_id[dependency]["status"] != "DONE"
+                if dependency not in archived_ids
+                and by_id[dependency]["status"] != "DONE"
             ]
             if ticket["status"] == "WAITING":
                 self.assertTrue(unresolved)
@@ -169,7 +177,8 @@ class OrchestrationTests(unittest.TestCase):
                 return
             visiting.add(ticket_id)
             for dependency in by_id[ticket_id]["depends_on"]:
-                visit(dependency)
+                if dependency in by_id:
+                    visit(dependency)
             visiting.remove(ticket_id)
             visited.add(ticket_id)
 
