@@ -9,7 +9,7 @@ from supernova_goal1.confirmatory_manifest import (
     NON_CREDIT_DRAFT,
     assert_dispatch_authorized,
 )
-from supernova_goal1.contracts import Arm, CompleteCost
+from supernova_goal1.contracts import Arm
 from supernova_goal1.evidence_bridge import EvaluatorEvidenceRecord
 from supernova_goal1.evaluate_confirmatory import (
     _evaluate_non_credit_draft,
