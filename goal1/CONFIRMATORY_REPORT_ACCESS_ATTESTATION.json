@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "attestation_id": "goal1-confirmatory-report-access-v1",
+  "status": "SEALED",
+  "claim_scope": "EXPERIMENT_TIME_REPORT_ACCESS_NOT_DATA_SECRECY",
+  "report_payload": {
+    "path": "test.jsonl",
+    "sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a",
+    "bytes": 231909,
+    "records": 244,
+    "source_split": "test"
+  },
+  "public_reconstructibility": {
+    "claim": "PUBLICLY_RECONSTRUCTIBLE_FROM_PINNED_UPSTREAM_SOURCES_BEFORE_AND_AFTER_ANY_PROTOCOL_OR_DISPATCH_SEAL",
+    "secrecy_or_non_public_data_claim": "NONE",
+    "source_manifest": {
+      "path": "goal1/BENCHMARK_SOURCES.json",
+      "git_blob_sha1": "6fc789fe09bc27338a790ebd3f7fbfefeac9c38d"
+    },
+    "upstream_sources": [
+      {
+        "source_id": "deepseek-prover-v1.5-minif2f",
+        "repository": "https://github.com/deepseek-ai/DeepSeek-Prover-V1.5",
+        "commit": "2c4ba9119eef74d0d611f494261b2c5bae98c69a",
+        "path": "datasets/minif2f.jsonl",
+        "sha256": "d6654c88476ff14db19d57dea25bd955a240525fb52171e460f89d98f83d7dd5",
+        "role": "PUBLIC_IDENTITY_AND_VALIDATION_SOURCE"
+      },
+      {
+        "source_id": "ai-mo-minif2f-test",
+        "repository": "https://huggingface.co/datasets/AI-MO/minif2f_test",
+        "commit": "5def318348521dfc34875045a9ecddf729a2b49f",
+        "data_last_changed_commit": "67daf183adb85307b2842554bbe2f2134c2c702c",
+        "path": "data/train-00000-of-00001.parquet",
+        "sha256": "a32985e3d44b5165fbd586f453055cd17de0d081f43d7806cbba3f321346a8c5",
+        "records": 244,
+        "role": "PUBLIC_CORRECTED_REPORT_THEOREM_BYTES_SOURCE"
+      }
+    ],
+    "assembly_script_path": "scripts/assemble_minif2f_kimina.py",
+    "assembly_rule": "RECONSTRUCT_FROM_PINNED_PUBLIC_SOURCES_THEN_REQUIRE_THE_FROZEN_REPORT_SHA256_RECORD_COUNT_AND_BYTE_COUNT"
+  },
+  "controlled_runtime_injection": {
+    "claim": "PUBLIC_AVAILABILITY_DOES_NOT_AUTHORIZE_EXPERIMENT_TIME_REPORT_USE",
+    "development_prompts_memory_retrieval_tuning_and_selection": "BLOCKED",
+    "confirmatory_runtime_injection": "BLOCKED_UNTIL_PROTOCOL_RULES_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_ALL_SEALED",
+    "required_exact_report_sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a"
+  },
+  "repository_scan": {
+    "algorithm_id": "git_tracked_regular_file_exact_sha256_v1",
+    "scope": "ALL_GIT_TRACKED_REGULAR_FILES_IN_THE_REVISION_CONTAINING_THIS_ATTESTATION",
+    "target_sha256": "5abc8ff963f096bc28107f09d96d04592971ff1f771c15dba77c5649e541970a",
+    "expected_exact_payload_matches": [],
+    "interpretation": "NO_TRACKED_REGULAR_FILE_EQUALS_THE_EXACT_ASSEMBLED_REPORT_PAYLOAD_THIS_IS_NOT_A_SECRECY_CLAIM_AND_DOES_NOT_DENY_PUBLIC_SOURCE_RECONSTRUCTIBILITY"
+  },
+  "benchmark_freeze_id": "goal1-confirmatory-benchmark-v2"
+}
