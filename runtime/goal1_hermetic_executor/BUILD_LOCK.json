@@ -13,8 +13,7 @@
   },
   "command": ["/opt/supernova/executor", "--stdio"],
   "image_environment": [
-    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    "LD_LIBRARY_PATH=/app"
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   ],
   "container_user": "65532:65532",
   "generation_settings": {

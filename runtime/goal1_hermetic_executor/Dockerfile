@@ -12,12 +12,13 @@ RUN mkdir -p /opt/supernova && \
     echo "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32  /opt/supernova/model.gguf" | sha256sum --check --strict
 
 FROM ghcr.io/ggml-org/llama.cpp:light@sha256:dda507ed4361d468bf06d23d4d2cbe11b66d481355d1a11b4c86250736c0d32e
-ENV LD_LIBRARY_PATH=/app
 USER root
 COPY --from=wrapper-builder /out/executor /opt/supernova/executor
 COPY --from=model-fetch /opt/supernova/model.gguf /opt/supernova/model.gguf
 COPY BUILD_LOCK.json /opt/supernova/BUILD_LOCK.json
-RUN test -r /app/libllama-cli-impl.so && \
+RUN cp -P /app/*.so* /usr/local/lib/ && \
+    ldconfig && \
+    test -r /usr/local/lib/libllama-cli-impl.so && \
     /app/llama-cli --version >/dev/null && \
     executor_sha="$(sha256sum /opt/supernova/executor | cut -d' ' -f1)" && \
     llama_cli_sha="$(sha256sum /app/llama-cli | cut -d' ' -f1)" && \
