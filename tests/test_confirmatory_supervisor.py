@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ from supernova_goal1.confirmatory_supervisor import (
 from supernova_goal1.execution_authority import (
     _issue_validated_authority,
     _validate_authority_artifact,
+    canonical_sha256,
     load_execution_authority,
 )
 
@@ -32,6 +34,22 @@ PROTOCOL = json.loads(
     (ROOT / "goal1" / "CONFIRMATORY_PROTOCOL.json").read_text(encoding="utf-8")
 )
 GOAL1 = json.loads((ROOT / "goal1" / "GOAL1.json").read_text(encoding="utf-8"))
+RUNTIME = json.loads(
+    (ROOT / "goal1" / "CONFIRMATORY_RUNTIME.json").read_text(encoding="utf-8")
+)
+BUILD_LOCK = json.loads(
+    (ROOT / "runtime" / "goal1_hermetic_executor" / "BUILD_LOCK.json").read_text(
+        encoding="utf-8"
+    )
+)
+PUBLISHED_IMAGE = json.loads(
+    (
+        ROOT
+        / "runtime"
+        / "goal1_hermetic_executor"
+        / "PUBLISHED_IMAGE.json"
+    ).read_text(encoding="utf-8")
+)
 IMAGE_ID = "sha256:" + "a" * 64
 CONTAINER_ID = "b" * 64
 TMPFS = {
@@ -56,11 +74,13 @@ def _completed(
 
 def _launcher(settings: dict[str, object] | None = None) -> HermeticLauncher:
     return HermeticLauncher(
-        container_image_ref="registry.example/supernova@sha256:" + "1" * 64,
+        container_image_ref=(
+            "ghcr.io/kitahl/supernova-goal1-executor@sha256:" + "1" * 64
+        ),
         command=("/opt/supernova/executor", "--stdio"),
         inference_runtime_sha256="2" * 64,
         model_weights_sha256="3" * 64,
-        tokenizer_sha256="4" * 64,
+        tokenizer_sha256="3" * 64,
         exact_model_version="fixture-model@sha256:" + "5" * 64,
         model_provider="HERMETIC_LOCAL_MODEL",
         generation_settings=settings or {
@@ -96,6 +116,71 @@ def _launcher_config(launcher: HermeticLauncher) -> dict[str, object]:
         "timeout_seconds": launcher.timeout_seconds,
         "tokenizer_sha256": launcher.tokenizer_sha256,
     }
+
+
+def _capacity_config(launcher: HermeticLauncher) -> dict[str, object]:
+    return {
+        "schema": "supernova.confirmatory-capacity-binding.v1",
+        "pool_id": "fixture-hermetic-pool-v1",
+        "platform": "linux/amd64",
+        "pool_instance_count": 1,
+        "executor_image_ref": launcher.container_image_ref,
+        "launcher_artifact_sha256": launcher.launcher_artifact_sha256,
+        "model_slot": {
+            "memory_bytes": launcher.memory_bytes,
+            "nano_cpus": launcher.nano_cpus,
+            "timeout_seconds": launcher.timeout_seconds,
+            "max_output_bytes": launcher.max_output_bytes,
+            "pids_limit": 256,
+            "runtime": "runc",
+            "network": "none",
+            "gpu_device_requests": 0,
+        },
+        "verifier_slot": dict(RUNTIME["resource_limits"]),
+        "concurrency": {
+            "max_model_dispatches": 1,
+            "max_verifier_processes": 1,
+            "protocol_rule": PROTOCOL["sealed_rules"]["deterministic_schedule"][
+                "concurrency"
+            ],
+        },
+        "selection_after_manifest": "BLOCKED",
+    }
+
+
+def _prepare_repository_bindings(repository: Path, launcher: HermeticLauncher) -> None:
+    goal = repository / "goal1"
+    build_context = repository / "runtime" / "goal1_hermetic_executor"
+    goal.mkdir(parents=True)
+    build_context.mkdir(parents=True)
+    for name, value in (
+        ("CONFIRMATORY_PROTOCOL.json", PROTOCOL),
+        ("GOAL1.json", GOAL1),
+        ("CONFIRMATORY_RUNTIME.json", RUNTIME),
+        ("CONFIRMATORY_EXECUTOR_LAUNCHER.json", _launcher_config(launcher)),
+        ("CONFIRMATORY_CAPACITY_BINDING.json", _capacity_config(launcher)),
+    ):
+        (goal / name).write_text(json.dumps(value), encoding="utf-8")
+    build_lock = json.loads(json.dumps(BUILD_LOCK))
+    build_lock["command"] = list(launcher.command)
+    build_lock["container_user"] = launcher.container_user
+    build_lock["generation_settings"] = launcher.generation_settings
+    build_lock["image_environment"] = list(launcher.image_environment)
+    build_lock["model"]["exact_version"] = launcher.exact_model_version
+    build_lock["model"]["sha256"] = launcher.model_weights_sha256
+    build_lock_path = build_context / "BUILD_LOCK.json"
+    build_lock_path.write_text(json.dumps(build_lock), encoding="utf-8")
+    publication = json.loads(json.dumps(PUBLISHED_IMAGE))
+    publication["image_ref"] = launcher.container_image_ref
+    publication["image_digest"] = launcher.container_image_digest
+    publication["llama_cli_sha256"] = launcher.inference_runtime_sha256
+    publication["model_sha256"] = launcher.model_weights_sha256
+    publication["build_lock_sha256"] = __import__("hashlib").sha256(
+        build_lock_path.read_bytes().replace(b"\r\n", b"\n")
+    ).hexdigest()
+    (build_context / "PUBLISHED_IMAGE.json").write_text(
+        json.dumps(publication), encoding="utf-8"
+    )
 
 
 class _FakeDocker:
@@ -507,6 +592,22 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
         self.assertEqual(launcher.generation_settings_sha256, before)
 
 
+    def test_repository_provisioner_has_no_launcher_or_capacity_injection(self) -> None:
+        parameters = inspect.signature(
+            provision_repository_execution_authority
+        ).parameters
+        self.assertEqual(
+            list(parameters),
+            [
+                "root_key_path",
+                "receipt_key_path",
+                "authority_id",
+                "root_key_id",
+                "receipt_issuer_id",
+                "validator_id",
+            ],
+        )
+
     def test_operator_provisioner_writes_only_fixed_public_artifacts(self) -> None:
         from tempfile import TemporaryDirectory
 
@@ -514,15 +615,7 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
             base = Path(directory)
             repository = base / "repository"
             goal = repository / "goal1"
-            goal.mkdir(parents=True)
-            (goal / "CONFIRMATORY_PROTOCOL.json").write_text(
-                json.dumps(PROTOCOL), encoding="utf-8"
-            )
-            (goal / "GOAL1.json").write_text(json.dumps(GOAL1), encoding="utf-8")
-            launcher_path = base / "launcher.json"
-            launcher_path.write_text(
-                json.dumps(_launcher_config(self.launcher)), encoding="utf-8"
-            )
+            _prepare_repository_bindings(repository, self.launcher)
             root_key_path = base / "root.key"
             receipt_key_path = base / "receipt.key"
             root_key_path.write_bytes(self.root_private)
@@ -535,6 +628,10 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                     return_value=repository,
                 ),
                 patch(
+                    "supernova_goal1.execution_authority._repository_root",
+                    return_value=repository,
+                ),
+                patch(
                     "supernova_goal1.confirmatory_supervisor._invoke",
                     side_effect=fake,
                 ),
@@ -544,21 +641,26 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 ) as link_calls,
             ):
                 sealed = provision_repository_execution_authority(
-                    launcher_path,
                     root_key_path,
                     receipt_key_path,
                     authority_id="goal1-confirmatory-authority-v1",
                     root_key_id="goal1-confirmatory-root-v1",
                     receipt_issuer_id="production-hermetic-supervisor-v1",
                     validator_id="host-preflight-validator-v1",
-                    pool_id="local-hermetic-pool-v1",
-                    capacity_binding_sha256="6" * 64,
                 )
 
             trust_path = goal / "CONFIRMATORY_TRUST_ROOT.json"
             authority_path = goal / "CONFIRMATORY_EXECUTION_AUTHORITY.json"
             self.assertEqual(json.loads(trust_path.read_text()), sealed.trust_root)
             self.assertEqual(json.loads(authority_path.read_text()), sealed.authority)
+            self.assertEqual(
+                sealed.authority["serving_pool_policy"]["pool_id"],
+                "fixture-hermetic-pool-v1",
+            )
+            self.assertEqual(
+                sealed.authority["serving_pool_policy"]["capacity_binding_sha256"],
+                canonical_sha256(_capacity_config(self.launcher)),
+            )
             public_bytes = trust_path.read_bytes() + authority_path.read_bytes()
             self.assertNotIn(self.root_private, public_bytes)
             self.assertNotIn(self.receipt_private, public_bytes)
@@ -580,6 +682,58 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 self.launcher.executor_artifact_sha256,
             )
 
+            launcher_binding_path = (
+                goal / "CONFIRMATORY_EXECUTOR_LAUNCHER.json"
+            )
+            capacity_binding_path = (
+                goal / "CONFIRMATORY_CAPACITY_BINDING.json"
+            )
+            for fixed_path in (launcher_binding_path, capacity_binding_path):
+                original_bytes = fixed_path.read_bytes()
+                fixed_path.unlink()
+                with (
+                    patch(
+                        "supernova_goal1.execution_authority._repository_root",
+                        return_value=repository,
+                    ),
+                    self.subTest(missing=fixed_path.name),
+                    self.assertRaisesRegex(PermissionError, "launcher/capacity"),
+                ):
+                    load_execution_authority(PROTOCOL, GOAL1)
+                fixed_path.write_bytes(original_bytes)
+
+            capacity = json.loads(capacity_binding_path.read_text(encoding="utf-8"))
+            capacity_binding_path.write_text(
+                json.dumps(capacity, indent=4, sort_keys=False), encoding="utf-8"
+            )
+            with patch(
+                "supernova_goal1.execution_authority._repository_root",
+                return_value=repository,
+            ):
+                self.assertEqual(
+                    load_execution_authority(PROTOCOL, GOAL1).authority_sha256,
+                    capability.authority_sha256,
+                )
+
+            launcher_config = json.loads(
+                launcher_binding_path.read_text(encoding="utf-8")
+            )
+            launcher_config["inference_runtime_sha256"] = "9" * 64
+            launcher_binding_path.write_text(
+                json.dumps(launcher_config), encoding="utf-8"
+            )
+            with (
+                patch(
+                    "supernova_goal1.execution_authority._repository_root",
+                    return_value=repository,
+                ),
+                self.assertRaisesRegex(PermissionError, "launcher/capacity"),
+            ):
+                load_execution_authority(PROTOCOL, GOAL1)
+            launcher_binding_path.write_text(
+                json.dumps(_launcher_config(self.launcher)), encoding="utf-8"
+            )
+
             second = _FakeDocker(self.launcher)
             with (
                 patch(
@@ -590,19 +744,16 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                     "supernova_goal1.confirmatory_supervisor._invoke",
                     side_effect=second,
                 ),
+                self.assertRaisesRegex(FileExistsError, "refusing to overwrite"),
             ):
-                with self.assertRaisesRegex(FileExistsError, "refusing to overwrite"):
-                    provision_repository_execution_authority(
-                        launcher_path,
-                        root_key_path,
-                        receipt_key_path,
-                        authority_id="goal1-confirmatory-authority-v1",
-                        root_key_id="goal1-confirmatory-root-v1",
-                        receipt_issuer_id="production-hermetic-supervisor-v1",
-                        validator_id="host-preflight-validator-v1",
-                        pool_id="local-hermetic-pool-v1",
-                        capacity_binding_sha256="6" * 64,
-                    )
+                provision_repository_execution_authority(
+                    root_key_path,
+                    receipt_key_path,
+                    authority_id="goal1-confirmatory-authority-v1",
+                    root_key_id="goal1-confirmatory-root-v1",
+                    receipt_issuer_id="production-hermetic-supervisor-v1",
+                    validator_id="host-preflight-validator-v1",
+                )
             self.assertEqual(second.calls, [])
 
     def test_operator_provisioner_rejects_repository_key_and_launcher_drift(self) -> None:
@@ -619,9 +770,14 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
             launcher_path.write_text(json.dumps(config), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "fields differ"):
                 load_launcher_file(launcher_path)
+            launcher_path.write_text(
+                '{"schema":"supernova.hermetic-launcher.v1",'
+                '"schema":"supernova.hermetic-launcher.v1"}',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate JSON object key"):
+                load_launcher_file(launcher_path)
 
-            config.pop("unexpected")
-            launcher_path.write_text(json.dumps(config), encoding="utf-8")
             key_in_repository = goal / "root.key"
             key_in_repository.write_bytes(self.root_private)
             receipt_key_path = base / "receipt.key"
@@ -634,17 +790,132 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 self.assertRaisesRegex(PermissionError, "outside the repository"),
             ):
                 provision_repository_execution_authority(
-                    launcher_path,
                     key_in_repository,
                     receipt_key_path,
                     authority_id="goal1-confirmatory-authority-v1",
                     root_key_id="goal1-confirmatory-root-v1",
                     receipt_issuer_id="production-hermetic-supervisor-v1",
                     validator_id="host-preflight-validator-v1",
-                    pool_id="local-hermetic-pool-v1",
-                    capacity_binding_sha256="6" * 64,
                 )
 
+    def test_capacity_drift_blocks_before_docker_or_key_read(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            repository = base / "repository"
+            _prepare_repository_bindings(repository, self.launcher)
+            capacity_path = (
+                repository / "goal1" / "CONFIRMATORY_CAPACITY_BINDING.json"
+            )
+            capacity = json.loads(capacity_path.read_text(encoding="utf-8"))
+            capacity["model_slot"]["network"] = "bridge"
+            capacity_path.write_text(json.dumps(capacity), encoding="utf-8")
+            root_key_path = base / "root.key"
+            receipt_key_path = base / "receipt.key"
+            root_key_path.write_bytes(self.root_private)
+            receipt_key_path.write_bytes(self.receipt_private)
+            fake = _FakeDocker(self.launcher)
+            with (
+                patch(
+                    "supernova_goal1.confirmatory_supervisor._repository_root",
+                    return_value=repository,
+                ),
+                patch(
+                    "supernova_goal1.confirmatory_supervisor._invoke",
+                    side_effect=fake,
+                ),
+                patch(
+                    "supernova_goal1.confirmatory_supervisor.load_private_key_file"
+                ) as key_loader,
+                self.assertRaisesRegex(ValueError, "model_slot"),
+            ):
+                provision_repository_execution_authority(
+                    root_key_path,
+                    receipt_key_path,
+                    authority_id="goal1-confirmatory-authority-v1",
+                    root_key_id="goal1-confirmatory-root-v1",
+                    receipt_issuer_id="production-hermetic-supervisor-v1",
+                    validator_id="host-preflight-validator-v1",
+                )
+            self.assertEqual(fake.calls, [])
+            key_loader.assert_not_called()
+
+    def test_publication_evidence_blocks_synchronized_identity_tamper(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        for mutation in ("image", "runtime", "model"):
+            with self.subTest(mutation=mutation), TemporaryDirectory() as directory:
+                base = Path(directory)
+                repository = base / "repository"
+                _prepare_repository_bindings(repository, self.launcher)
+                goal = repository / "goal1"
+                launcher_path = goal / "CONFIRMATORY_EXECUTOR_LAUNCHER.json"
+                capacity_path = goal / "CONFIRMATORY_CAPACITY_BINDING.json"
+                lock_path = (
+                    repository / "runtime" / "goal1_hermetic_executor" / "BUILD_LOCK.json"
+                )
+                launcher_config = json.loads(
+                    launcher_path.read_text(encoding="utf-8")
+                )
+                capacity = json.loads(capacity_path.read_text(encoding="utf-8"))
+                if mutation == "image":
+                    launcher_config["container_image_ref"] = (
+                        "registry.example/altered@sha256:" + "9" * 64
+                    )
+                    launcher_path.write_text(
+                        json.dumps(launcher_config), encoding="utf-8"
+                    )
+                    altered = load_launcher_file(launcher_path)
+                    capacity["executor_image_ref"] = altered.container_image_ref
+                    capacity["launcher_artifact_sha256"] = (
+                        altered.launcher_artifact_sha256
+                    )
+                elif mutation == "runtime":
+                    launcher_config["inference_runtime_sha256"] = "9" * 64
+                    launcher_path.write_text(
+                        json.dumps(launcher_config), encoding="utf-8"
+                    )
+                else:
+                    launcher_config["model_weights_sha256"] = "9" * 64
+                    launcher_config["tokenizer_sha256"] = "9" * 64
+                    launcher_path.write_text(
+                        json.dumps(launcher_config), encoding="utf-8"
+                    )
+                    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+                    lock["model"]["sha256"] = "9" * 64
+                    lock_path.write_text(json.dumps(lock), encoding="utf-8")
+                capacity_path.write_text(json.dumps(capacity), encoding="utf-8")
+
+                root_key_path = base / "root.key"
+                receipt_key_path = base / "receipt.key"
+                root_key_path.write_bytes(self.root_private)
+                receipt_key_path.write_bytes(self.receipt_private)
+                fake = _FakeDocker(self.launcher)
+                with (
+                    patch(
+                        "supernova_goal1.confirmatory_supervisor._repository_root",
+                        return_value=repository,
+                    ),
+                    patch(
+                        "supernova_goal1.confirmatory_supervisor._invoke",
+                        side_effect=fake,
+                    ),
+                    patch(
+                        "supernova_goal1.confirmatory_supervisor.load_private_key_file"
+                    ) as key_loader,
+                    self.assertRaisesRegex(ValueError, "publication|published"),
+                ):
+                    provision_repository_execution_authority(
+                        root_key_path,
+                        receipt_key_path,
+                        authority_id="goal1-confirmatory-authority-v1",
+                        root_key_id="goal1-confirmatory-root-v1",
+                        receipt_issuer_id="production-hermetic-supervisor-v1",
+                        validator_id="host-preflight-validator-v1",
+                    )
+                self.assertEqual(fake.calls, [])
+                key_loader.assert_not_called()
 
     def test_preflight_failure_never_reads_root_signing_key(self) -> None:
         from tempfile import TemporaryDirectory
@@ -653,15 +924,7 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
             base = Path(directory)
             repository = base / "repository"
             goal = repository / "goal1"
-            goal.mkdir(parents=True)
-            (goal / "CONFIRMATORY_PROTOCOL.json").write_text(
-                json.dumps(PROTOCOL), encoding="utf-8"
-            )
-            (goal / "GOAL1.json").write_text(json.dumps(GOAL1), encoding="utf-8")
-            launcher_path = base / "launcher.json"
-            launcher_path.write_text(
-                json.dumps(_launcher_config(self.launcher)), encoding="utf-8"
-            )
+            _prepare_repository_bindings(repository, self.launcher)
             root_key_path = base / "root.key"
             receipt_key_path = base / "receipt.key"
             root_key_path.write_bytes(self.root_private)
@@ -691,15 +954,12 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 self.assertRaises(SupervisorError),
             ):
                 provision_repository_execution_authority(
-                    launcher_path,
                     root_key_path,
                     receipt_key_path,
                     authority_id="goal1-confirmatory-authority-v1",
                     root_key_id="goal1-confirmatory-root-v1",
                     receipt_issuer_id="production-hermetic-supervisor-v1",
                     validator_id="host-preflight-validator-v1",
-                    pool_id="local-hermetic-pool-v1",
-                    capacity_binding_sha256="6" * 64,
                 )
 
             self.assertEqual(reads, [receipt_key_path])
@@ -713,15 +973,7 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
             base = Path(directory)
             repository = base / "repository"
             goal = repository / "goal1"
-            goal.mkdir(parents=True)
-            (goal / "CONFIRMATORY_PROTOCOL.json").write_text(
-                json.dumps(PROTOCOL), encoding="utf-8"
-            )
-            (goal / "GOAL1.json").write_text(json.dumps(GOAL1), encoding="utf-8")
-            launcher_path = base / "launcher.json"
-            launcher_path.write_text(
-                json.dumps(_launcher_config(self.launcher)), encoding="utf-8"
-            )
+            _prepare_repository_bindings(repository, self.launcher)
             root_key_path = base / "root.key"
             receipt_key_path = base / "receipt.key"
             root_key_path.write_bytes(self.root_private)
@@ -752,15 +1004,12 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 self.assertRaisesRegex(OSError, "injected publication interruption"),
             ):
                 provision_repository_execution_authority(
-                    launcher_path,
                     root_key_path,
                     receipt_key_path,
                     authority_id="goal1-confirmatory-authority-v1",
                     root_key_id="goal1-confirmatory-root-v1",
                     receipt_issuer_id="production-hermetic-supervisor-v1",
                     validator_id="host-preflight-validator-v1",
-                    pool_id="local-hermetic-pool-v1",
-                    capacity_binding_sha256="6" * 64,
                 )
 
             self.assertEqual(
@@ -773,19 +1022,13 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
             self.assertFalse((goal / "CONFIRMATORY_TRUST_ROOT.json").exists())
             self.assertFalse((goal / "CONFIRMATORY_EXECUTION_AUTHORITY.json").exists())
 
-
     def test_same_key_file_is_rejected_before_docker(self) -> None:
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as directory:
             base = Path(directory)
             repository = base / "repository"
-            goal = repository / "goal1"
-            goal.mkdir(parents=True)
-            launcher_path = base / "launcher.json"
-            launcher_path.write_text(
-                json.dumps(_launcher_config(self.launcher)), encoding="utf-8"
-            )
+            (repository / "goal1").mkdir(parents=True)
             shared_key_path = base / "shared.key"
             shared_key_path.write_bytes(self.receipt_private)
             fake = _FakeDocker(self.launcher)
@@ -802,15 +1045,12 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 self.assertRaisesRegex(PermissionError, "key files must be distinct"),
             ):
                 provision_repository_execution_authority(
-                    launcher_path,
                     shared_key_path,
                     shared_key_path,
                     authority_id="goal1-confirmatory-authority-v1",
                     root_key_id="goal1-confirmatory-root-v1",
                     receipt_issuer_id="production-hermetic-supervisor-v1",
                     validator_id="host-preflight-validator-v1",
-                    pool_id="local-hermetic-pool-v1",
-                    capacity_binding_sha256="6" * 64,
                 )
 
             self.assertEqual(fake.calls, [])
@@ -822,15 +1062,7 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
             base = Path(directory)
             repository = base / "repository"
             goal = repository / "goal1"
-            goal.mkdir(parents=True)
-            (goal / "CONFIRMATORY_PROTOCOL.json").write_text(
-                json.dumps(PROTOCOL), encoding="utf-8"
-            )
-            (goal / "GOAL1.json").write_text(json.dumps(GOAL1), encoding="utf-8")
-            launcher_path = base / "launcher.json"
-            launcher_path.write_text(
-                json.dumps(_launcher_config(self.launcher)), encoding="utf-8"
-            )
+            _prepare_repository_bindings(repository, self.launcher)
             root_key_path = base / "root.key"
             receipt_key_path = base / "receipt.key"
             root_key_path.write_bytes(self.receipt_private)
@@ -851,21 +1083,17 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 ),
             ):
                 provision_repository_execution_authority(
-                    launcher_path,
                     root_key_path,
                     receipt_key_path,
                     authority_id="goal1-confirmatory-authority-v1",
                     root_key_id="goal1-confirmatory-root-v1",
                     receipt_issuer_id="production-hermetic-supervisor-v1",
                     validator_id="host-preflight-validator-v1",
-                    pool_id="local-hermetic-pool-v1",
-                    capacity_binding_sha256="6" * 64,
                 )
 
             self.assertTrue(fake.removed)
             self.assertFalse((goal / "CONFIRMATORY_TRUST_ROOT.json").exists())
             self.assertFalse((goal / "CONFIRMATORY_EXECUTION_AUTHORITY.json").exists())
-
 
 if __name__ == "__main__":
     unittest.main()

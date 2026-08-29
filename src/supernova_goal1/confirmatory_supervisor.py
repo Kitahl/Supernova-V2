@@ -29,6 +29,7 @@ from .execution_authority import (
     _repository_root,
     _validate_authority_artifact,
     canonical_sha256,
+    load_execution_authority,
     signed_bytes,
 )
 
@@ -38,6 +39,14 @@ PREFLIGHT_RESPONSE_SCHEMA = "supernova.hermetic-preflight-response.v1"
 PREFLIGHT_VALIDATION_SCHEMA = "supernova.preflight-validation-record.v1"
 TRUST_ROOT_SCHEMA = "supernova.confirmatory-trust-root.v1"
 LAUNCHER_SCHEMA = "supernova.hermetic-launcher.v1"
+CAPACITY_BINDING_SCHEMA = "supernova.confirmatory-capacity-binding.v1"
+LAUNCHER_RELATIVE_PATH = Path("goal1") / "CONFIRMATORY_EXECUTOR_LAUNCHER.json"
+CAPACITY_BINDING_RELATIVE_PATH = Path("goal1") / "CONFIRMATORY_CAPACITY_BINDING.json"
+RUNTIME_RELATIVE_PATH = Path("goal1") / "CONFIRMATORY_RUNTIME.json"
+BUILD_LOCK_RELATIVE_PATH = Path("runtime") / "goal1_hermetic_executor" / "BUILD_LOCK.json"
+PUBLICATION_RELATIVE_PATH = (
+    Path("runtime") / "goal1_hermetic_executor" / "PUBLISHED_IMAGE.json"
+)
 EMPTY_CONTEXT_SHA256 = sha256(b"").hexdigest()
 _TMPFS = {
     "/run": "rw,noexec,nosuid,size=16777216",
@@ -60,6 +69,62 @@ _LAUNCHER_CONFIG_FIELDS = frozenset(
         "schema",
         "timeout_seconds",
         "tokenizer_sha256",
+    }
+)
+_CAPACITY_BINDING_FIELDS = frozenset(
+    {
+        "concurrency",
+        "executor_image_ref",
+        "launcher_artifact_sha256",
+        "model_slot",
+        "platform",
+        "pool_id",
+        "pool_instance_count",
+        "schema",
+        "selection_after_manifest",
+        "verifier_slot",
+    }
+)
+_MODEL_SLOT_FIELDS = frozenset(
+    {
+        "gpu_device_requests",
+        "max_output_bytes",
+        "memory_bytes",
+        "nano_cpus",
+        "network",
+        "pids_limit",
+        "runtime",
+        "timeout_seconds",
+    }
+)
+_VERIFIER_SLOT_FIELDS = frozenset(
+    {
+        "host_wall_clock_milliseconds",
+        "lean_memory_megabytes",
+        "process_tree_kill_on_limit",
+        "stderr_max_bytes",
+        "stdout_max_bytes",
+        "timeout_or_truncation_decision",
+    }
+)
+_CONCURRENCY_FIELDS = frozenset(
+    {"max_model_dispatches", "max_verifier_processes", "protocol_rule"}
+)
+_PUBLICATION_FIELDS = frozenset(
+    {
+        "build_lock_sha256",
+        "evidence_artifact_digest",
+        "executor_sha256",
+        "image_digest",
+        "image_ref",
+        "llama_cli_sha256",
+        "model_sha256",
+        "platform",
+        "publication_status",
+        "schema",
+        "source_commit",
+        "workflow_run_id",
+        "workflow_url",
     }
 )
 
@@ -113,6 +178,35 @@ def _json_object(value: bytes, field: str) -> dict[str, Any]:
     if type(decoded) is not dict:
         raise SupervisorError(f"{field} is not one exact JSON object")
     return decoded
+
+
+def _reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        value[key] = item
+    return value
+
+
+def _reject_nonfinite_json(value: str) -> None:
+    raise ValueError(f"non-finite JSON number is forbidden: {value}")
+
+
+def _load_exact_json_object(path: Path, field: str) -> dict[str, Any]:
+    if not isinstance(path, Path):
+        raise TypeError(f"{field} path must be exact pathlib.Path")
+    try:
+        value = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_pairs,
+            parse_constant=_reject_nonfinite_json,
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{field} must be one readable UTF-8 JSON object") from exc
+    if type(value) is not dict:
+        raise ValueError(f"{field} must be one exact JSON object")
+    return value
 
 
 @dataclass(frozen=True)
@@ -871,16 +965,9 @@ def load_private_key_file(path: Path) -> bytes:
 
 
 def load_launcher_file(path: Path) -> HermeticLauncher:
-    """Load one exact operator-supplied launcher configuration."""
+    """Load one exact launcher configuration."""
 
-    if not isinstance(path, Path):
-        raise TypeError("path must be exact pathlib.Path")
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("launcher file must be one readable UTF-8 JSON object") from exc
-    if type(value) is not dict:
-        raise ValueError("launcher file must be one exact JSON object")
+    value = _load_exact_json_object(path, "launcher file")
     if set(value) != _LAUNCHER_CONFIG_FIELDS:
         raise ValueError("launcher file fields differ from the exact launcher schema")
     if value["schema"] != LAUNCHER_SCHEMA:
@@ -905,6 +992,194 @@ def load_launcher_file(path: Path) -> HermeticLauncher:
         timeout_seconds=value["timeout_seconds"],
         max_output_bytes=value["max_output_bytes"],
     )
+
+
+def load_capacity_binding_file(
+    path: Path,
+    launcher: HermeticLauncher,
+    *,
+    runtime: Mapping[str, Any],
+    protocol: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Load and cross-check one exact capacity allocation."""
+
+    if type(launcher) is not HermeticLauncher:
+        raise TypeError("launcher must be exact HermeticLauncher")
+    if type(runtime) is not dict or type(protocol) is not dict:
+        raise TypeError("runtime and protocol must be exact dictionaries")
+    value = _load_exact_json_object(path, "capacity binding")
+    if set(value) != _CAPACITY_BINDING_FIELDS:
+        raise ValueError("capacity binding fields differ from the exact schema")
+    if value["schema"] != CAPACITY_BINDING_SCHEMA:
+        raise ValueError("capacity binding schema is not supported")
+    _token(value["pool_id"], "capacity binding pool_id")
+    if value["platform"] != "linux/amd64":
+        raise ValueError("capacity binding platform must be linux/amd64")
+    if type(value["pool_instance_count"]) is not int or value["pool_instance_count"] != 1:
+        raise ValueError("capacity binding must allocate exactly one pool instance")
+    if value["executor_image_ref"] != launcher.container_image_ref:
+        raise ValueError("capacity binding image differs from the fixed launcher")
+    if value["launcher_artifact_sha256"] != launcher.launcher_artifact_sha256:
+        raise ValueError("capacity binding launcher digest differs from the fixed launcher")
+
+    model_slot = value["model_slot"]
+    if type(model_slot) is not dict or set(model_slot) != _MODEL_SLOT_FIELDS:
+        raise ValueError("capacity model_slot fields differ from the exact schema")
+    expected_model_slot = {
+        "gpu_device_requests": 0,
+        "max_output_bytes": launcher.max_output_bytes,
+        "memory_bytes": launcher.memory_bytes,
+        "nano_cpus": launcher.nano_cpus,
+        "network": "none",
+        "pids_limit": 256,
+        "runtime": "runc",
+        "timeout_seconds": launcher.timeout_seconds,
+    }
+    if model_slot != expected_model_slot:
+        raise ValueError("capacity model_slot differs from the fixed launcher boundary")
+
+    resource_limits = runtime.get("resource_limits")
+    if type(resource_limits) is not dict:
+        raise ValueError("runtime resource_limits must be one exact object")
+    verifier_slot = value["verifier_slot"]
+    if type(verifier_slot) is not dict or set(verifier_slot) != _VERIFIER_SLOT_FIELDS:
+        raise ValueError("capacity verifier_slot fields differ from the exact schema")
+    expected_verifier_slot = {
+        key: resource_limits.get(key) for key in sorted(_VERIFIER_SLOT_FIELDS)
+    }
+    if verifier_slot != expected_verifier_slot:
+        raise ValueError("capacity verifier_slot differs from the frozen runtime")
+
+    concurrency = value["concurrency"]
+    if type(concurrency) is not dict or set(concurrency) != _CONCURRENCY_FIELDS:
+        raise ValueError("capacity concurrency fields differ from the exact schema")
+    schedule = protocol.get("sealed_rules", {}).get("deterministic_schedule", {})
+    expected_concurrency = {
+        "max_model_dispatches": 1,
+        "max_verifier_processes": 1,
+        "protocol_rule": schedule.get("concurrency"),
+    }
+    if concurrency != expected_concurrency:
+        raise ValueError("capacity concurrency differs from the sealed protocol")
+    if value["selection_after_manifest"] != "BLOCKED":
+        raise ValueError("capacity selection_after_manifest must remain BLOCKED")
+    return json.loads(json.dumps(value, allow_nan=False, sort_keys=True))
+
+
+def load_repository_execution_bindings(
+    repository_root: Path,
+) -> tuple[HermeticLauncher, dict[str, Any]]:
+    """Load the only launcher/capacity pair admissible for this checkout."""
+
+    if not isinstance(repository_root, Path):
+        raise TypeError("repository_root must be exact pathlib.Path")
+    root = repository_root.resolve(strict=True)
+    launcher = load_launcher_file(root / LAUNCHER_RELATIVE_PATH)
+    build_lock = _load_exact_json_object(root / BUILD_LOCK_RELATIVE_PATH, "build lock")
+    if (
+        build_lock.get("schema") != "supernova.hermetic-executor-build-lock.v1"
+        or build_lock.get("platform") != "linux/amd64"
+    ):
+        raise ValueError("executor build lock schema or platform changed")
+    model = build_lock.get("model")
+    if type(model) is not dict:
+        raise ValueError("executor build-lock model must be one exact object")
+    if model.get("tokenizer_binding") != "EMBEDDED_IN_GGUF_BOUND_BY_FULL_FILE_SHA256":
+        raise ValueError("executor tokenizer is not bound by the full model digest")
+
+    publication = _load_exact_json_object(
+        root / PUBLICATION_RELATIVE_PATH, "executor publication evidence"
+    )
+    if set(publication) != _PUBLICATION_FIELDS:
+        raise ValueError("executor publication evidence fields differ from the exact schema")
+    if publication["schema"] != "supernova.hermetic-executor-publication.v1":
+        raise ValueError("executor publication evidence schema is not supported")
+    if (
+        publication["platform"] != "linux/amd64"
+        or publication["publication_status"] != "PUBLISHED_IMMUTABLE"
+        or type(publication["workflow_run_id"]) is not int
+        or publication["workflow_run_id"] <= 0
+    ):
+        raise ValueError("executor publication evidence is not one immutable amd64 build")
+    source_commit = _token(publication["source_commit"], "publication source_commit")
+    if len(source_commit) != 40 or any(
+        char not in "0123456789abcdef" for char in source_commit
+    ):
+        raise ValueError("publication source_commit must be one lowercase Git commit")
+    if publication["workflow_url"] != (
+        "https://github.com/Kitahl/Supernova-V2/actions/runs/"
+        + str(publication["workflow_run_id"])
+    ):
+        raise ValueError("publication workflow URL does not bind its run id")
+    artifact_digest = _token(
+        publication["evidence_artifact_digest"], "publication artifact digest"
+    )
+    if not artifact_digest.startswith("sha256:"):
+        raise ValueError("publication artifact digest must be sha256")
+    _sha256_hex(artifact_digest[7:], "publication artifact digest")
+    for field in (
+        "build_lock_sha256",
+        "executor_sha256",
+        "llama_cli_sha256",
+        "model_sha256",
+    ):
+        _sha256_hex(publication[field], f"publication {field}")
+    image_digest = _token(publication["image_digest"], "publication image_digest")
+    if not image_digest.startswith("sha256:"):
+        raise ValueError("publication image_digest must be sha256")
+    _sha256_hex(image_digest[7:], "publication image_digest")
+    if publication["image_ref"] != (
+        "ghcr.io/kitahl/supernova-goal1-executor@" + image_digest
+    ):
+        raise ValueError("publication image_ref differs from its digest")
+    normalized_lock_bytes = (root / BUILD_LOCK_RELATIVE_PATH).read_bytes().replace(
+        b"\r\n", b"\n"
+    )
+    if sha256(normalized_lock_bytes).hexdigest() != publication["build_lock_sha256"]:
+        raise ValueError("executor publication evidence binds a different build lock")
+    if (
+        publication["image_ref"] != launcher.container_image_ref
+        or publication["llama_cli_sha256"] != launcher.inference_runtime_sha256
+        or publication["model_sha256"] != launcher.model_weights_sha256
+        or publication["model_sha256"] != launcher.tokenizer_sha256
+        or publication["model_sha256"] != model.get("sha256")
+    ):
+        raise ValueError("fixed launcher differs from published executor evidence")
+
+    expected_launcher_values = {
+        "command": list(launcher.command),
+        "container_user": launcher.container_user,
+        "exact_model_version": launcher.exact_model_version,
+        "generation_settings": launcher.generation_settings,
+        "image_environment": list(launcher.image_environment),
+        "model_sha256": launcher.model_weights_sha256,
+        "tokenizer_sha256": launcher.tokenizer_sha256,
+    }
+    locked_launcher_values = {
+        "command": build_lock.get("command"),
+        "container_user": build_lock.get("container_user"),
+        "exact_model_version": model.get("exact_version"),
+        "generation_settings": build_lock.get("generation_settings"),
+        "image_environment": build_lock.get("image_environment"),
+        "model_sha256": model.get("sha256"),
+        "tokenizer_sha256": model.get("sha256"),
+    }
+    if expected_launcher_values != locked_launcher_values:
+        raise ValueError("fixed launcher differs from the reviewed executor build lock")
+    if launcher.model_provider != "HERMETIC_LOCAL_MODEL":
+        raise ValueError("fixed launcher model_provider is not the hermetic provider")
+    runtime = _load_exact_json_object(root / RUNTIME_RELATIVE_PATH, "confirmatory runtime")
+    protocol = _load_exact_json_object(
+        root / (Path("goal1") / "CONFIRMATORY_PROTOCOL.json"),
+        "confirmatory protocol",
+    )
+    capacity = load_capacity_binding_file(
+        root / CAPACITY_BINDING_RELATIVE_PATH,
+        launcher,
+        runtime=runtime,
+        protocol=protocol,
+    )
+    return launcher, capacity
 
 
 def _canonical_public_bytes(value: Mapping[str, object]) -> bytes:
@@ -964,7 +1239,6 @@ def _write_public_activation_artifacts(
 
 
 def provision_repository_execution_authority(
-    launcher_path: Path,
     root_key_path: Path,
     receipt_key_path: Path,
     *,
@@ -972,13 +1246,10 @@ def provision_repository_execution_authority(
     root_key_id: str,
     receipt_issuer_id: str,
     validator_id: str,
-    pool_id: str,
-    capacity_binding_sha256: str,
 ) -> SealedExecutionAuthority:
-    """Run authentic preflight in the fixed checkout and publish public artifacts."""
+    """Preflight and seal only the fixed repository launcher/capacity pair."""
 
     for value, field in (
-        (launcher_path, "launcher_path"),
         (root_key_path, "root_key_path"),
         (receipt_key_path, "receipt_key_path"),
     ):
@@ -1007,13 +1278,11 @@ def provision_repository_execution_authority(
         if path.exists():
             raise FileExistsError(f"refusing to overwrite activation artifact: {path}")
 
-    launcher = load_launcher_file(launcher_path)
-    protocol = json.loads(
-        (goal_directory / "CONFIRMATORY_PROTOCOL.json").read_text(encoding="utf-8")
+    launcher, capacity = load_repository_execution_bindings(root)
+    protocol = _load_exact_json_object(
+        goal_directory / "CONFIRMATORY_PROTOCOL.json", "confirmatory protocol"
     )
-    goal1 = json.loads((goal_directory / "GOAL1.json").read_text(encoding="utf-8"))
-    if type(protocol) is not dict or type(goal1) is not dict:
-        raise ValueError("protocol and Goal-1 authority must be exact JSON objects")
+    goal1 = _load_exact_json_object(goal_directory / "GOAL1.json", "Goal-1 authority")
 
     receipt_private_key = load_private_key_file(receipt_key_path)
     preflight = run_hermetic_preflight(
@@ -1036,29 +1305,39 @@ def provision_repository_execution_authority(
         root_key_id=root_key_id,
         root_private_key=root_private_key,
         receipt_issuer_id=receipt_issuer_id,
-        pool_id=pool_id,
-        capacity_binding_sha256=capacity_binding_sha256,
+        pool_id=capacity["pool_id"],
+        capacity_binding_sha256=canonical_sha256(capacity),
     )
     _write_public_activation_artifacts(sealed, trust_root_path, authority_path)
+    try:
+        capability = load_execution_authority(protocol, goal1)
+        if (
+            capability.authority_sha256 != canonical_sha256(sealed.authority)
+            or capability.executor_artifact_sha256
+            != launcher.executor_artifact_sha256
+        ):
+            raise ValueError("published authority reload produced a different capability")
+    except BaseException:
+        trust_root_path.unlink(missing_ok=True)
+        authority_path.unlink(missing_ok=True)
+        raise
     return sealed
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the authentic hermetic preflight and create the fixed public Goal-1 "
-            "execution-authority artifacts. Existing artifacts are never overwritten."
+            "Run authentic hermetic preflight for the fixed checked-in launcher and "
+            "capacity binding, then create public Goal-1 authority artifacts. "
+            "Existing artifacts are never overwritten."
         )
     )
-    parser.add_argument("--launcher", type=Path, required=True)
     parser.add_argument("--root-key", type=Path, required=True)
     parser.add_argument("--receipt-key", type=Path, required=True)
     parser.add_argument("--authority-id", required=True)
     parser.add_argument("--root-key-id", required=True)
     parser.add_argument("--receipt-issuer-id", required=True)
     parser.add_argument("--validator-id", required=True)
-    parser.add_argument("--pool-id", required=True)
-    parser.add_argument("--capacity-binding-sha256", required=True)
     return parser
 
 
@@ -1066,15 +1345,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         sealed = provision_repository_execution_authority(
-            args.launcher,
             args.root_key,
             args.receipt_key,
             authority_id=args.authority_id,
             root_key_id=args.root_key_id,
             receipt_issuer_id=args.receipt_issuer_id,
             validator_id=args.validator_id,
-            pool_id=args.pool_id,
-            capacity_binding_sha256=args.capacity_binding_sha256,
         )
     except Exception as exc:
         print(f"activation refused: {exc}", file=sys.stderr)
@@ -1100,8 +1376,10 @@ __all__ = [
     "SealedExecutionAuthority",
     "SupervisedAttempt",
     "SupervisorError",
+    "load_capacity_binding_file",
     "load_launcher_file",
     "load_private_key_file",
+    "load_repository_execution_bindings",
     "main",
     "provision_execution_authority",
     "provision_repository_execution_authority",

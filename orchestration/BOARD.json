@@ -79,15 +79,20 @@
         "remaining_requirement": "TRUSTED_HOST_SUPERVISOR_IMMUTABLE_HERMETIC_EXECUTION_AUTHORITY_BUNDLE_AND_AUTHENTIC_PREFLIGHT"
       },
       "phase_two": {
-        "state": "MERGED_PROVISIONING_ENTRYPOINT_AWAITING_PINNED_RUNTIME_BUILD",
+        "state": "PUBLISHED_EXECUTOR_AND_FIXED_BINDINGS_AWAITING_MERGE_AND_AUTHENTIC_PREFLIGHT",
         "supervisor_pull_request": 81,
         "supervisor_reviewed_head": "ed992d63a6f55b63275884a1a01a9276fff6d4b0",
         "supervisor_merge_commit": "13f3cd145d05679bba9162fc2cb14c087fcdc7ea",
         "provisioner_pull_request": 82,
         "provisioner_reviewed_head": "51ac2778b0b8cf449ce620bcf772cbba5bbdb58f",
         "provisioner_merge_commit": "57666d4214cbf0422f151888a14f2114015fffe3",
-        "remaining_requirement": "PINNED_RUNTIME_EXECUTOR_PUBLIC_LAUNCHER_CAPACITY_BINDING_AUTHENTIC_PREFLIGHT_AND_PUBLIC_AUTHORITY_ARTIFACTS",
-        "next_assignment": "Build and publish the single-platform CPU executor from the declared narrow context without signing keys. After publication, commit the exact digest-bound launcher and capacity artifact, then run the operator provisioner for authentic preflight and public authority activation."
+        "executor_pull_request": 83,
+        "executor_reviewed_head": "b0cdc5b3f7ad0fc639e4f5ff4c7206e3b5191eb9",
+        "executor_merge_commit": "7cd2f582904cd82eb19a655bd575f29ab8415518",
+        "executor_workflow_run": 33231696180,
+        "executor_image_ref": "ghcr.io/kitahl/supernova-goal1-executor@sha256:db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
+        "remaining_requirement": "MERGE_FIXED_PUBLIC_BINDINGS_THEN_RUN_AUTHENTIC_PREFLIGHT_AND_PUBLISH_PUBLIC_AUTHORITY_ARTIFACTS",
+        "next_assignment": "Review and merge the fixed launcher, capacity, and publication-evidence binding candidate. Then run the operator provisioner on a trusted Docker host with distinct external root and receipt signing keys; publish only the generated public trust root and execution authority."
       }
     },
     {

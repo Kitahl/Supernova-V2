@@ -415,7 +415,8 @@ def _validate_authority_artifact(
 def load_execution_authority(
     protocol: Mapping[str, Any], goal1: Mapping[str, Any]
 ) -> ValidatedExecutionAuthority:
-    """Mint authority only from fixed repository artifacts and the fixed trust root."""
+    """Mint authority only from the complete fixed repository artifact chain."""
+
     repository_root = _repository_root()
     key_id, root_key = _fixed_root(repository_root)
     fixed_protocol = json.loads(
@@ -435,10 +436,46 @@ def load_execution_authority(
         raise PermissionError(
             "BLOCKED_NO_EXECUTION_AUTHORITY: fixed authority artifact is absent"
         ) from exc
+
+    # Imported only after this module is initialized to avoid a module cycle:
+    # the supervisor uses the validator above when it seals an authority.
+    from .confirmatory_supervisor import load_repository_execution_bindings
+
+    try:
+        launcher, capacity = load_repository_execution_bindings(repository_root)
+    except (FileNotFoundError, OSError, ValueError, TypeError) as exc:
+        raise PermissionError(
+            "BLOCKED_NO_EXECUTION_AUTHORITY: fixed launcher/capacity binding is invalid"
+        ) from exc
     validated = _validate_authority_artifact(
-        authority, protocol=protocol, goal1=goal1,
-        root_key_id=key_id, root_public_key=root_key,
+        authority,
+        protocol=protocol,
+        goal1=goal1,
+        root_key_id=key_id,
+        root_public_key=root_key,
     )
+    executor = _mapping(authority["executor_artifact"], "executor_artifact")
+    pool = _mapping(authority["serving_pool_policy"], "serving_pool_policy")
+    if (
+        executor != launcher.executor_artifact
+        or authority["executor_artifact_sha256"]
+        != launcher.executor_artifact_sha256
+        or authority["generation_settings"] != launcher.generation_settings
+        or authority["generation_settings_sha256"]
+        != launcher.generation_settings_sha256
+        or authority["exact_model_version"] != launcher.exact_model_version
+        or authority["model_provider"] != launcher.model_provider
+        or validated.model_identity_sha256 != launcher.model_identity_sha256
+    ):
+        raise ValueError("execution authority differs from the fixed launcher")
+    if (
+        pool["pool_id"] != capacity["pool_id"]
+        or pool["capacity_binding_sha256"] != canonical_sha256(capacity)
+        or capacity["executor_image_ref"] != launcher.container_image_ref
+        or capacity["launcher_artifact_sha256"]
+        != launcher.launcher_artifact_sha256
+    ):
+        raise ValueError("execution authority differs from the fixed capacity binding")
     return _issue_validated_authority(validated)
 
 

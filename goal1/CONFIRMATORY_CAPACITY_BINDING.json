@@ -1,0 +1,32 @@
+{
+  "schema": "supernova.confirmatory-capacity-binding.v1",
+  "pool_id": "goal1-hermetic-cpu-pool-v1",
+  "platform": "linux/amd64",
+  "pool_instance_count": 1,
+  "executor_image_ref": "ghcr.io/kitahl/supernova-goal1-executor@sha256:db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
+  "launcher_artifact_sha256": "83c8fb2f180acd711647b2d0279dd2449804638d2a41b40d6bf81a34d0b37587",
+  "model_slot": {
+    "memory_bytes": 4294967296,
+    "nano_cpus": 2000000000,
+    "timeout_seconds": 600,
+    "max_output_bytes": 1048576,
+    "pids_limit": 256,
+    "runtime": "runc",
+    "network": "none",
+    "gpu_device_requests": 0
+  },
+  "verifier_slot": {
+    "lean_memory_megabytes": 4096,
+    "host_wall_clock_milliseconds": 600000,
+    "stdout_max_bytes": 1048576,
+    "stderr_max_bytes": 1048576,
+    "process_tree_kill_on_limit": true,
+    "timeout_or_truncation_decision": "BLOCKED"
+  },
+  "concurrency": {
+    "max_model_dispatches": 1,
+    "max_verifier_processes": 1,
+    "protocol_rule": "ONE_MODEL_DISPATCH_AND_ONE_VERIFIER_PROCESS_PER_PROBLEM_ARM_CELL_AT_A_TIME"
+  },
+  "selection_after_manifest": "BLOCKED"
+}
