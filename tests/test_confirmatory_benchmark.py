@@ -19,6 +19,7 @@ from scripts.validate_confirmatory_benchmark import (
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "goal1" / "CONFIRMATORY_BENCHMARK.json"
+PROTOCOL_PATH = ROOT / "goal1" / "CONFIRMATORY_PROTOCOL.json"
 LOCK_PATH = ROOT / "goal1" / "BENCHMARK.lock.json"
 SOURCES_PATH = ROOT / "goal1" / "BENCHMARK_SOURCES.json"
 ATTESTATION_PATH = ROOT / "goal1" / "CONFIRMATORY_REPORT_ACCESS_ATTESTATION.json"
@@ -122,6 +123,7 @@ class ConfirmatoryBenchmarkTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.manifest = load_strict_json(MANIFEST_PATH)
+        cls.protocol = load_strict_json(PROTOCOL_PATH)
         cls.lock = load_strict_json(LOCK_PATH)
         cls.sources = load_strict_json(SOURCES_PATH)
         cls.attestation = load_strict_json(ATTESTATION_PATH)
@@ -164,6 +166,32 @@ class ConfirmatoryBenchmarkTests(unittest.TestCase):
                 "source_split": "test",
             },
         )
+        self.assertEqual(
+            attestation["benchmark_binding"],
+            {
+                "path": "goal1/CONFIRMATORY_BENCHMARK.json",
+                "git_blob_sha1": _git_blob_sha1(MANIFEST_PATH),
+                "freeze_id": self.manifest["freeze_id"],
+                "scientific_input_mutation": "NONE",
+            },
+        )
+        self.assertEqual(
+            attestation["protocol_rules_binding"],
+            {
+                "path": "goal1/CONFIRMATORY_PROTOCOL.json",
+                "git_blob_sha1": _git_blob_sha1(PROTOCOL_PATH),
+                "protocol_id": self.protocol["protocol_id"],
+                "sealed_rules_sha256": canonical_sha256(
+                    self.protocol["sealed_rules"]
+                ),
+                "scientific_rule_mutation": "NONE",
+            },
+        )
+        self.assertEqual(
+            attestation["protocol_rules_binding"]["sealed_rules_sha256"],
+            self.protocol["sealed_rules_sha256"],
+        )
+        self.assertEqual(attestation["benchmark_freeze_id"], self.manifest["freeze_id"])
 
         public = attestation["public_reconstructibility"]
         self.assertEqual(
@@ -219,6 +247,47 @@ class ConfirmatoryBenchmarkTests(unittest.TestCase):
             "BLOCKED_UNTIL_PROTOCOL_RULES_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_ALL_SEALED",
         )
         self.assertEqual(runtime["required_exact_report_sha256"], report["sha256"])
+
+    def test_frozen_release_terms_mean_runtime_injection_not_data_secrecy(self) -> None:
+        interpretation = self.attestation["legacy_terminology_interpretation"]
+        self.assertEqual(
+            interpretation["meaning"],
+            "CONTROLLED_EXPERIMENT_TIME_RUNTIME_INJECTION_GATE_ONLY",
+        )
+        self.assertEqual(
+            interpretation["public_data_disclosure_or_secrecy_claim"], "NONE"
+        )
+        self.assertEqual(
+            interpretation["scope"],
+            [
+                "goal1/CONFIRMATORY_BENCHMARK.json:contamination_and_duplicate_exclusions.report_file_may_be_released_only_after_protocol_and_dispatch_seal",
+                "goal1/CONFIRMATORY_PROTOCOL.json:sealed_rules.benchmark_selection.report_problem_bytes_release",
+                "goal1/CONFIRMATORY_PROTOCOL.json:sealed_rules.confirmatory_manifest_interface.seal_before",
+            ],
+        )
+        self.assertIs(
+            self.manifest["contamination_and_duplicate_exclusions"][
+                "report_file_may_be_released_only_after_protocol_and_dispatch_seal"
+            ],
+            True,
+        )
+        selection = self.protocol["sealed_rules"]["benchmark_selection"]
+        self.assertEqual(
+            selection["report_problem_bytes_release"],
+            "ONLY_AFTER_PROTOCOL_RULES_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_ALL_SEALED",
+        )
+        self.assertEqual(
+            self.protocol["sealed_rules"]["confirmatory_manifest_interface"][
+                "seal_before"
+            ],
+            "REPORT_BYTES_RELEASE_OR_FIRST_CONFIRMATORY_DISPATCH_WHICHEVER_WOULD_OCCUR_FIRST",
+        )
+        self.assertEqual(
+            self.manifest["contamination_and_duplicate_exclusions"][
+                "no_claim_of_model_training_decontamination"
+            ],
+            "This contract controls experiment-time leakage only; it does not claim knowledge of model pretraining data.",
+        )
 
     def test_report_access_repository_scan_is_reproducible(self) -> None:
         scan = self.attestation["repository_scan"]
