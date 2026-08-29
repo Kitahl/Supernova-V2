@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from fractions import Fraction
 import json
 from math import comb
-from pathlib import Path
 from typing import Iterable
 
 from .confirmatory_manifest import NON_CREDIT_DRAFT, canonical_sha256
@@ -14,6 +13,7 @@ from .dispatch import CompletionStatus
 from .execution_authority import (
     PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
     PRODUCTION_CREDIT_STATUS,
+    _repository_root,
     load_execution_authority,
 )
 from .evidence_bridge import (
@@ -920,8 +920,8 @@ def evaluate_confirmatory(
     if type(bundle) is not EvidenceBridgeBundle:
         raise TypeError("bundle must be an exact EvidenceBridgeBundle")
     result = _base_result(bundle)
-    root = Path(__file__).resolve().parents[2]
     try:
+        root = _repository_root()
         protocol = json.loads(
             (root / "goal1" / "CONFIRMATORY_PROTOCOL.json").read_text(
                 encoding="utf-8"

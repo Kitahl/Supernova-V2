@@ -33,6 +33,7 @@ from supernova_goal1.execution_authority import (
     PRODUCTION_RECEIPT_SCHEMA,
     ValidatedExecutionAuthority,
     _issue_validated_authority,
+    _repository_root,
     _validate_authority_artifact,
     canonical_sha256,
     load_execution_authority,
@@ -167,6 +168,20 @@ def _signed_fixture() -> tuple[dict[str, object], Ed25519PrivateKey, Ed25519Priv
 
 
 class ConfirmatoryExecutionAuthorityTests(unittest.TestCase):
+    def test_installed_package_without_fixed_checkout_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fake_module = (
+                Path(directory)
+                / "site-packages"
+                / "supernova_goal1"
+                / "execution_authority.py"
+            )
+            with patch.object(execution_authority, "__file__", str(fake_module)):
+                with self.assertRaisesRegex(
+                    PermissionError, "BLOCKED_NO_FIXED_REPOSITORY_CHECKOUT"
+                ):
+                    _repository_root()
+
     def test_valid_signed_hermetic_bundle_is_immutable_capability(self) -> None:
         authority, root_private, receipt_private = _signed_fixture()
         validated = _validate_authority_artifact(

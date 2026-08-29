@@ -238,7 +238,25 @@ def _fixed_root(repository_root: Path) -> tuple[str, bytes]:
 
 
 def _repository_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the fixed experiment checkout or fail closed.
+
+    Production activation is deliberately a repository-checkout operation: the
+    frozen protocol and Goal-1 authority are control-plane inputs, not mutable
+    package data. An ordinary wheel therefore cannot silently fall back to
+    caller-provided files or files adjacent to site-packages.
+    """
+
+    root = Path(__file__).resolve().parents[2]
+    missing = [
+        path.as_posix()
+        for path in (PROTOCOL_RELATIVE_PATH, GOAL1_RELATIVE_PATH)
+        if not (root / path).is_file()
+    ]
+    if missing:
+        raise PermissionError(
+            "BLOCKED_NO_FIXED_REPOSITORY_CHECKOUT: missing=" + ",".join(missing)
+        )
+    return root
 
 
 def _model_identity(authority: Mapping[str, Any]) -> dict[str, object]:

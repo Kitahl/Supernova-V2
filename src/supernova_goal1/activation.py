@@ -14,6 +14,7 @@ from .execution_authority import (
     AUTHORITY_RELATIVE_PATH,
     AUTHORIZED_DISPATCH_STATUS,
     ValidatedExecutionAuthority,
+    _repository_root,
 )
 
 
@@ -37,7 +38,7 @@ def _json_copy(value: Mapping[str, Any], field: str) -> dict[str, Any]:
 
 
 def _fixed_protocol() -> dict[str, Any]:
-    path = Path(__file__).resolve().parents[2] / PROTOCOL_RELATIVE_PATH
+    path = _repository_root() / PROTOCOL_RELATIVE_PATH
     return json.loads(path.read_text(encoding="utf-8"))
 
 
