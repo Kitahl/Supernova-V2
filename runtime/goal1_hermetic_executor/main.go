@@ -139,7 +139,9 @@ func handlePreflight(raw []byte) error {
 	if err := runCommand(
 		llamaCLIPath,
 		"-m", modelPath,
-		"-n", "0",
+		"--prompt", "PREFLIGHT",
+		"--single-turn",
+		"-n", "1",
 		"--device", "none",
 		"--threads", "1",
 		"--ctx-size", "256",
@@ -192,6 +194,7 @@ func handleGeneration(prompt []byte) error {
 		llamaCLIPath,
 		"-m", modelPath,
 		"--file", name,
+		"--single-turn",
 		"-n", "1024",
 		"--device", "none",
 		"--threads", "1",

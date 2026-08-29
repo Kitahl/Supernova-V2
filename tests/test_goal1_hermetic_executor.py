@@ -48,6 +48,8 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         )
         for fragment in expected_fragments:
             self.assertIn(fragment, wrapper)
+        self.assertGreaterEqual(wrapper.count('"--single-turn"'), 2)
+        self.assertNotIn('"-no-cnv"', wrapper)
 
     def test_dockerfile_has_no_mutable_runtime_or_secret_input(self) -> None:
         dockerfile = (CONTEXT / "Dockerfile").read_text(encoding="utf-8")
@@ -60,6 +62,9 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn('CMD ["/opt/supernova/executor", "--stdio"]', dockerfile)
         self.assertIn("sha256sum --check --strict", dockerfile)
         self.assertIn("COPY BUILD_LOCK.json /opt/supernova/BUILD_LOCK.json", dockerfile)
+        self.assertIn("cp -P /app/*.so* /usr/local/lib/", dockerfile)
+        self.assertIn("test -r /usr/local/lib/libllama-cli-impl.so", dockerfile)
+        self.assertIn("/app/llama-cli --version", dockerfile)
         self.assertFalse(dockerfile.startswith("# syntax="))
 
     def test_workflow_builds_only_narrow_context_and_never_receives_signing_keys(self) -> None:
@@ -67,6 +72,7 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn("context: runtime/goal1_hermetic_executor", workflow)
         self.assertIn("platforms: linux/amd64", workflow)
         self.assertIn("--network none", workflow)
+        self.assertIn("timeout --signal=KILL 180s docker run", workflow)
         self.assertIn("push: false", workflow)
         self.assertIn("github.event_name != 'pull_request'", workflow)
         self.assertEqual(workflow.count("docker/build-push-action@"), 1)
