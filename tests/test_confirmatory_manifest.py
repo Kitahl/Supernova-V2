@@ -334,7 +334,7 @@ class ConfirmatoryManifestTests(unittest.TestCase):
             "schema": "self-asserted",
             "provider_attested_fresh_empty_context_capability": True,
         }
-        with self.assertRaisesRegex(PermissionError, "execution-authority validator"):
+        with self.assertRaisesRegex(PermissionError, "activation-only"):
             build_confirmatory_manifest(
                 self.protocol,
                 operator_seed=OPERATOR_SEED,

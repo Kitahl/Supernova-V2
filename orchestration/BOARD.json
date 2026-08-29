@@ -29,10 +29,20 @@
       "owner": "MF02",
       "status": "READY",
       "paths": [
+        "orchestration/BOARD.json",
+        ".github/workflows/ci.yml",
+        "pyproject.toml",
         "goal1/CONFIRMATORY_PROTOCOL.json",
-        "tests/test_confirmatory_protocol.py",
         "goal1/CONFIRMATORY_EXECUTION_AUTHORITY.json",
-        "tests/test_confirmatory_execution_authority.py"
+        "src/supernova_goal1/activation.py",
+        "src/supernova_goal1/confirmatory_manifest.py",
+        "src/supernova_goal1/evaluate_confirmatory.py",
+        "src/supernova_goal1/evidence_bridge.py",
+        "src/supernova_goal1/execution_authority.py",
+        "tests/test_confirmatory_protocol.py",
+        "tests/test_confirmatory_execution_authority.py",
+        "tests/test_confirmatory_manifest.py",
+        "tests/test_evaluate_confirmatory.py"
       ],
       "depends_on": [
         "G1-120",

@@ -12,6 +12,7 @@ import supernova_goal1.evidence_bridge as bridge_module
 from supernova_goal1.confirmatory_manifest import NON_CREDIT_DRAFT
 from supernova_goal1.contracts import Arm, CompleteCost
 from supernova_goal1.dispatch import CompletionStatus
+from supernova_goal1.execution_authority import PRODUCTION_CREDIT_STATUS
 from supernova_goal1.evidence_bridge import (
     EvidenceBridgeBundle,
     EvidenceBridgeReceipt,
@@ -23,6 +24,7 @@ from supernova_goal1.evaluate_confirmatory import (
     EXPECTED_REPORT_PROBLEM_IDS,
     _CellSnapshot,
     _evaluate_complete_snapshots,
+    _evaluate_non_credit_draft,
     evaluate_confirmatory,
 )
 
@@ -210,7 +212,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
 
     def test_public_api_rejects_raw_records(self) -> None:
         with self.assertRaisesRegex(TypeError, "exact EvidenceBridgeBundle"):
-            evaluate_confirmatory([], evidence_authority=self.authority())
+            evaluate_confirmatory([])
 
     def test_authenticated_non_credit_draft_is_blocked_without_statistics(self) -> None:
         authority = self.authority()
@@ -222,9 +224,33 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         bundle = self.bundle(
             (record,), credit_status=NON_CREDIT_DRAFT, authority=authority
         )
-        result = evaluate_confirmatory(bundle, evidence_authority=authority)
+        result = _evaluate_non_credit_draft(bundle, evidence_authority=authority)
         self.assertEqual("BLOCKED", result["decision"])
         self.assertIn("NON_CREDIT_DRAFT", result["blockers"])
+        self.assertEqual([], result["contrasts"])
+        self.assertFalse(result["decision_eligible"])
+
+
+    def test_public_evaluator_rejects_pass_shaped_caller_hmac_authority(self) -> None:
+        authority = self.authority()
+        bundle = self.bundle(
+            self.full_records(
+                verified_success_attempt=0,
+                control_success_attempt=None,
+                credit_status=PRODUCTION_CREDIT_STATUS,
+            ),
+            credit_status=PRODUCTION_CREDIT_STATUS,
+            authority=authority,
+        )
+        result = evaluate_confirmatory(bundle)
+        self.assertEqual("BLOCKED", result["decision"])
+        self.assertIn(
+            result["reason"],
+            {
+                "PRODUCTION_EXECUTION_AUTHORITY_UNAVAILABLE",
+                "BRIDGE_AUTHENTICATION_FAILED",
+            },
+        )
         self.assertEqual([], result["contrasts"])
         self.assertFalse(result["decision_eligible"])
 
@@ -243,7 +269,9 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             "UNSEALED_CALLER_TOKEN"
         )
         forged = tuple.__new__(EvidenceBridgeBundle, tuple(values))
-        result = evaluate_confirmatory(forged, evidence_authority=authority)
+        result = _evaluate_non_credit_draft(
+            forged, evidence_authority=authority
+        )
         self.assertEqual("BLOCKED", result["decision"])
         self.assertEqual("BRIDGE_AUTHENTICATION_FAILED", result["reason"])
         self.assertEqual([], result["contrasts"])
@@ -251,7 +279,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         malformed_values = list(genuine)
         malformed_values[genuine._fields.index("authority_receipt")] = None
         malformed = tuple.__new__(EvidenceBridgeBundle, tuple(malformed_values))
-        malformed_result = evaluate_confirmatory(
+        malformed_result = _evaluate_non_credit_draft(
             malformed, evidence_authority=authority
         )
         self.assertEqual("BLOCKED", malformed_result["decision"])
@@ -265,7 +293,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
         non_json_bundle = tuple.__new__(
             EvidenceBridgeBundle, tuple(non_json_values)
         )
-        non_json_result = evaluate_confirmatory(
+        non_json_result = _evaluate_non_credit_draft(
             non_json_bundle, evidence_authority=authority
         )
         self.assertEqual("BLOCKED", non_json_result["decision"])
@@ -345,7 +373,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             credit_status=NON_CREDIT_DRAFT,
             authority=authority,
         )
-        result = evaluate_confirmatory(bundle, evidence_authority=authority)
+        result = _evaluate_non_credit_draft(bundle, evidence_authority=authority)
         self.assertEqual("BLOCKED", result["decision"])
         self.assertIn("NON_CREDIT_DRAFT", result["blockers"])
         self.assertIn("MISSING_PAIRED_CELLS", result["incomplete_reasons"])
@@ -371,7 +399,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             credit_status=NON_CREDIT_DRAFT,
             authority=authority,
         )
-        result = evaluate_confirmatory(bundle, evidence_authority=authority)
+        result = _evaluate_non_credit_draft(bundle, evidence_authority=authority)
         self.assertEqual("BLOCKED", result["decision"])
         self.assertTrue(
             any(reason.startswith("VERIFIER_TIMEOUT") for reason in result["blockers"])
@@ -403,7 +431,7 @@ class ConfirmatoryEvaluatorTests(unittest.TestCase):
             credit_status=NON_CREDIT_DRAFT,
             authority=authority,
         )
-        result = evaluate_confirmatory(bundle, evidence_authority=authority)
+        result = _evaluate_non_credit_draft(bundle, evidence_authority=authority)
         self.assertEqual("BLOCKED", result["decision"])
         self.assertTrue(
             any(
