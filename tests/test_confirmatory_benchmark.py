@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "goal1" / "CONFIRMATORY_BENCHMARK.json"
 LOCK_PATH = ROOT / "goal1" / "BENCHMARK.lock.json"
 SOURCES_PATH = ROOT / "goal1" / "BENCHMARK_SOURCES.json"
+ATTESTATION_PATH = ROOT / "goal1" / "CONFIRMATORY_REPORT_ACCESS_ATTESTATION.json"
 
 
 def _record(problem_id: str, split: str) -> dict[str, Any]:
@@ -48,6 +50,13 @@ def _jsonl(records: list[dict[str, Any]]) -> bytes:
         )
         for record in records
     )
+
+
+def _git_blob_sha1(path: Path) -> str:
+    data = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha1(
+        b"blob " + str(len(data)).encode("ascii") + b"\0" + data
+    ).hexdigest()
 
 
 def _set_file_contract(
@@ -115,6 +124,7 @@ class ConfirmatoryBenchmarkTests(unittest.TestCase):
         cls.manifest = load_strict_json(MANIFEST_PATH)
         cls.lock = load_strict_json(LOCK_PATH)
         cls.sources = load_strict_json(SOURCES_PATH)
+        cls.attestation = load_strict_json(ATTESTATION_PATH)
 
     def test_repository_manifest_is_statically_bound_to_existing_lock(self) -> None:
         validate_static_manifest(self.manifest, self.lock, self.sources)
@@ -134,6 +144,102 @@ class ConfirmatoryBenchmarkTests(unittest.TestCase):
         self.assertIsNone(self.manifest["selection"]["selected_count_per_split"])
         self.assertEqual(self.manifest["selection"]["development_problem_ids"], [])
         self.assertEqual(self.manifest["selection"]["report_problem_ids"], [])
+
+    def test_report_access_attestation_binds_public_report_and_runtime_gate(self) -> None:
+        attestation = self.attestation
+        report = self.manifest["benchmark"]["report_file"]
+        self.assertEqual(attestation["schema_version"], 1)
+        self.assertEqual(attestation["status"], "SEALED")
+        self.assertEqual(
+            attestation["claim_scope"],
+            "EXPERIMENT_TIME_REPORT_ACCESS_NOT_DATA_SECRECY",
+        )
+        self.assertEqual(
+            attestation["report_payload"],
+            {
+                "path": report["path"],
+                "sha256": report["sha256"],
+                "bytes": report["bytes"],
+                "records": report["records"],
+                "source_split": "test",
+            },
+        )
+
+        public = attestation["public_reconstructibility"]
+        self.assertEqual(
+            public["claim"],
+            "PUBLICLY_RECONSTRUCTIBLE_FROM_PINNED_UPSTREAM_SOURCES_BEFORE_AND_AFTER_ANY_PROTOCOL_OR_DISPATCH_SEAL",
+        )
+        self.assertEqual(public["secrecy_or_non_public_data_claim"], "NONE")
+        self.assertEqual(
+            public["source_manifest"],
+            {
+                "path": "goal1/BENCHMARK_SOURCES.json",
+                "git_blob_sha1": _git_blob_sha1(SOURCES_PATH),
+            },
+        )
+
+        deepseek = self.sources["sources"]["deepseek_prover_v15"]
+        kimina = self.sources["sources"]["kimina_corrected_test"]
+        self.assertEqual(
+            public["upstream_sources"],
+            [
+                {
+                    "source_id": "deepseek-prover-v1.5-minif2f",
+                    "repository": deepseek["repository_url"],
+                    "commit": deepseek["commit"],
+                    "path": deepseek["path"],
+                    "sha256": deepseek["sha256"],
+                    "role": "PUBLIC_IDENTITY_AND_VALIDATION_SOURCE",
+                },
+                {
+                    "source_id": "ai-mo-minif2f-test",
+                    "repository": kimina["repository_url"],
+                    "commit": kimina["commit"],
+                    "data_last_changed_commit": kimina["data_last_changed_commit"],
+                    "path": kimina["path"],
+                    "sha256": kimina["sha256"],
+                    "records": kimina["expected_records"],
+                    "role": "PUBLIC_CORRECTED_REPORT_THEOREM_BYTES_SOURCE",
+                },
+            ],
+        )
+
+        runtime = attestation["controlled_runtime_injection"]
+        self.assertEqual(
+            runtime["claim"],
+            "PUBLIC_AVAILABILITY_DOES_NOT_AUTHORIZE_EXPERIMENT_TIME_REPORT_USE",
+        )
+        self.assertEqual(
+            runtime["development_prompts_memory_retrieval_tuning_and_selection"],
+            "BLOCKED",
+        )
+        self.assertEqual(
+            runtime["confirmatory_runtime_injection"],
+            "BLOCKED_UNTIL_PROTOCOL_RULES_EXECUTION_AUTHORITY_AND_MANIFEST_ARE_ALL_SEALED",
+        )
+        self.assertEqual(runtime["required_exact_report_sha256"], report["sha256"])
+
+    def test_report_access_repository_scan_is_reproducible(self) -> None:
+        scan = self.attestation["repository_scan"]
+        self.assertEqual(scan["algorithm_id"], "git_tracked_regular_file_exact_sha256_v1")
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout.split(b"\0")
+        matches: list[str] = []
+        for encoded in tracked:
+            if not encoded:
+                continue
+            relative = encoded.decode("utf-8")
+            path = ROOT / relative
+            if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == scan[
+                "target_sha256"
+            ]:
+                matches.append(relative)
+        self.assertEqual(matches, scan["expected_exact_payload_matches"])
 
     def test_post_freeze_manifest_mutation_is_rejected(self) -> None:
         expected = canonical_sha256(self.manifest)
