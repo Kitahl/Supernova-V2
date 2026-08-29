@@ -136,19 +136,24 @@ class HermeticLauncher:
         object.__setattr__(self, "generation_settings", frozen_settings)
         if type(self.image_environment) is not tuple:
             raise ValueError("image_environment must be one exact tuple")
-        allowed_environment_names = {
-            "HOME", "LANG", "LC_ALL", "OMP_NUM_THREADS", "PATH",
-            "PYTHONPATH", "PYTHONUNBUFFERED", "RUST_BACKTRACE", "TZ",
-            "TOKENIZERS_PARALLELISM",
+        allowed_environment_entries = {
+            "HOME=/nonexistent",
+            "LANG=C.UTF-8",
+            "LC_ALL=C.UTF-8",
+            "OMP_NUM_THREADS=1",
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PYTHONPATH=/opt/supernova",
+            "PYTHONUNBUFFERED=1",
+            "RUST_BACKTRACE=0",
+            "TOKENIZERS_PARALLELISM=false",
+            "TZ=UTC",
         }
         names: list[str] = []
         for index, entry in enumerate(self.image_environment):
             entry = _token(entry, f"image_environment[{index}]")
-            if "=" not in entry:
-                raise ValueError("each image environment entry must be NAME=value")
+            if entry not in allowed_environment_entries:
+                raise ValueError(f"image environment entry is not allowed: {entry}")
             name, _value = entry.split("=", 1)
-            if name not in allowed_environment_names:
-                raise ValueError(f"image environment name is not allowed: {name}")
             names.append(name)
         if len(names) != len(set(names)):
             raise ValueError("image_environment contains a duplicate name")
@@ -330,6 +335,8 @@ def _create_argv(launcher: HermeticLauncher) -> list[str]:
         "private",
         "--user",
         launcher.container_user,
+        "--runtime",
+        "runc",
         "--memory",
         str(launcher.memory_bytes),
         "--cpus",
@@ -399,6 +406,8 @@ def _clean_snapshot(
         or host.get("AutoRemove") is not False
         or host.get("OomKillDisable") not in {None, False}
         or host.get("Init") is not True
+        or host.get("Runtime") != "runc"
+        or host.get("Isolation") not in {None, "", "default"}
         or restart != {"MaximumRetryCount": 0, "Name": "no"}
         or tmpfs != _TMPFS
         or binds != []
@@ -434,6 +443,7 @@ def _clean_snapshot(
         "pids_limit": host.get("PidsLimit"),
         "privileged": host.get("Privileged"),
         "read_only_root": host.get("ReadonlyRootfs"),
+        "runtime": host.get("Runtime"),
         "security_opt": sorted(security),
         "tmpfs": tmpfs,
         "user": config.get("User"),

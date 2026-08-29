@@ -123,6 +123,8 @@ class _FakeDocker:
             "AutoRemove": False,
             "OomKillDisable": False,
             "Init": True,
+            "Runtime": "runc",
+            "Isolation": "",
             "RestartPolicy": {"MaximumRetryCount": 0, "Name": "no"},
             "Tmpfs": dict(TMPFS),
             "Binds": None,
