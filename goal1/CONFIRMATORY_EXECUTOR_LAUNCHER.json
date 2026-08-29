@@ -1,0 +1,33 @@
+{
+  "schema": "supernova.hermetic-launcher.v1",
+  "container_image_ref": "ghcr.io/kitahl/supernova-goal1-executor@sha256:db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
+  "command": [
+    "/opt/supernova/executor",
+    "--stdio"
+  ],
+  "inference_runtime_sha256": "bab9d9c7aa177608100060782b0386f5d28b34a27aa3515ba6e54ef86b47fc67",
+  "model_weights_sha256": "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32",
+  "tokenizer_sha256": "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32",
+  "exact_model_version": "Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF@bf1da6ca8f02b444067db175f02a14e74f49c5c0#q4_k_m",
+  "model_provider": "HERMETIC_LOCAL_MODEL",
+  "generation_settings": {
+    "batch_size": 512,
+    "context_tokens": 4096,
+    "cpu_threads": 1,
+    "device": "none",
+    "engine": "llama-cli",
+    "max_output_tokens": 1024,
+    "seed": -1,
+    "temperature": 0.8,
+    "top_k": 40,
+    "top_p": 0.95
+  },
+  "image_environment": [
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  ],
+  "container_user": "65532:65532",
+  "memory_bytes": 4294967296,
+  "nano_cpus": 2000000000,
+  "timeout_seconds": 600,
+  "max_output_bytes": 1048576
+}

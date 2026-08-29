@@ -1,0 +1,15 @@
+{
+  "schema": "supernova.hermetic-executor-publication.v1",
+  "source_commit": "7cd2f582904cd82eb19a655bd575f29ab8415518",
+  "workflow_run_id": 33231696180,
+  "workflow_url": "https://github.com/Kitahl/Supernova-V2/actions/runs/33231696180",
+  "evidence_artifact_digest": "sha256:ea59971aa3e3476eb09f3e0aeb145a2dcf84ce13a37f3b36fdd82e444530fe3e",
+  "image_ref": "ghcr.io/kitahl/supernova-goal1-executor@sha256:db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
+  "image_digest": "sha256:db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
+  "build_lock_sha256": "f026c814eff1efe1f9de908a59914948aa8c4b496d94c86b1b98a4394231fa85",
+  "platform": "linux/amd64",
+  "publication_status": "PUBLISHED_IMMUTABLE",
+  "executor_sha256": "02570fd6d475f1b7d3b8f07c9eea9c3f91c638e8543ed85b7343d6198d67c577",
+  "llama_cli_sha256": "bab9d9c7aa177608100060782b0386f5d28b34a27aa3515ba6e54ef86b47fc67",
+  "model_sha256": "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32"
+}

@@ -4,6 +4,11 @@ import json
 import pathlib
 import unittest
 
+from supernova_goal1.confirmatory_supervisor import (
+    load_repository_execution_bindings,
+)
+from supernova_goal1.execution_authority import canonical_sha256
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONTEXT = ROOT / "runtime" / "goal1_hermetic_executor"
 WORKFLOW = ROOT / ".github" / "workflows" / "goal1_hermetic_executor.yml"
@@ -93,6 +98,57 @@ class HermeticExecutorBuildTests(unittest.TestCase):
             "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
         ):
             self.assertIn(action, workflow)
+
+    def test_public_launcher_and_capacity_bind_published_executor(self) -> None:
+        launcher, capacity = load_repository_execution_bindings(ROOT)
+        publication = json.loads(
+            (CONTEXT / "PUBLISHED_IMAGE.json").read_text(encoding="utf-8")
+        )
+        lock = json.loads((CONTEXT / "BUILD_LOCK.json").read_text(encoding="utf-8"))
+        runtime = json.loads(
+            (ROOT / "goal1" / "CONFIRMATORY_RUNTIME.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            launcher.container_image_ref,
+            "ghcr.io/kitahl/supernova-goal1-executor@sha256:"
+            "db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
+        )
+        self.assertEqual(
+            launcher.inference_runtime_sha256,
+            "bab9d9c7aa177608100060782b0386f5d28b34a27aa3515ba6e54ef86b47fc67",
+        )
+        self.assertEqual(launcher.exact_model_version, lock["model"]["exact_version"])
+        self.assertEqual(launcher.model_weights_sha256, lock["model"]["sha256"])
+        self.assertEqual(launcher.tokenizer_sha256, lock["model"]["sha256"])
+        self.assertEqual(launcher.generation_settings, lock["generation_settings"])
+        self.assertEqual(capacity["executor_image_ref"], launcher.container_image_ref)
+        self.assertEqual(publication["image_ref"], launcher.container_image_ref)
+        self.assertEqual(
+            publication["source_commit"],
+            "7cd2f582904cd82eb19a655bd575f29ab8415518",
+        )
+        self.assertEqual(publication["workflow_run_id"], 33231696180)
+        self.assertEqual(
+            publication["build_lock_sha256"],
+            "f026c814eff1efe1f9de908a59914948aa8c4b496d94c86b1b98a4394231fa85",
+        )
+        self.assertEqual(
+            publication["evidence_artifact_digest"],
+            "sha256:ea59971aa3e3476eb09f3e0aeb145a2dcf84ce13a37f3b36fdd82e444530fe3e",
+        )
+        self.assertEqual(
+            capacity["launcher_artifact_sha256"],
+            "83c8fb2f180acd711647b2d0279dd2449804638d2a41b40d6bf81a34d0b37587",
+        )
+        self.assertEqual(
+            canonical_sha256(capacity),
+            "697a0a254714601dbe821af72a73e2ba54e823e6bc72bc8d1a4dab2d20060e11",
+        )
+        self.assertEqual(capacity["verifier_slot"], runtime["resource_limits"])
+        self.assertEqual(capacity["model_slot"]["memory_bytes"], 4_294_967_296)
+        self.assertEqual(capacity["model_slot"]["nano_cpus"], 2_000_000_000)
+        self.assertEqual(capacity["model_slot"]["network"], "none")
+        self.assertEqual(capacity["model_slot"]["gpu_device_requests"], 0)
 
     def test_board_declares_every_new_path(self) -> None:
         board = json.loads((ROOT / "orchestration" / "BOARD.json").read_text(encoding="utf-8"))
