@@ -110,7 +110,7 @@ class _FakeDocker:
             "Memory": self.launcher.memory_bytes,
             "NanoCpus": self.launcher.nano_cpus,
             "IpcMode": "none",
-            "PidMode": "private",
+            "PidMode": "",
             "UTSMode": "private",
             "UsernsMode": "",
             "CgroupnsMode": "private",
@@ -271,6 +271,7 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
         self.assertIn("--network", create)
         self.assertEqual(create[create.index("--network") + 1], "none")
         self.assertIn("--read-only", create)
+        self.assertNotIn("--pid", create)
         self.assertIn("ALL", create)
         self.assertIn("no-new-privileges:true", create)
         self.assertNotIn("--env", create)

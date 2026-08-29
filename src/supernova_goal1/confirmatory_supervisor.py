@@ -329,8 +329,6 @@ def _create_argv(launcher: HermeticLauncher) -> list[str]:
         "256",
         "--ipc",
         "none",
-        "--pid",
-        "private",
         "--uts",
         "private",
         "--user",
@@ -393,7 +391,7 @@ def _clean_snapshot(
         or host.get("Memory") != launcher.memory_bytes
         or host.get("NanoCpus") != launcher.nano_cpus
         or host.get("IpcMode") != "none"
-        or host.get("PidMode") != "private"
+        or host.get("PidMode") not in {None, ""}
         or host.get("UTSMode") != "private"
         or host.get("UsernsMode") not in {None, ""}
         or host.get("CgroupnsMode") not in {None, "", "private"}
