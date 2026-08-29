@@ -205,10 +205,51 @@ class ConfirmatoryExecutionAuthorityTests(unittest.TestCase):
             ["protocol", "goal1", "operator_seed"],
             list(inspect.signature(activate_confirmatory_execution).parameters),
         )
-        with self.assertRaisesRegex(PermissionError, "BLOCKED_NO_EXECUTION_AUTHORITY"):
-            load_execution_authority(PROTOCOL, GOAL1)
-        with self.assertRaisesRegex(PermissionError, "BLOCKED_NO_EXECUTION_AUTHORITY"):
-            activate_confirmatory_execution(PROTOCOL, GOAL1, operator_seed=b"x" * 32)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            goal = root / "goal1"
+            goal.mkdir()
+            for name in (
+                "CONFIRMATORY_PROTOCOL.json",
+                "CONFIRMATORY_TRUST_ROOT.json",
+                "GOAL1.json",
+            ):
+                (goal / name).write_bytes((ROOT / "goal1" / name).read_bytes())
+
+            with patch.object(
+                execution_authority,
+                "_repository_root",
+                return_value=root,
+            ):
+                with self.assertRaisesRegex(
+                    PermissionError, "BLOCKED_NO_EXECUTION_AUTHORITY"
+                ):
+                    load_execution_authority(PROTOCOL, GOAL1)
+                with self.assertRaisesRegex(
+                    PermissionError, "BLOCKED_NO_EXECUTION_AUTHORITY"
+                ):
+                    activate_confirmatory_execution(
+                        PROTOCOL,
+                        GOAL1,
+                        operator_seed=b"x" * 32,
+                    )
+
+    def test_fixed_repository_authority_activates(self) -> None:
+        capability = load_execution_authority(PROTOCOL, GOAL1)
+        activated = activate_confirmatory_execution(
+            PROTOCOL,
+            GOAL1,
+            operator_seed=b"B" * 32,
+        )
+        self.assertEqual(capability, activated.authority)
+        self.assertEqual(
+            AUTHORIZED_DISPATCH_STATUS,
+            activated.protocol["confirmatory_execution_status"],
+        )
+        self.assertEqual(
+            PRODUCTION_CREDIT_STATUS,
+            activated.manifest.public_manifest["credit_status"],
+        )
 
     def test_random_self_selected_root_cannot_activate(self) -> None:
         authority, _, _ = _signed_fixture()

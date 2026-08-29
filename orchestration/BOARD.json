@@ -79,7 +79,7 @@
         "remaining_requirement": "TRUSTED_HOST_SUPERVISOR_IMMUTABLE_HERMETIC_EXECUTION_AUTHORITY_BUNDLE_AND_AUTHENTIC_PREFLIGHT"
       },
       "phase_two": {
-        "state": "PUBLISHED_EXECUTOR_AND_FIXED_BINDINGS_AWAITING_MERGE_AND_AUTHENTIC_PREFLIGHT",
+        "state": "AUTHENTIC_PREFLIGHT_PASSED_PUBLIC_EXECUTION_AUTHORITY_PENDING_MERGE",
         "supervisor_pull_request": 81,
         "supervisor_reviewed_head": "ed992d63a6f55b63275884a1a01a9276fff6d4b0",
         "supervisor_merge_commit": "13f3cd145d05679bba9162fc2cb14c087fcdc7ea",
@@ -91,8 +91,18 @@
         "executor_merge_commit": "7cd2f582904cd82eb19a655bd575f29ab8415518",
         "executor_workflow_run": 33231696180,
         "executor_image_ref": "ghcr.io/kitahl/supernova-goal1-executor@sha256:db481d797c97a2edaaa1439e368209b174cdca9585474093defdcea1690c54b7",
-        "remaining_requirement": "MERGE_FIXED_PUBLIC_BINDINGS_THEN_RUN_AUTHENTIC_PREFLIGHT_AND_PUBLISH_PUBLIC_AUTHORITY_ARTIFACTS",
-        "next_assignment": "Review and merge the fixed launcher, capacity, and publication-evidence binding candidate. Then run the operator provisioner on a trusted Docker host with distinct external root and receipt signing keys; publish only the generated public trust root and execution authority."
+        "bindings_pull_request": 84,
+        "bindings_merge_commit": "b57ebbd1a378810bd2dd2fc4207f46729a9b0676",
+        "uts_compatibility_pull_request": 85,
+        "uts_compatibility_reviewed_head": "f815c2ea133fe1e3d6e6336f437602d1bbf90b4f",
+        "uts_compatibility_merge_commit": "e909bf51413fd6bbba903d6e4f39b8f193187e8d",
+        "trust_root_sha256": "3fe6c46373a7fdda2875d9814508fdad68cc9dd30bddcfbb7bed9523e4e3fc5d",
+        "execution_authority_sha256": "bd44e2f0b396b5eb0f9a4cdd5ff2960aa12041e1df7fa14fc033af87aca174c4",
+        "preflight_receipt_sha256": "ca61fa9c19f98e395a9fab5d5858d51907592458b547d3d46a411d253e9b17dc",
+        "preflight_validation_record_sha256": "46897d4bc4dde697d8d0c09db206a7228fd97afd4f43872930a2bdf975c7ad9d",
+        "preflight_validation_verdict": "PASS",
+        "remaining_requirement": "MERGE_PUBLIC_AUTHORITY_ARTIFACTS_AND_RECORD_EXACT_COMPLETION",
+        "next_assignment": "Merge the public authority artifacts, then record the exact completion PR and merge commit and open G1-131."
       }
     },
     {
