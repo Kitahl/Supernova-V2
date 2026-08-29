@@ -27,7 +27,7 @@
     {
       "id": "G1-121",
       "owner": "MF02",
-      "status": "READY",
+      "status": "DONE",
       "paths": [
         "orchestration/BOARD.json",
         ".github/workflows/ci.yml",
@@ -79,7 +79,7 @@
         "remaining_requirement": "TRUSTED_HOST_SUPERVISOR_IMMUTABLE_HERMETIC_EXECUTION_AUTHORITY_BUNDLE_AND_AUTHENTIC_PREFLIGHT"
       },
       "phase_two": {
-        "state": "AUTHENTIC_PREFLIGHT_PASSED_PUBLIC_EXECUTION_AUTHORITY_PENDING_MERGE",
+        "state": "AUTHENTIC_PREFLIGHT_PASSED_PUBLIC_EXECUTION_AUTHORITY_PUBLISHED",
         "supervisor_pull_request": 81,
         "supervisor_reviewed_head": "ed992d63a6f55b63275884a1a01a9276fff6d4b0",
         "supervisor_merge_commit": "13f3cd145d05679bba9162fc2cb14c087fcdc7ea",
@@ -101,8 +101,12 @@
         "preflight_receipt_sha256": "ca61fa9c19f98e395a9fab5d5858d51907592458b547d3d46a411d253e9b17dc",
         "preflight_validation_record_sha256": "46897d4bc4dde697d8d0c09db206a7228fd97afd4f43872930a2bdf975c7ad9d",
         "preflight_validation_verdict": "PASS",
-        "remaining_requirement": "MERGE_PUBLIC_AUTHORITY_ARTIFACTS_AND_RECORD_EXACT_COMPLETION",
-        "next_assignment": "Merge the public authority artifacts, then record the exact completion PR and merge commit and open G1-131."
+        "remaining_requirement": null,
+        "next_assignment": "G1-131 independent review is READY from the exact merged activation chain and public authority digests."
+      },
+      "completion": {
+        "pull_request": 86,
+        "merge_commit": "fda4286d21b3544469d0c901f95639ba807b5904"
       }
     },
     {
@@ -333,7 +337,7 @@
     {
       "id": "G1-131",
       "owner": "MM06",
-      "status": "WAITING",
+      "status": "READY",
       "paths": [
         "reviews/G1_CONFIRMATORY_REVIEW.md"
       ],
