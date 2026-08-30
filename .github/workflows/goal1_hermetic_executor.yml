@@ -12,6 +12,7 @@ on:
     branches: [main]
     tags:
       - "publish-goal1-verifier-g1-activation-20260829"
+      - "publish-goal1-verifier-g1-activation-20260829-parser"
     paths:
       - "runtime/goal1_hermetic_executor/**"
       - ".github/workflows/goal1_hermetic_executor.yml"
@@ -160,7 +161,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'verifier') ||
-      (github.event_name == 'push' && github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829')
+      (github.event_name == 'push' && (github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' || github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'))
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -191,7 +192,8 @@ jobs:
       - name: Log in to GHCR
         if: >-
           github.event_name == 'workflow_dispatch' ||
-          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829'
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -201,7 +203,8 @@ jobs:
         id: publish-verifier
         if: >-
           github.event_name == 'workflow_dispatch' ||
-          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829'
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'
         shell: bash
         run: |
           set -euo pipefail
@@ -220,7 +223,8 @@ jobs:
       - name: Attest published verifier image
         if: >-
           github.event_name == 'workflow_dispatch' ||
-          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829'
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
           subject-name: ${{ env.IMAGE_NAME }}

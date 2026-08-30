@@ -120,6 +120,7 @@ test "$(/opt/lean/bin/lean --print-prefix)" = "/opt/lean"
 test -x /opt/supernova/bin/lean4export
 test -x /opt/supernova/bin/check_exports
 test -x /opt/supernova/bin/nanoda_bin
+test -x /opt/supernova/bin/parse_product
 test -f /opt/supernova/VERIFIER_RUNTIME_LOCK.json
 cat /opt/supernova/VERIFIER_RUNTIME_LOCK.json
 """.strip()
@@ -148,6 +149,45 @@ cat /opt/supernova/VERIFIER_RUNTIME_LOCK.json
 
 def qualify(image: str) -> dict[str, str]:
     runtime_lock = assert_runtime_inventory(image)
+    policy = runtime_lock.get("policy")
+    if not isinstance(policy, dict):
+        raise TypeError("runtime policy is missing")
+    if policy.get("parser_mode") != "PINNED_LEAN_PARSER_WITHOUT_ELABORATION":
+        raise RuntimeError("parser-only policy is not frozen")
+    if policy.get("direct_lean_argv", [None])[-2:] != ["0", "{source_path}"]:
+        raise RuntimeError("runtime lock does not bind cgroup-only memory authority")
+
+    product_name = "SupernovaProduct.P_" + ("a" * 64) + ".a00"
+    parse_only_source = f'''theorem {product_name} : True := by
+  run_tac
+    let inside <- IO.FS.readFile "/opt/supernova/sandbox_sentinel.txt"
+    IO.println inside
+  trivial
+'''.encode()
+    parse_request: dict[str, Any] = {
+        "expected_name": product_name,
+        "mode": "parse_product",
+        "schema": REQUEST_SCHEMA,
+        **blob_fields("product_source", parse_only_source),
+    }
+    parsed, parser_stderr = run_container(image, parse_request, expected_exit=0)
+    if parsed.get("status") != "PARSED":
+        raise RuntimeError(f"parser-only mode rejected a valid declaration: {parsed}")
+    parser_artifact = canonical_bytes(parsed) + parser_stderr
+    if INSIDE_SENTINEL.encode("utf-8") in parser_artifact:
+        raise RuntimeError("parser-only mode executed candidate elaboration")
+
+    second_declaration = parse_only_source + b"\nlemma extra : True := by trivial\n"
+    two_request: dict[str, Any] = {
+        "expected_name": product_name,
+        "mode": "parse_product",
+        "schema": REQUEST_SCHEMA,
+        **blob_fields("product_source", second_declaration),
+    }
+    rejected_parse, _ = run_container(image, two_request, expected_exit=10)
+    if rejected_parse.get("status") != "INVALID":
+        raise RuntimeError("parser-only mode accepted two declarations")
+
     theorem = "supernova_benign"
     benign_source = (
         b"import Mathlib\n"
@@ -249,6 +289,7 @@ theorem supernova_hostile : True := by
         "benign_solution_export_sha256": sha256(solution_export),
         "hostile_request_sha256": sha256(canonical_bytes(hostile_request)),
         "image": image,
+        "parser_only_request_sha256": sha256(canonical_bytes(parse_request)),
         "runtime_lock_sha256": str(runtime_lock["root_sha256"]),
         "status": "QUALIFIED",
     }

@@ -28,6 +28,7 @@ LEAN = Path("/opt/lean/bin/lean")
 LEAN4EXPORT = Path("/opt/supernova/bin/lean4export")
 CHECK_EXPORTS = Path("/opt/supernova/bin/check_exports")
 NANODA = Path("/opt/supernova/bin/nanoda_bin")
+PARSE_PRODUCT = Path("/opt/supernova/bin/parse_product")
 TOOLCHAIN_BIN = "/opt/lean/bin"
 PERMITTED_AXIOMS = ("propext", "Quot.sound", "Classical.choice")
 PRIMITIVE_TARGETS = (
@@ -362,6 +363,55 @@ def elaborate(request: dict[str, Any], lock: dict[str, Any]) -> None:
         )
 
 
+def parse_product(request: dict[str, Any], lock: dict[str, Any]) -> None:
+    expected = {
+        "expected_name",
+        "mode",
+        "product_source_b64",
+        "product_source_sha256",
+        "schema",
+    }
+    if set(request) != expected or request.get("mode") != "parse_product":
+        raise InfrastructureError("parse_product request fields changed")
+    source = decode_blob(request, "product_source", MAX_SOURCE_BYTES)
+    try:
+        text = source.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise Rejected("product declaration is not UTF-8") from exc
+    expected_name = token(request.get("expected_name"), "expected_name")
+    lines = text.splitlines()
+    first_line = lines[0] if lines else ""
+    allowed_prefixes = (
+        f"theorem {expected_name}",
+        f"lemma {expected_name}",
+    )
+    if not any(
+        first_line.startswith(prefix)
+        and (len(first_line) == len(prefix) or first_line[len(prefix)].isspace())
+        for prefix in allowed_prefixes
+    ):
+        raise Rejected("product declaration kind or exact name changed")
+    with tempfile.TemporaryDirectory(dir="/tmp") as raw:
+        root = Path(raw)
+        (root / "home").mkdir()
+        source_path = root / "Product.lean"
+        source_path.write_bytes(source)
+        parsed = run(
+            [str(PARSE_PRODUCT), str(source_path)],
+            cwd=TRUSTED_WORKING_DIRECTORY,
+            environment=runtime_environment(lock, root),
+        )
+        if parsed.returncode != 0:
+            raise Rejected(
+                (parsed.stderr + parsed.stdout)[:8192].decode("utf-8", "replace")
+            )
+    response(
+        "PARSED",
+        declaration_name=expected_name,
+        product_source_sha256=sha256(source),
+    )
+
+
 def check(request: dict[str, Any], lock: dict[str, Any]) -> None:
     expected = {
         "challenge_source_b64",
@@ -459,6 +509,8 @@ def main() -> int:
         mode = request.get("mode")
         if mode == "elaborate":
             elaborate(request, lock)
+        elif mode == "parse_product":
+            parse_product(request, lock)
         elif mode == "check":
             check(request, lock)
         else:

@@ -74,9 +74,18 @@ RUN git clone https://github.com/robsimmons/nanoda_lib.git nanoda \
     && cp target/release/nanoda_bin /opt/supernova/bin/nanoda_bin
 
 COPY --chown=verifier:verifier runtime/lean/lakefile.toml runtime/lean/lake-manifest.json runtime/lean/lean-toolchain /opt/supernova/template/
+COPY --chown=verifier:verifier runtime/goal1_verifier/ParseProduct.lean /opt/supernova/template/ParseProduct.lean
 RUN cd /opt/supernova/template \
     && lake update \
-    && lake exe cache get
+    && lake exe cache get \
+    && printf '%s\n' \
+       '' \
+       '[[lean_exe]]' \
+       'name = "parse_product"' \
+       'root = "ParseProduct"' \
+       >> lakefile.toml \
+    && lake build parse_product \
+    && cp .lake/build/bin/parse_product /opt/supernova/bin/parse_product
 
 COPY --chown=verifier:verifier runtime/goal1_verifier/freeze_runtime.py /opt/supernova/freeze_runtime.py
 COPY --chown=verifier:verifier runtime/goal1_verifier/entrypoint.py runtime/goal1_verifier/pins.json runtime/goal1_verifier/sandbox_sentinel.txt /opt/supernova/

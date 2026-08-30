@@ -184,6 +184,11 @@ def build_lock(args: argparse.Namespace) -> dict[str, object]:
             Path("/opt/supernova/bin/nanoda_bin"),
         ),
         (
+            "parse_product",
+            Path("/opt/supernova/bin/parse_product"),
+            Path("/opt/supernova/bin/parse_product"),
+        ),
+        (
             "entrypoint",
             Path("/opt/supernova/entrypoint.py"),
             Path("/opt/supernova/entrypoint.py"),
@@ -226,8 +231,13 @@ def build_lock(args: argparse.Namespace) -> dict[str, object]:
                 "0",
                 "-DwarningAsError=true",
                 "-M",
-                "4096",
+                "0",
                 "{source_path}",
+            ],
+            "parser_mode": "PINNED_LEAN_PARSER_WITHOUT_ELABORATION",
+            "parser_argv": [
+                "/opt/supernova/bin/parse_product",
+                "{product_source_path}",
             ],
             "permitted_axioms": list(PERMITTED_AXIOMS),
             "primitive_export_targets": list(PRIMITIVE_TARGETS),

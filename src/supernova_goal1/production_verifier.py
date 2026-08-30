@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -133,6 +133,93 @@ class FrozenLeanProblemSource:
         )
 
 
+@dataclass(frozen=True)
+class VerificationSubject:
+    """Exact keyless-container inputs derived before verification begins."""
+
+    challenge_source: bytes
+    candidate_source: bytes
+    theorem_names: tuple[str, ...]
+    theorem_statement_sha256: str
+    theorem_target_set_sha256: str
+    source_construction_sha256: str
+
+    def __post_init__(self) -> None:
+        for value, field in (
+            (self.challenge_source, "challenge_source"),
+            (self.candidate_source, "candidate_source"),
+        ):
+            if type(value) is not bytes:
+                raise TypeError(f"{field} must be exact bytes")
+            try:
+                value.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError(f"{field} must be UTF-8") from exc
+        if (
+            type(self.theorem_names) is not tuple
+            or len(self.theorem_names) != 1
+            or not all(type(value) is str and value for value in self.theorem_names)
+        ):
+            raise ValueError("theorem_names must contain one exact target")
+        _sha256(self.theorem_statement_sha256, "theorem_statement_sha256")
+        _sha256(self.theorem_target_set_sha256, "theorem_target_set_sha256")
+        _sha256(self.source_construction_sha256, "source_construction_sha256")
+        if _sha(self.challenge_source) != self.source_construction_sha256:
+            raise ValueError("source construction digest mismatch")
+        if canonical_sha256(list(self.theorem_names)) != self.theorem_target_set_sha256:
+            raise ValueError("theorem target-set digest mismatch")
+
+
+@dataclass(frozen=True)
+class ProductionVerification:
+    """One host-read signed verifier result and the exact request it attests."""
+
+    binding: VerifierBinding
+    record: VerifierEvidenceRecord
+    blobs: VerifierEvidenceBlobs
+    result: VerifierResult
+
+    def __post_init__(self) -> None:
+        if type(self.binding) is not VerifierBinding:
+            raise TypeError("binding must be an exact VerifierBinding")
+        if type(self.record) is not VerifierEvidenceRecord:
+            raise TypeError("record must be an exact VerifierEvidenceRecord")
+        if type(self.blobs) is not VerifierEvidenceBlobs:
+            raise TypeError("blobs must be exact VerifierEvidenceBlobs")
+        if type(self.result) is not VerifierResult:
+            raise TypeError("result must be an exact VerifierResult")
+        if self.record.body["binding"] != self.binding.body():
+            raise ValueError("signed verifier record differs from its dispatch binding")
+        if _sha(self.blobs.candidate) != self.binding.candidate_source_sha256:
+            raise ValueError("verifier candidate blob differs from its binding")
+        if _sha(self.blobs.source) != self.binding.source_construction_sha256:
+            raise ValueError("verifier source blob differs from its binding")
+        derived = verifier_result_from_evidence(
+            self.record,
+            self.blobs,
+            command=self.result.command,
+        )
+        if derived != self.result:
+            raise ValueError(
+                "compatibility result differs from signed verifier evidence"
+            )
+
+
+def _default_subject(
+    source: FrozenLeanProblemSource,
+    candidate: bytes,
+) -> VerificationSubject:
+    theorem_names = (source.native_id,)
+    return VerificationSubject(
+        challenge_source=source.source,
+        candidate_source=candidate,
+        theorem_names=theorem_names,
+        theorem_statement_sha256=source.theorem_statement_sha256,
+        theorem_target_set_sha256=canonical_sha256(list(theorem_names)),
+        source_construction_sha256=source.source_sha256,
+    )
+
+
 def load_frozen_lean_sources(
     path: Path,
     *,
@@ -230,6 +317,7 @@ def build_verifier_binding(
     protocol_rules_sha256: str,
     confirmatory_manifest_sha256: str,
     actual_runtime_sha256: str,
+    subject: VerificationSubject | None = None,
 ) -> VerifierBinding:
     """Bind exact pre-completion inputs; no verifier verdict is accepted here."""
 
@@ -239,6 +327,12 @@ def build_verifier_binding(
         raise TypeError("candidate must be exact bytes")
     if type(source) is not FrozenLeanProblemSource:
         raise TypeError("source must be an exact FrozenLeanProblemSource")
+    if subject is None:
+        subject = _default_subject(source, candidate)
+    elif type(subject) is not VerificationSubject:
+        raise TypeError("subject must be an exact VerificationSubject or null")
+    if subject.candidate_source != candidate:
+        raise ValueError("verification subject candidate differs from visible response")
     request = dispatch.request
     if request.problem.native_id != source.native_id:
         raise ValueError("frozen problem identity differs from benchmark source")
@@ -296,9 +390,9 @@ def build_verifier_binding(
         attempt_id=request.attempt,
         candidate_id=response.artifact_id,
         candidate_source_sha256=response.sha256_hex,
-        theorem_statement_sha256=source.theorem_statement_sha256,
-        theorem_target_set_sha256=canonical_sha256([source.native_id]),
-        source_construction_sha256=source.source_sha256,
+        theorem_statement_sha256=subject.theorem_statement_sha256,
+        theorem_target_set_sha256=subject.theorem_target_set_sha256,
+        source_construction_sha256=subject.source_construction_sha256,
         requested_runtime_sha256=request.runtime_sha256,
         actual_runtime_sha256=actual_runtime_sha256,
         immutable_configuration_sha256=immutable_configuration_sha256,
@@ -364,6 +458,13 @@ class ProductionVerifierPort:
         execution_authority_sha256: str,
         protocol_rules_sha256: str,
         confirmatory_manifest_sha256: str,
+        subject_builder: (
+            Callable[
+                [BaselineDispatch, bytes, FrozenLeanProblemSource],
+                VerificationSubject,
+            ]
+            | None
+        ) = None,
     ) -> None:
         if type(supervisor) is not VerifierSupervisor:
             raise TypeError("supervisor must be an exact VerifierSupervisor")
@@ -387,6 +488,9 @@ class ProductionVerifierPort:
         self.confirmatory_manifest_sha256 = _sha256(
             confirmatory_manifest_sha256, "confirmatory_manifest_sha256"
         )
+        if subject_builder is not None and not callable(subject_builder):
+            raise TypeError("subject_builder must be callable or null")
+        self.subject_builder = subject_builder
         self._bindings_by_dispatch: dict[str, VerifierBinding] = {}
 
     @property
@@ -395,10 +499,36 @@ class ProductionVerifierPort:
 
         return dict(self._bindings_by_dispatch)
 
-    def __call__(self, dispatch: BaselineDispatch, candidate: bytes) -> VerifierResult:
+    def verify(
+        self,
+        dispatch: BaselineDispatch,
+        candidate: bytes,
+    ) -> ProductionVerification:
+        """Run once and return only evidence read back through the host store."""
+
         source = self.sources_by_problem_id.get(dispatch.request.problem_id)
         if source is None:
             raise KeyError("no frozen Lean source for registered problem")
+        subject = (
+            _default_subject(source, candidate)
+            if self.subject_builder is None
+            else self.subject_builder(dispatch, candidate, source)
+        )
+        return self.verify_subject(dispatch, candidate, subject)
+
+    def verify_subject(
+        self,
+        dispatch: BaselineDispatch,
+        candidate: bytes,
+        subject: VerificationSubject,
+    ) -> ProductionVerification:
+        """Verify one caller-constructed subject after binding every exact byte."""
+
+        source = self.sources_by_problem_id.get(dispatch.request.problem_id)
+        if source is None:
+            raise KeyError("no frozen Lean source for registered problem")
+        if type(subject) is not VerificationSubject:
+            raise TypeError("subject must be an exact VerificationSubject")
         binding = build_verifier_binding(
             dispatch,
             candidate,
@@ -408,27 +538,34 @@ class ProductionVerifierPort:
             protocol_rules_sha256=self.protocol_rules_sha256,
             confirmatory_manifest_sha256=self.confirmatory_manifest_sha256,
             actual_runtime_sha256=self.supervisor.launcher.toolchain_lock_sha256,
+            subject=subject,
         )
         if binding.actual_dispatch_id in self._bindings_by_dispatch:
             raise ValueError("verifier dispatch replay rejected")
         self._bindings_by_dispatch[binding.actual_dispatch_id] = binding
         record = self.supervisor.run_and_record(
             binding,
-            source=source.source,
-            candidate=candidate,
-            theorem_names=(source.native_id,),
+            source=subject.challenge_source,
+            candidate=subject.candidate_source,
+            theorem_names=subject.theorem_names,
         )
         blobs = self.supervisor.store.read_blobs(binding)
-        return verifier_result_from_evidence(
+        result = verifier_result_from_evidence(
             record,
             blobs,
             command=self.supervisor.launcher.command,
         )
+        return ProductionVerification(binding, record, blobs, result)
+
+    def __call__(self, dispatch: BaselineDispatch, candidate: bytes) -> VerifierResult:
+        return self.verify(dispatch, candidate).result
 
 
 __all__ = [
     "FrozenLeanProblemSource",
+    "ProductionVerification",
     "ProductionVerifierPort",
+    "VerificationSubject",
     "build_verifier_binding",
     "canonical_sha256",
     "load_frozen_lean_sources",
