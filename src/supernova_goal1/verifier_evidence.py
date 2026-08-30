@@ -19,6 +19,7 @@ import json
 import secrets
 import sqlite3
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -1014,16 +1015,44 @@ def _invoke(
     *,
     input_bytes: bytes | None = None,
     timeout: int | None = None,
+    max_output_bytes: int = 1024 * 1024,
 ) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(
-        list(argv),
-        input=input_bytes,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-        shell=False,
-        timeout=timeout,
-    )
+    if type(max_output_bytes) is not int or max_output_bytes <= 0:
+        raise ValueError("max_output_bytes must be a positive integer")
+    with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+        try:
+            completed = subprocess.run(
+                list(argv),
+                input=input_bytes,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                check=False,
+                shell=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout_file.flush()
+            stderr_file.flush()
+            stdout_file.seek(0)
+            stderr_file.seek(0)
+            exc.stdout = stdout_file.read(max_output_bytes)
+            exc.stderr = stderr_file.read(max_output_bytes)
+            raise
+
+        def bounded(handle: Any, field: str) -> bytes:
+            handle.flush()
+            size = handle.seek(0, 2)
+            if size > max_output_bytes:
+                raise RuntimeError(f"{field} exceeded its byte limit")
+            handle.seek(0)
+            return handle.read(max_output_bytes + 1)
+
+        return subprocess.CompletedProcess(
+            completed.args,
+            completed.returncode,
+            bounded(stdout_file, "docker stdout"),
+            bounded(stderr_file, "docker stderr"),
+        )
 
 
 def _success(result: subprocess.CompletedProcess[bytes], field: str) -> bytes:

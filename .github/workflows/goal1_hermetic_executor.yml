@@ -13,6 +13,15 @@ on:
       - ".github/workflows/goal1_hermetic_executor.yml"
       - "tests/test_goal1_hermetic_executor.py"
   workflow_dispatch:
+    inputs:
+      publish_target:
+        description: "Artifact to build, test, and publish"
+        required: true
+        default: executor
+        type: choice
+        options:
+          - executor
+          - verifier
 
 permissions:
   contents: read
@@ -23,6 +32,7 @@ env:
 
 jobs:
   build-test-publish:
+    if: github.event_name != 'workflow_dispatch' || inputs.publish_target == 'executor'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -138,3 +148,95 @@ jobs:
             executor-components.json
             executor-image-inspect.json
           if-no-files-found: error
+
+  build-test-publish-verifier:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_target == 'verifier'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    env:
+      IMAGE_NAME: ghcr.io/kitahl/supernova-goal1-verifier
+      CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-verifier:candidate-${{ github.sha }}
+      RELEASE_TAG: ghcr.io/kitahl/supernova-goal1-verifier:g1-activation-20260829
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build one local single-platform verifier image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: runtime/goal1_verifier/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.CANDIDATE_TAG }}
+      - name: Exercise exact keyless sandbox and runtime inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          inventory="$(docker run --rm \
+            --network none --read-only --runtime runc --init \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --pids-limit 256 --memory 4g --cpus 2 \
+            --user 10001:10001 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=536870912 \
+            --tmpfs /run:rw,noexec,nosuid,size=16777216 \
+            --entrypoint /bin/sh "$CANDIDATE_TAG" -c \
+            'set -eu; test -x /opt/supernova/bin/lean4export; test -x /opt/supernova/bin/check_exports; test -x /opt/supernova/bin/nanoda_bin; test -f /opt/supernova/template/lake-manifest.json; test -f /opt/supernova/pins.json; /opt/lean/bin/lean --version')"
+          printf '%s\n' "$inventory"
+          printf '%s' '{"mode":"unsupported","schema":"supernova.goal1.verifier-container-request.v1"}' > "$RUNNER_TEMP/verifier-request.json"
+          cidfile="$RUNNER_TEMP/goal1-verifier.cid"
+          cleanup() {
+            if test -s "$cidfile"; then
+              docker rm -f "$(cat "$cidfile")" >/dev/null 2>&1 || true
+            fi
+            rm -f "$cidfile"
+          }
+          trap cleanup EXIT
+          set +e
+          response="$(timeout --signal=KILL 180s docker run --cidfile "$cidfile" --rm -i \
+            --network none --read-only --runtime runc --init \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --pids-limit 256 --memory 4g --cpus 2 \
+            --user 10001:10001 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=536870912 \
+            --tmpfs /run:rw,noexec,nosuid,size=16777216 \
+            "$CANDIDATE_TAG" < "$RUNNER_TEMP/verifier-request.json")"
+          verifier_status=$?
+          set -e
+          test "$verifier_status" -eq 20
+          test "$response" = '{"diagnostic":"unsupported mode","schema":"supernova.goal1.verifier-container-response.v1","status":"UNKNOWN"}'
+          cleanup
+          trap - EXIT
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the exact tested verifier image
+        id: publish-verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_id="$(docker image inspect "$CANDIDATE_TAG" --format '{{.Id}}')"
+          docker tag "$CANDIDATE_TAG" "$RELEASE_TAG"
+          push_output="$(docker push "$RELEASE_TAG")"
+          printf '%s\n' "$push_output"
+          digest="$(printf '%s\n' "$push_output" | sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\).*$/\1/p' | tail -n 1)"
+          test -n "$digest"
+          immutable_ref="${IMAGE_NAME}@${digest}"
+          docker pull "$immutable_ref"
+          published_id="$(docker image inspect "$immutable_ref" --format '{{.Id}}')"
+          test "$candidate_id" = "$published_id"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$immutable_ref" >> "$GITHUB_OUTPUT"
+      - name: Attest published verifier image
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.publish-verifier.outputs.digest }}
+          push-to-registry: true
