@@ -83,6 +83,7 @@ RUN cd /opt/supernova/template \
        '[[lean_exe]]' \
        'name = "parse_product"' \
        'root = "ParseProduct"' \
+       'supportInterpreter = true' \
        >> lakefile.toml \
     && lake build parse_product \
     && cp .lake/build/bin/parse_product /opt/supernova/bin/parse_product

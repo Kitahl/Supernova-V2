@@ -30,6 +30,12 @@ qualify_image = load_script("qualify_image")
 
 
 class Goal1VerifierRuntimeTests(unittest.TestCase):
+    def test_parser_executable_exports_symbols_for_trusted_initializers(self) -> None:
+        dockerfile = (
+            ROOT / "runtime" / "goal1_verifier" / "Dockerfile"
+        ).read_text(encoding="utf-8")
+        self.assertIn("'supportInterpreter = true'", dockerfile)
+
     def test_parser_initializes_search_path_before_importing_mathlib(self) -> None:
         source = (ROOT / "runtime" / "goal1_verifier" / "ParseProduct.lean").read_text(
             encoding="utf-8"
