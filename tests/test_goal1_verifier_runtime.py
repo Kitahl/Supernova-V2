@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import subprocess
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -149,6 +153,31 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
         self.assertIn("no-new-privileges:true", command)
         self.assertNotIn("--volume", command)
         self.assertNotIn("--mount", command)
+
+    def test_failed_qualification_persists_exact_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw) / "qualification.json"
+            stdout = io.StringIO()
+            with (
+                patch.object(
+                    qualify_image,
+                    "qualify",
+                    side_effect=RuntimeError("verifier exit 20: UNKNOWN detail"),
+                ),
+                patch.object(
+                    sys,
+                    "argv",
+                    ["qualify_image.py", "candidate", "--output", str(output)],
+                ),
+                redirect_stdout(stdout),
+            ):
+                exit_code = qualify_image.main()
+            persisted = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(1, exit_code)
+        self.assertEqual("FAILED", persisted["status"])
+        self.assertEqual("RuntimeError", persisted["error_type"])
+        self.assertIn("UNKNOWN detail", persisted["error"])
+        self.assertIn("::error file=runtime/goal1_verifier/qualify_image.py::", stdout.getvalue())
 
 
 if __name__ == "__main__":

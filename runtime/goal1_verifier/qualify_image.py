@@ -85,7 +85,8 @@ def run_container(
     if completed.returncode != expected_exit:
         raise RuntimeError(
             f"verifier exit {completed.returncode}, expected {expected_exit}: "
-            + completed.stderr.decode("utf-8", "replace")[:2000]
+            + (completed.stdout + b"\n" + completed.stderr)
+            .decode("utf-8", "replace")[:4000]
         )
     try:
         response = json.loads(completed.stdout.decode("utf-8"))
@@ -253,17 +254,38 @@ theorem supernova_hostile : True := by
     }
 
 
+def github_command_escape(value: str) -> str:
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("image")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = qualify(args.image)
+    exit_code = 0
+    try:
+        result = qualify(args.image)
+    except Exception as exc:  # noqa: BLE001 - qualification must persist its cause
+        result = {
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "image": args.image,
+            "status": "FAILED",
+        }
+        message = github_command_escape(
+            f"{result['error_type']}: {result['error']}"
+        )
+        print(
+            "::error file=runtime/goal1_verifier/qualify_image.py::"
+            + message
+        )
+        exit_code = 1
     raw = json.dumps(result, allow_nan=False, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
         args.output.write_text(raw, encoding="utf-8")
     print(raw, end="")
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
