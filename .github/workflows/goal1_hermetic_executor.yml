@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - "runtime/goal1_hermetic_executor/**"
+      - "runtime/goal1_verifier/**"
       - ".github/workflows/goal1_hermetic_executor.yml"
       - "tests/test_goal1_hermetic_executor.py"
+      - "tests/test_goal1_verifier_runtime.py"
   push:
     branches: [main]
     paths:
@@ -150,7 +152,7 @@ jobs:
           if-no-files-found: error
 
   build-test-publish-verifier:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_target == 'verifier'
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'verifier')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -171,45 +173,15 @@ jobs:
           docker buildx build --platform linux/amd64 --load \
             --tag "$CANDIDATE_TAG" \
             --file runtime/goal1_verifier/Dockerfile .
-      - name: Exercise exact keyless sandbox and runtime inventory
+      - name: Qualify real benign VALID and hostile containment
         shell: bash
         run: |
           set -euo pipefail
-          inventory="$(docker run --rm \
-            --network none --read-only --runtime runc --init \
-            --cap-drop ALL --security-opt no-new-privileges:true \
-            --pids-limit 256 --memory 4g --cpus 2 \
-            --user 10001:10001 \
-            --tmpfs /tmp:rw,noexec,nosuid,size=536870912 \
-            --tmpfs /run:rw,noexec,nosuid,size=16777216 \
-            --entrypoint /bin/sh "$CANDIDATE_TAG" -c \
-            'set -eu; test -x /opt/supernova/bin/lean4export; test -x /opt/supernova/bin/check_exports; test -x /opt/supernova/bin/nanoda_bin; test -f /opt/supernova/template/lake-manifest.json; test -f /opt/supernova/pins.json; /opt/lean/bin/lean --version')"
-          printf '%s\n' "$inventory"
-          printf '%s' '{"mode":"unsupported","schema":"supernova.goal1.verifier-container-request.v1"}' > "$RUNNER_TEMP/verifier-request.json"
-          cidfile="$RUNNER_TEMP/goal1-verifier.cid"
-          cleanup() {
-            if test -s "$cidfile"; then
-              docker rm -f "$(cat "$cidfile")" >/dev/null 2>&1 || true
-            fi
-            rm -f "$cidfile"
-          }
-          trap cleanup EXIT
-          set +e
-          response="$(timeout --signal=KILL 180s docker run --cidfile "$cidfile" --rm -i \
-            --network none --read-only --runtime runc --init \
-            --cap-drop ALL --security-opt no-new-privileges:true \
-            --pids-limit 256 --memory 4g --cpus 2 \
-            --user 10001:10001 \
-            --tmpfs /tmp:rw,noexec,nosuid,size=536870912 \
-            --tmpfs /run:rw,noexec,nosuid,size=16777216 \
-            "$CANDIDATE_TAG" < "$RUNNER_TEMP/verifier-request.json")"
-          verifier_status=$?
-          set -e
-          test "$verifier_status" -eq 20
-          test "$response" = '{"diagnostic":"unsupported mode","schema":"supernova.goal1.verifier-container-response.v1","status":"UNKNOWN"}'
-          cleanup
-          trap - EXIT
+          python runtime/goal1_verifier/qualify_image.py \
+            "$CANDIDATE_TAG" \
+            --output verifier-qualification.json
       - name: Log in to GHCR
+        if: github.event_name == 'workflow_dispatch'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -217,6 +189,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the exact tested verifier image
         id: publish-verifier
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
@@ -233,8 +206,15 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "image_ref=$immutable_ref" >> "$GITHUB_OUTPUT"
       - name: Attest published verifier image
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
           subject-name: ${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.publish-verifier.outputs.digest }}
           push-to-registry: true
+      - name: Upload verifier qualification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: goal1-verifier-qualification-${{ github.sha }}
+          path: verifier-qualification.json
+          if-no-files-found: error

@@ -78,6 +78,15 @@ RUN cd /opt/supernova/template \
     && lake update \
     && lake exe cache get
 
+COPY --chown=verifier:verifier runtime/goal1_verifier/freeze_runtime.py /opt/supernova/freeze_runtime.py
+COPY --chown=verifier:verifier runtime/goal1_verifier/entrypoint.py runtime/goal1_verifier/pins.json runtime/goal1_verifier/sandbox_sentinel.txt /opt/supernova/
+RUN cd /opt/supernova/template \
+    && lake env python3 /opt/supernova/freeze_runtime.py \
+       --template /opt/supernova/template \
+       --build-sysroot /home/verifier/.elan/toolchains/leanprover--lean4---v4.33.1 \
+       --runtime-sysroot /opt/lean \
+       --output /opt/supernova/VERIFIER_RUNTIME_LOCK.json
+
 RUN rm -rf /home/verifier/.cache /home/verifier/.cargo /home/verifier/.rustup \
        /opt/supernova/src
 
@@ -94,9 +103,15 @@ RUN apt-get update \
 COPY --from=build --chown=verifier:verifier \
   /home/verifier/.elan/toolchains/leanprover--lean4---v4.33.1/ /opt/lean/
 COPY --from=build --chown=verifier:verifier /opt/supernova/bin/ /opt/supernova/bin/
-COPY --chown=verifier:verifier runtime/goal1_verifier/entrypoint.py /opt/supernova/entrypoint.py
-COPY --chown=verifier:verifier runtime/goal1_verifier/pins.json /opt/supernova/pins.json
+COPY --from=build --chown=verifier:verifier /opt/supernova/entrypoint.py /opt/supernova/entrypoint.py
+COPY --from=build --chown=verifier:verifier /opt/supernova/pins.json /opt/supernova/pins.json
+COPY --from=build --chown=verifier:verifier /opt/supernova/sandbox_sentinel.txt /opt/supernova/sandbox_sentinel.txt
 COPY --from=build --chown=verifier:verifier /opt/supernova/template/ /opt/supernova/template/
+COPY --from=build --chown=verifier:verifier /opt/supernova/VERIFIER_RUNTIME_LOCK.json /opt/supernova/VERIFIER_RUNTIME_LOCK.json
+
+# Runtime verification is deliberately Lake- and Git-free. Dependency
+# materialization happens only in the networked build stage above.
+RUN rm -f /opt/lean/bin/lake
 
 USER verifier
 ENV PATH="/opt/lean/bin:/usr/local/bin:/usr/bin:/bin"

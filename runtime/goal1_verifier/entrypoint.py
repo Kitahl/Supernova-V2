@@ -4,12 +4,12 @@ import base64
 import hashlib
 import json
 import os
-from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any
-
 
 REQUEST_SCHEMA = "supernova.goal1.verifier-container-request.v1"
 RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v1"
@@ -18,16 +18,39 @@ MAX_SOURCE_BYTES = 4 * 1024 * 1024
 MAX_EXPORT_BYTES = 48 * 1024 * 1024
 MAX_DIAGNOSTIC_BYTES = 8 * 1024
 TEMPLATE = Path("/opt/supernova/template")
+RUNTIME_LOCK = Path("/opt/supernova/VERIFIER_RUNTIME_LOCK.json")
+TRUSTED_WORKING_DIRECTORY = TEMPLATE / ".lake" / "packages" / "mathlib"
+LEAN = Path("/opt/lean/bin/lean")
 LEAN4EXPORT = Path("/opt/supernova/bin/lean4export")
 CHECK_EXPORTS = Path("/opt/supernova/bin/check_exports")
 NANODA = Path("/opt/supernova/bin/nanoda_bin")
 TOOLCHAIN_BIN = "/opt/lean/bin"
 PERMITTED_AXIOMS = ("propext", "Quot.sound", "Classical.choice")
 PRIMITIVE_TARGETS = (
-    "Nat", "String", "String.mk", "Char", "Char.ofNat", "List", "Quot",
-    "Quot.mk", "Quot.lift", "Quot.ind", "Nat.add", "Nat.sub", "Nat.mul",
-    "Nat.pow", "Nat.gcd", "Nat.div", "Nat.mod", "Nat.beq", "Nat.ble",
-    "Nat.land", "Nat.lor", "Nat.xor", "Nat.shiftLeft", "Nat.shiftRight",
+    "Nat",
+    "String",
+    "String.mk",
+    "Char",
+    "Char.ofNat",
+    "List",
+    "Quot",
+    "Quot.mk",
+    "Quot.lift",
+    "Quot.ind",
+    "Nat.add",
+    "Nat.sub",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.gcd",
+    "Nat.div",
+    "Nat.mod",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.land",
+    "Nat.lor",
+    "Nat.xor",
+    "Nat.shiftLeft",
+    "Nat.shiftRight",
     "String.ofList",
 )
 
@@ -104,12 +127,82 @@ def response(status: str, **fields: object) -> None:
     sys.stdout.buffer.flush()
 
 
-def project(directory: Path) -> None:
-    for name in ("lakefile.toml", "lake-manifest.json", "lean-toolchain"):
-        os.symlink(TEMPLATE / name, directory / name)
-    lake = directory / ".lake"
-    lake.mkdir()
-    os.symlink(TEMPLATE / ".lake" / "packages", lake / "packages")
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def runtime_lock() -> dict[str, Any]:
+    try:
+        raw = RUNTIME_LOCK.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise InfrastructureError("verifier runtime lock is unreadable") from exc
+    if not isinstance(value, dict):
+        raise InfrastructureError("verifier runtime lock must be an object")
+    expected_root = value.get("root_sha256")
+    if not isinstance(expected_root, str):
+        raise InfrastructureError("verifier runtime lock root is missing")
+    body = dict(value)
+    del body["root_sha256"]
+    if sha256(canonical_bytes(body)) != expected_root:
+        raise InfrastructureError("verifier runtime lock root mismatch")
+    artifacts = value.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise InfrastructureError("verifier runtime artifacts changed")
+    binary_map = artifacts.get("binaries")
+    trusted_oleans = artifacts.get("trusted_oleans")
+    if not isinstance(binary_map, dict) or not isinstance(trusted_oleans, list):
+        raise InfrastructureError("verifier runtime artifact inventory changed")
+    inventory = [*binary_map.values(), *trusted_oleans]
+    for item in inventory:
+        if not isinstance(item, dict) or set(item) != {"path", "sha256", "size"}:
+            raise InfrastructureError("verifier runtime artifact entry changed")
+        path = Path(token(item["path"], "runtime artifact path"))
+        expected_sha = token(item["sha256"], "runtime artifact sha256")
+        expected_size = item["size"]
+        if not path.is_absolute() or type(expected_size) is not int:
+            raise InfrastructureError("verifier runtime artifact identity changed")
+        try:
+            stat = path.stat()
+        except OSError as exc:
+            raise InfrastructureError("verifier runtime artifact is missing") from exc
+        if stat.st_size != expected_size or file_sha256(path) != expected_sha:
+            raise InfrastructureError("verifier runtime artifact digest mismatch")
+    if not TRUSTED_WORKING_DIRECTORY.is_dir():
+        raise InfrastructureError("trusted mathlib working directory is missing")
+    return value
+
+
+def runtime_environment(lock: dict[str, Any], cell_root: Path) -> dict[str, str]:
+    module_environment = lock.get("module_environment")
+    if not isinstance(module_environment, dict):
+        raise InfrastructureError("verifier module environment changed")
+    result = {
+        "HOME": str(cell_root / "home"),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "LEAN_SYSROOT": "/opt/lean",
+        "PATH": f"{TOOLCHAIN_BIN}:/usr/local/bin:/usr/bin:/bin",
+    }
+    for key in ("LEAN_PATH", "LEAN_SRC_PATH", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
+        entries = module_environment.get(key)
+        if not isinstance(entries, list) or any(
+            not isinstance(item, str) for item in entries
+        ):
+            raise InfrastructureError(f"{key} runtime lock entry changed")
+        exact = [str(cell_root), *entries] if key == "LEAN_PATH" else entries
+        if exact:
+            result[key] = os.pathsep.join(exact)
+    for forbidden in ("git", "lake"):
+        if shutil.which(forbidden, path=result["PATH"]) is not None:
+            raise InfrastructureError(
+                f"forbidden runtime command is present: {forbidden}"
+            )
+    return result
 
 
 def _bounded_file_bytes(handle: Any, limit: int, field: str) -> bytes:
@@ -128,6 +221,7 @@ def run(
     command: list[str],
     *,
     cwd: Path,
+    environment: dict[str, str],
     input_bytes: bytes | None = None,
     stdout_limit: int = MAX_DIAGNOSTIC_BYTES,
     stderr_limit: int = MAX_DIAGNOSTIC_BYTES,
@@ -146,12 +240,7 @@ def run(
             stderr=stderr_file,
             check=False,
             shell=False,
-            env={
-                "HOME": "/tmp/home",
-                "LANG": "C.UTF-8",
-                "LC_ALL": "C.UTF-8",
-                "PATH": f"{TOOLCHAIN_BIN}:/usr/local/bin:/usr/bin:/bin",
-            },
+            env=environment,
         )
         return subprocess.CompletedProcess(
             completed.args,
@@ -162,13 +251,78 @@ def run(
 
 
 def export_targets(theorems: tuple[str, ...], axioms: tuple[str, ...]) -> list[str]:
-    return sorted(set((*theorems, *axioms, *PRIMITIVE_TARGETS)))
+    return sorted({*theorems, *axioms, *PRIMITIVE_TARGETS})
 
 
-def elaborate(request: dict[str, Any]) -> None:
+def compile_module(
+    *,
+    root: Path,
+    module: str,
+    source: bytes,
+    lock: dict[str, Any],
+    warning_as_error: bool = True,
+) -> subprocess.CompletedProcess[bytes]:
+    source_path = root / f"{module}.lean"
+    olean_path = root / f"{module}.olean"
+    source_path.write_bytes(source)
+    command = [
+        str(LEAN),
+        "-R",
+        str(root),
+        "-o",
+        str(olean_path),
+        "-t",
+        "0",
+    ]
+    if warning_as_error:
+        command.append("-DwarningAsError=true")
+    command.extend(
+        [
+            "-M",
+            "4096",
+            str(source_path),
+        ]
+    )
+    completed = run(
+        command,
+        cwd=TRUSTED_WORKING_DIRECTORY,
+        environment=runtime_environment(lock, root),
+    )
+    if completed.returncode == 0:
+        try:
+            stat = olean_path.stat()
+        except OSError as exc:
+            raise InfrastructureError(
+                "Lean did not produce the expected olean"
+            ) from exc
+        if not olean_path.is_file() or stat.st_size == 0:
+            raise InfrastructureError("Lean produced an invalid olean")
+    return completed
+
+
+def export_module(
+    *,
+    root: Path,
+    module: str,
+    targets: list[str],
+    lock: dict[str, Any],
+) -> subprocess.CompletedProcess[bytes]:
+    return run(
+        [str(LEAN4EXPORT), module, "--", *targets],
+        cwd=TRUSTED_WORKING_DIRECTORY,
+        environment=runtime_environment(lock, root),
+        stdout_limit=MAX_EXPORT_BYTES,
+    )
+
+
+def elaborate(request: dict[str, Any], lock: dict[str, Any]) -> None:
     expected = {
-        "mode", "schema", "solution_source_b64", "solution_source_sha256",
-        "theorem_names", "permitted_axioms",
+        "mode",
+        "schema",
+        "solution_source_b64",
+        "solution_source_sha256",
+        "theorem_names",
+        "permitted_axioms",
     }
     if set(request) != expected or request.get("mode") != "elaborate":
         raise InfrastructureError("elaborate request fields changed")
@@ -180,21 +334,21 @@ def elaborate(request: dict[str, Any]) -> None:
     with tempfile.TemporaryDirectory(dir="/tmp") as raw:
         root = Path(raw)
         (root / "home").mkdir()
-        project(root)
-        (root / "Solution.lean").write_bytes(solution)
-        built = run(["lake", "env", "lean", "Solution.lean"], cwd=root)
+        built = compile_module(root=root, module="Solution", source=solution, lock=lock)
         if built.returncode != 0:
-            raise Rejected((built.stderr + built.stdout)[:8192].decode("utf-8", "replace"))
-        exported = run(
-            [
-                "lake", "env", str(LEAN4EXPORT), "Solution", "--",
-                *export_targets(theorems, axioms),
-            ],
-            cwd=root,
-            stdout_limit=MAX_EXPORT_BYTES,
+            raise Rejected(
+                (built.stderr + built.stdout)[:8192].decode("utf-8", "replace")
+            )
+        exported = export_module(
+            root=root,
+            module="Solution",
+            targets=export_targets(theorems, axioms),
+            lock=lock,
         )
         if exported.returncode != 0 or not exported.stdout:
-            raise Rejected((exported.stderr + exported.stdout)[:8192].decode("utf-8", "replace"))
+            raise Rejected(
+                (exported.stderr + exported.stdout)[:8192].decode("utf-8", "replace")
+            )
         if len(exported.stdout) > MAX_EXPORT_BYTES:
             raise InfrastructureError("solution export exceeds byte limit")
         response(
@@ -204,11 +358,16 @@ def elaborate(request: dict[str, Any]) -> None:
         )
 
 
-def check(request: dict[str, Any]) -> None:
+def check(request: dict[str, Any], lock: dict[str, Any]) -> None:
     expected = {
-        "challenge_source_b64", "challenge_source_sha256", "mode",
-        "permitted_axioms", "schema", "solution_export_b64",
-        "solution_export_sha256", "theorem_names",
+        "challenge_source_b64",
+        "challenge_source_sha256",
+        "mode",
+        "permitted_axioms",
+        "schema",
+        "solution_export_b64",
+        "solution_export_sha256",
+        "theorem_names",
     }
     if set(request) != expected or request.get("mode") != "check":
         raise InfrastructureError("check request fields changed")
@@ -221,22 +380,24 @@ def check(request: dict[str, Any]) -> None:
     with tempfile.TemporaryDirectory(dir="/tmp") as raw:
         root = Path(raw)
         (root / "home").mkdir()
-        project(root)
-        (root / "Challenge.lean").write_bytes(challenge)
         (root / "solution.ndjson").write_bytes(solution_export)
-        built = run(["lake", "env", "lean", "Challenge.lean"], cwd=root)
+        built = compile_module(
+            root=root,
+            module="Challenge",
+            source=challenge,
+            lock=lock,
+            warning_as_error=False,
+        )
         if built.returncode != 0:
             raise InfrastructureError(
                 "trusted challenge failed to elaborate: "
                 + (built.stderr + built.stdout)[:8192].decode("utf-8", "replace")
             )
-        challenge_export = run(
-            [
-                "lake", "env", str(LEAN4EXPORT), "Challenge", "--",
-                *export_targets(theorems, axioms),
-            ],
-            cwd=root,
-            stdout_limit=MAX_EXPORT_BYTES,
+        challenge_export = export_module(
+            root=root,
+            module="Challenge",
+            targets=export_targets(theorems, axioms),
+            lock=lock,
         )
         if challenge_export.returncode != 0 or not challenge_export.stdout:
             raise InfrastructureError("trusted challenge export failed")
@@ -248,13 +409,18 @@ def check(request: dict[str, Any]) -> None:
         (root / "checker.json").write_bytes(canonical_bytes(checker_config))
         compared = run(
             [
-                str(CHECK_EXPORTS), "challenge.ndjson", "solution.ndjson",
+                str(CHECK_EXPORTS),
+                "challenge.ndjson",
+                "solution.ndjson",
                 "checker.json",
             ],
             cwd=root,
+            environment=runtime_environment(lock, root),
         )
         if compared.returncode != 0:
-            raise Rejected((compared.stderr + compared.stdout)[:8192].decode("utf-8", "replace"))
+            raise Rejected(
+                (compared.stderr + compared.stdout)[:8192].decode("utf-8", "replace")
+            )
         nanoda_config = {
             "nat_extension": True,
             "permitted_axioms": list(axioms),
@@ -265,10 +431,15 @@ def check(request: dict[str, Any]) -> None:
         }
         (root / "nanoda.json").write_bytes(canonical_bytes(nanoda_config))
         nanoda = run(
-            [str(NANODA), "nanoda.json"], cwd=root, input_bytes=solution_export
+            [str(NANODA), "nanoda.json"],
+            cwd=root,
+            environment=runtime_environment(lock, root),
+            input_bytes=solution_export,
         )
         if nanoda.returncode != 0:
-            raise Rejected((nanoda.stderr + nanoda.stdout)[:8192].decode("utf-8", "replace"))
+            raise Rejected(
+                (nanoda.stderr + nanoda.stdout)[:8192].decode("utf-8", "replace")
+            )
         response(
             "VALID",
             challenge_export_sha256=sha256(challenge_export.stdout),
@@ -279,12 +450,13 @@ def check(request: dict[str, Any]) -> None:
 
 def main() -> int:
     try:
+        lock = runtime_lock()
         request = read_request()
         mode = request.get("mode")
         if mode == "elaborate":
-            elaborate(request)
+            elaborate(request, lock)
         elif mode == "check":
-            check(request)
+            check(request, lock)
         else:
             raise InfrastructureError("unsupported mode")
         return 0
