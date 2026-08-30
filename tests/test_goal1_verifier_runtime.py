@@ -35,8 +35,14 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("Lean.initSearchPath (← Lean.findSysroot)", source)
+        self.assertIn("unsafe Lean.enableInitializersExecution", source)
         self.assertLess(
-            source.index("Lean.initSearchPath"), source.index("Lean.importModules")
+            source.index("Lean.initSearchPath"),
+            source.index("Lean.enableInitializersExecution"),
+        )
+        self.assertLess(
+            source.index("Lean.enableInitializersExecution"),
+            source.index("Lean.importModules"),
         )
 
     def test_direct_lean_command_is_exact_and_produces_olean(self) -> None:

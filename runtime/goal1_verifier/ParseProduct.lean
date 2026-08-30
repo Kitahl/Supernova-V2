@@ -5,6 +5,7 @@ open Lean
 private def parseProduct (path : String) : IO UInt32 := do
   let input <- IO.FS.readFile path
   Lean.initSearchPath (← Lean.findSysroot)
+  unsafe Lean.enableInitializersExecution
   let env <- Lean.importModules #[{ module := `Mathlib }] {} (loadExts := true)
   match Lean.Parser.runParserCategory env `command input path with
   | .ok _ =>
