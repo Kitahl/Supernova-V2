@@ -60,7 +60,7 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
         self.assertIn("-o", command)
         self.assertIn("-t", command)
         self.assertIn("-DwarningAsError=true", command)
-        self.assertEqual(command[-3:-1], ["-M", "4096"])
+        self.assertEqual(command[-3:-1], ["-M", "0"])
 
     def test_trusted_reference_disables_only_warning_escalation(self) -> None:
         commands: list[list[str]] = []
@@ -89,7 +89,7 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
         command = commands[0]
         self.assertNotIn("-DwarningAsError=true", command)
         self.assertEqual(command[command.index("-t") + 1], "0")
-        self.assertEqual(command[command.index("-M") + 1], "4096")
+        self.assertEqual(command[command.index("-M") + 1], "0")
 
     def test_runtime_environment_is_locked_and_lake_git_are_absent(self) -> None:
         lock = {

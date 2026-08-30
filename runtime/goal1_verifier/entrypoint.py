@@ -17,6 +17,10 @@ MAX_REQUEST_BYTES = 64 * 1024 * 1024
 MAX_SOURCE_BYTES = 4 * 1024 * 1024
 MAX_EXPORT_BYTES = 48 * 1024 * 1024
 MAX_DIAGNOSTIC_BYTES = 8 * 1024
+# Lean's -M flag is measured in megabytes.  Zero disables the cumulative
+# interpreter threshold so the host-observed cgroup is the single memory
+# authority; an actual cgroup OOM is recorded as UNKNOWN rather than INVALID.
+LEAN_INTERNAL_MEMORY_MEGABYTES = 0
 TEMPLATE = Path("/opt/supernova/template")
 RUNTIME_LOCK = Path("/opt/supernova/VERIFIER_RUNTIME_LOCK.json")
 TRUSTED_WORKING_DIRECTORY = TEMPLATE / ".lake" / "packages" / "mathlib"
@@ -279,7 +283,7 @@ def compile_module(
     command.extend(
         [
             "-M",
-            "4096",
+            str(LEAN_INTERNAL_MEMORY_MEGABYTES),
             str(source_path),
         ]
     )
