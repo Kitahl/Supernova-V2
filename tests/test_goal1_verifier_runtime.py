@@ -30,6 +30,15 @@ qualify_image = load_script("qualify_image")
 
 
 class Goal1VerifierRuntimeTests(unittest.TestCase):
+    def test_parser_initializes_search_path_before_importing_mathlib(self) -> None:
+        source = (ROOT / "runtime" / "goal1_verifier" / "ParseProduct.lean").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Lean.initSearchPath (← Lean.findSysroot)", source)
+        self.assertLess(
+            source.index("Lean.initSearchPath"), source.index("Lean.importModules")
+        )
+
     def test_direct_lean_command_is_exact_and_produces_olean(self) -> None:
         commands: list[list[str]] = []
 
@@ -177,7 +186,9 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
         self.assertEqual("FAILED", persisted["status"])
         self.assertEqual("RuntimeError", persisted["error_type"])
         self.assertIn("UNKNOWN detail", persisted["error"])
-        self.assertIn("::error file=runtime/goal1_verifier/qualify_image.py::", stdout.getvalue())
+        self.assertIn(
+            "::error file=runtime/goal1_verifier/qualify_image.py::", stdout.getvalue()
+        )
 
 
 if __name__ == "__main__":
