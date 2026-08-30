@@ -3,14 +3,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import inspect
-import os
-from dataclasses import replace
 import json
+import os
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,6 +19,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import supernova_goal1.evidence_bridge as evidence_bridge_module
+import supernova_goal1.verifier_evidence as verifier_evidence_module
 from supernova_goal1.artifacts import (
     ScheduledChatArtifactEnvelope,
     ScheduledChatArtifactKind,
@@ -41,8 +43,8 @@ from supernova_goal1.dispatch import (
     DispatchAuthority,
 )
 from supernova_goal1.evidence_bridge import (
-    EvidenceBridgeBundle,
     EvaluatorEvidenceRecord,
+    EvidenceBridgeBundle,
     ExecutionLedgerAuthority,
     bridge_closed_evidence,
 )
@@ -54,8 +56,6 @@ from supernova_goal1.execution.common import (
 )
 from supernova_goal1.problem import BenchmarkProblemIdentity
 from supernova_goal1.verifier import VerifierResult, VerifierStatus
-import supernova_goal1.evidence_bridge as evidence_bridge_module
-import supernova_goal1.verifier_evidence as verifier_evidence_module
 from supernova_goal1.verifier_evidence import (
     HostVerifierSigner,
     TerminationCause,
@@ -76,9 +76,7 @@ class EvidenceBridgeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.protocol = json.loads(
-            (ROOT / "goal1" / "CONFIRMATORY_PROTOCOL.json").read_text(
-                encoding="utf-8"
-            )
+            (ROOT / "goal1" / "CONFIRMATORY_PROTOCOL.json").read_text(encoding="utf-8")
         )
         cls.manifest_bundle = build_non_credit_draft(
             cls.protocol,
@@ -161,7 +159,7 @@ class EvidenceBridgeTests(unittest.TestCase):
             for arm in Arm:
                 request_bytes = (
                     f"prove:{problem.native_id}:{arm.value}:{attempt}"
-                ).encode("utf-8")
+                ).encode()
                 request_artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
                     request_bytes,
                     kind=ScheduledChatArtifactKind.REQUEST,
@@ -208,7 +206,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                 response_bytes = (
                     b""
                     if no_answer
-                    else f"by\n  exact proof_{arm.value}_{attempt}".encode("utf-8")
+                    else f"by\n  exact proof_{arm.value}_{attempt}".encode()
                 )
                 response_artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
                     response_bytes,
@@ -227,18 +225,15 @@ class EvidenceBridgeTests(unittest.TestCase):
                     request_artifact_id=request_artifact.artifact_id,
                     response_artifact=response_artifact,
                     status=(
-                        AttemptStatus.NO_ANSWER
-                        if no_answer
-                        else AttemptStatus.ANSWERED
+                        AttemptStatus.NO_ANSWER if no_answer else AttemptStatus.ANSWERED
                     ),
                     error=None,
                 )
                 receipt = None
                 verifier_ms = 0
                 if not no_answer:
-                    passed = (
-                        (arm is Arm.VERIFIED_CHAIN and attempt == 0)
-                        or (arm is Arm.PORTFOLIO and attempt == 1)
+                    passed = (arm is Arm.VERIFIED_CHAIN and attempt == 0) or (
+                        arm is Arm.PORTFOLIO and attempt == 1
                     )
                     status = VerifierStatus.PASS if passed else VerifierStatus.FAIL
                     verifier_result = VerifierResult(
@@ -267,9 +262,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                             ledger._issue_context_isolation_receipt(completion)
                         ),
                         predecessor_reconciliation_receipt=(
-                            ledger._issue_predecessor_reconciliation_receipt(
-                                completion
-                            )
+                            ledger._issue_predecessor_reconciliation_receipt(completion)
                         ),
                         orchestration_milliseconds=1,
                     )
@@ -277,16 +270,12 @@ class EvidenceBridgeTests(unittest.TestCase):
                 prefix = request.frozen_request_sha256
                 expected_by_arm[arm].extend(
                     (
-                        ExpectedCostEvent.scheduled_chat_model_call(
-                            f"{prefix}:model"
-                        ),
+                        ExpectedCostEvent.scheduled_chat_model_call(f"{prefix}:model"),
                         ExpectedCostEvent.context_isolation(
                             f"{prefix}:context_isolation"
                         ),
                         ExpectedCostEvent.verifier(f"{prefix}:verifier"),
-                        ExpectedCostEvent.orchestration(
-                            f"{prefix}:orchestration"
-                        ),
+                        ExpectedCostEvent.orchestration(f"{prefix}:orchestration"),
                         ExpectedCostEvent.predecessor_reconciliation(
                             f"{prefix}:predecessor_reconciliation"
                         ),
@@ -299,9 +288,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                             request_utf8=request_bytes,
                             response_utf8=response_bytes,
                         ),
-                        CostEvent.context_isolation(
-                            f"{prefix}:context_isolation"
-                        ),
+                        CostEvent.context_isolation(f"{prefix}:context_isolation"),
                         CostEvent.verifier(
                             f"{prefix}:verifier", milliseconds=verifier_ms
                         ),
@@ -334,9 +321,7 @@ class EvidenceBridgeTests(unittest.TestCase):
             "protocol": self.protocol,
             "public_manifest": self.manifest_bundle.public_manifest,
             "operator_plan": self.fixture_operator_plan,
-            "cost_reports_by_problem": {
-                self.native_problem_id: self.report
-            },
+            "cost_reports_by_problem": {self.native_problem_id: self.report},
         }
         arguments.update(overrides)
         with patch(
@@ -356,9 +341,7 @@ class EvidenceBridgeTests(unittest.TestCase):
         record = by_arm[Arm.VERIFIED_CHAIN]
         self.assertEqual(self.native_problem_id, record.problem_id)
         self.assertEqual(16, len(record.protocol_dispatch_ids))
-        self.assertEqual(
-            16, len(record.protocol_binding_receipt_sha256s)
-        )
+        self.assertEqual(16, len(record.protocol_binding_receipt_sha256s))
         self.assertEqual(16, len(record.execution_receipt_sha256s))
         self.assertEqual(16, len(record.context_isolation_receipt_sha256s))
         self.assertEqual(16, len(record.predecessor_reconciliation_sha256s))
@@ -377,9 +360,7 @@ class EvidenceBridgeTests(unittest.TestCase):
         record_values[record._fields.index("completion_statuses")] = (
             CompletionStatus.SUCCEEDED,
         ) * 16
-        forged_record = tuple.__new__(
-            EvaluatorEvidenceRecord, tuple(record_values)
-        )
+        forged_record = tuple.__new__(EvaluatorEvidenceRecord, tuple(record_values))
         bundle_values = list(bundle)
         bundle_values[bundle._fields.index("records")] = (
             *bundle.records[:-1],
@@ -388,12 +369,8 @@ class EvidenceBridgeTests(unittest.TestCase):
         bundle_values[bundle._fields.index("manifest_credit_status")] = (
             "CONFIRMATORY_CREDIT_ELIGIBLE"
         )
-        forged_bundle = tuple.__new__(
-            EvidenceBridgeBundle, tuple(bundle_values)
-        )
-        with self.assertRaisesRegex(
-            ValueError, "does not bind|authentication failed"
-        ):
+        forged_bundle = tuple.__new__(EvidenceBridgeBundle, tuple(bundle_values))
+        with self.assertRaisesRegex(ValueError, "does not bind|authentication failed"):
             self.ledger.verify_evidence_bridge_bundle(forged_bundle)
 
         with self.assertRaisesRegex(TypeError, "cannot be replaced"):
@@ -432,9 +409,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                 operator_plan=self.manifest_bundle.operator_plan,
                 cost_reports_by_problem={self.native_problem_id: self.report},
             )
-        bad_manifest = json.loads(
-            json.dumps(self.manifest_bundle.public_manifest)
-        )
+        bad_manifest = json.loads(json.dumps(self.manifest_bundle.public_manifest))
         bad_manifest["protocol_id"] = "caller-relabel"
         with self.assertRaises(ValueError):
             bridge_closed_evidence(
@@ -468,9 +443,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                     self.ledger._issue_context_isolation_receipt(completion)
                 ),
                 predecessor_reconciliation_receipt=(
-                    self.ledger._issue_predecessor_reconciliation_receipt(
-                        completion
-                    )
+                    self.ledger._issue_predecessor_reconciliation_receipt(completion)
                 ),
                 orchestration_milliseconds=1,
             )
@@ -530,17 +503,11 @@ class EvidenceBridgeTests(unittest.TestCase):
             elif event.kind.value == "context_isolation":
                 zeroed.append(CostEvent.context_isolation(event.event_id))
             elif event.kind.value == "verifier":
-                zeroed.append(
-                    CostEvent.verifier(event.event_id, milliseconds=0)
-                )
+                zeroed.append(CostEvent.verifier(event.event_id, milliseconds=0))
             elif event.kind.value == "orchestration":
-                zeroed.append(
-                    CostEvent.orchestration(event.event_id, milliseconds=0)
-                )
+                zeroed.append(CostEvent.orchestration(event.event_id, milliseconds=0))
             else:
-                zeroed.append(
-                    CostEvent.predecessor_reconciliation(event.event_id)
-                )
+                zeroed.append(CostEvent.predecessor_reconciliation(event.event_id))
         traces[traces.index(ordinary)] = ArmCostTrace.from_events(
             Arm.ORDINARY,
             zeroed,
@@ -594,9 +561,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                     completion,
                     context_isolation_receipt="missing",
                     predecessor_reconciliation_receipt=(
-                        ledger._issue_predecessor_reconciliation_receipt(
-                            completion
-                        )
+                        ledger._issue_predecessor_reconciliation_receipt(completion)
                     ),
                     orchestration_milliseconds=1,
                 )
@@ -608,9 +573,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                     completion,
                     context_isolation_receipt=forged,
                     predecessor_reconciliation_receipt=(
-                        ledger._issue_predecessor_reconciliation_receipt(
-                            completion
-                        )
+                        ledger._issue_predecessor_reconciliation_receipt(completion)
                     ),
                     orchestration_milliseconds=1,
                 )
@@ -650,9 +613,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                     str(Path(tmp.name, f"execution-{index}.sqlite").resolve()),
                     run_id=run_id,
                     issuer_id="test-host",
-                    execution_authority_sha256=sha(
-                        "non-credit-test-authority"
-                    ),
+                    execution_authority_sha256=sha("non-credit-test-authority"),
                     secret=b"e" * 32,
                     protocol=self.protocol,
                     public_manifest=self.manifest_bundle.public_manifest,
@@ -662,15 +623,13 @@ class EvidenceBridgeTests(unittest.TestCase):
                     str(Path(tmp.name, f"dispatch-{index}.sqlite").resolve()),
                     run_id,
                 )
-                request_artifact = (
-                    ScheduledChatArtifactEnvelope.from_visible_utf8(
-                        b"binding-negative",
-                        kind=ScheduledChatArtifactKind.REQUEST,
-                        run_id=run_id,
-                        problem_id=base.problem_id,
-                        arm=base.arm,
-                        attempt=base.attempt,
-                    )
+                request_artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
+                    b"binding-negative",
+                    kind=ScheduledChatArtifactKind.REQUEST,
+                    run_id=run_id,
+                    problem_id=base.problem_id,
+                    arm=base.arm,
+                    attempt=base.attempt,
                 )
                 request = FrozenProblemRequest(
                     run_id=run_id,
@@ -686,9 +645,7 @@ class EvidenceBridgeTests(unittest.TestCase):
                     runtime_sha256=base.runtime_sha256,
                     request_artifact=request_artifact,
                     protocol_dispatch_id=protocol_dispatch_id,
-                    confirmatory_manifest_sha256=(
-                        confirmatory_manifest_sha256
-                    ),
+                    confirmatory_manifest_sha256=(confirmatory_manifest_sha256),
                 )
                 signer = CompletionSigner.generate()
                 manifest = authority.register(
@@ -706,14 +663,10 @@ class EvidenceBridgeTests(unittest.TestCase):
             self._bridge(cost_reports_by_problem={})
         with self.assertRaisesRegex(TypeError, "exact dict"):
             self._bridge(
-                cost_reports_by_problem={
-                    self.native_problem_id: self.report
-                }.items()
+                cost_reports_by_problem={self.native_problem_id: self.report}.items()
             )
         with self.assertRaisesRegex(TypeError, "exact CompleteCostReport"):
-            self._bridge(
-                cost_reports_by_problem={self.native_problem_id: object()}
-            )
+            self._bridge(cost_reports_by_problem={self.native_problem_id: object()})
 
     def test_cross_run_execution_ledger_is_rejected(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -733,7 +686,6 @@ class EvidenceBridgeTests(unittest.TestCase):
         finally:
             tmp.cleanup()
 
-
     def test_predecessor_receipt_is_bound_to_frozen_graph(self) -> None:
         completion = next(
             value
@@ -741,9 +693,7 @@ class EvidenceBridgeTests(unittest.TestCase):
             if value.payload.request.arm is Arm.VERIFIED_CHAIN
             and value.payload.request.attempt == 1
         )
-        receipt = self.ledger._issue_predecessor_reconciliation_receipt(
-            completion
-        )
+        receipt = self.ledger._issue_predecessor_reconciliation_receipt(completion)
         forged = replace(
             receipt,
             protocol_dispatch_id=(
@@ -821,9 +771,12 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             "candidate_id": "sha256:" + hashlib.sha256(self.candidate).hexdigest(),
             "candidate_source_sha256": hashlib.sha256(self.candidate).hexdigest(),
             "theorem_statement_sha256": sha("statement"),
+            "theorem_target_set_sha256": hashlib.sha256(
+                verifier_evidence_module.canonical_bytes(["alpha"])
+            ).hexdigest(),
             "source_construction_sha256": hashlib.sha256(self.source).hexdigest(),
             "requested_runtime_sha256": sha("requested-runtime"),
-            "actual_runtime_sha256": sha("actual-runtime"),
+            "actual_runtime_sha256": self.launcher.toolchain_lock_sha256,
             "immutable_configuration_sha256": sha("immutable-config"),
         }
         raw.update(changes)
@@ -838,9 +791,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         return VerifierEvidenceStore(
             (self.root / name).resolve(),
             verification_key=(
-                self.signer.public_key
-                if verification_key is None
-                else verification_key
+                self.signer.public_key if verification_key is None else verification_key
             ),
             expected_signing_key_id=self.signer.signing_key_id,
             expected_identity=self.launcher.identity,
@@ -979,9 +930,10 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             ),
         )
         for changed in variants:
-            with self.subTest(field=changed):
-                with self.assertRaises((KeyError, ValueError, sqlite3.IntegrityError)):
-                    self.append(store, record, changed)
+            with self.subTest(field=changed), self.assertRaises(
+                (KeyError, ValueError, sqlite3.IntegrityError)
+            ):
+                self.append(store, record, changed)
 
         with self.assertRaises(sqlite3.IntegrityError):
             self.append(store, record, binding)
@@ -1034,16 +986,17 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         binding = self.binding()
         record = self.issue_unpersisted(binding)
         store = self.store("rollback.sqlite")
-        with patch.object(store, "_read_row", side_effect=RuntimeError("forced")):
-            with self.assertRaisesRegex(RuntimeError, "forced"):
-                self.append(store, record, binding)
+        with patch.object(
+            store, "_read_row", side_effect=RuntimeError("forced")
+        ), self.assertRaisesRegex(RuntimeError, "forced"):
+            self.append(store, record, binding)
         connection = sqlite3.connect(store.path)
         try:
             self.assertEqual(
                 0,
-                connection.execute(
-                    "SELECT COUNT(*) FROM verifier_evidence"
-                ).fetchone()[0],
+                connection.execute("SELECT COUNT(*) FROM verifier_evidence").fetchone()[
+                    0
+                ],
             )
         finally:
             connection.close()
@@ -1061,7 +1014,9 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         finally:
             connection.close()
 
-    def test_sandbox_policy_has_no_mount_network_key_database_or_mutable_tag(self) -> None:
+    def test_sandbox_policy_has_no_mount_network_key_database_or_mutable_tag(
+        self,
+    ) -> None:
         policy = self.launcher.sandbox_policy
         self.assertEqual("none", policy["network"])
         self.assertEqual([], policy["host_mounts"])
@@ -1101,11 +1056,11 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         source = b"import Mathlib\n\ntheorem alpha : True := by\n"
         candidate = (
             "  run_tac\n"
-            f"    let contents <- IO.FS.readFile \"{candidate_path}\"\n"
-            f"    unless contents == \"{canary}\" do\n"
-            "      throwError \"host canary mismatch\"\n"
+            f'    let contents <- IO.FS.readFile "{candidate_path}"\n'
+            f'    unless contents == "{canary}" do\n'
+            '      throwError "host canary mismatch"\n'
             "  exact True.intro\n"
-        ).encode("utf-8")
+        ).encode()
         binding = self.binding(
             actual_dispatch_id=sha("hostile-host-file-dispatch"),
             candidate_id="sha256:" + hashlib.sha256(candidate).hexdigest(),
@@ -1115,7 +1070,9 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         checker_configuration = verifier_evidence_module.canonical_bytes(
             {
                 "check_exports_sha256": hashlib.sha256(
-                    (ROOT / "runtime" / "goal1_verifier" / "CheckExports.lean").read_bytes()
+                    (
+                        ROOT / "runtime" / "goal1_verifier" / "CheckExports.lean"
+                    ).read_bytes()
                 ).hexdigest(),
                 "permitted_axioms": list(verifier_evidence_module.PERMITTED_AXIOMS),
             }
@@ -1131,9 +1088,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         launcher = VerifierSandboxLauncher(
             image_ref=image_ref,
             command=("--stdio",),
-            image_environment=(
-                "PATH=/opt/lean/bin:/usr/local/bin:/usr/bin:/bin",
-            ),
+            image_environment=("PATH=/opt/lean/bin:/usr/local/bin:/usr/bin:/bin",),
             container_user="10001:10001",
             memory_bytes=4 * 1024 * 1024 * 1024,
             nano_cpus=2_000_000_000,
@@ -1193,7 +1148,9 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 return verifier_evidence_module.canonical_bytes(
                     {
                         "schema": verifier_evidence_module.CONTAINER_RESPONSE_SCHEMA,
-                        "solution_export_b64": base64.b64encode(exported).decode("ascii"),
+                        "solution_export_b64": base64.b64encode(exported).decode(
+                            "ascii"
+                        ),
                         "solution_export_sha256": hashlib.sha256(exported).hexdigest(),
                         "status": status,
                     }
@@ -1231,7 +1188,11 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             else 10
             if elaborator_status == "INVALID"
             else 20,
-            0 if checker_status == "VALID" else 10 if checker_status == "INVALID" else 20,
+            0
+            if checker_status == "VALID"
+            else 10
+            if checker_status == "INVALID"
+            else 20,
         )
         captured_requests: list[bytes] = []
         created_containers: list[str] = []
@@ -1240,7 +1201,9 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         inspection_count: dict[str, int] = {}
         phase_by_container: dict[str, int] = {}
 
-        def invoke(argv: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        def invoke(
+            argv: object, **kwargs: object
+        ) -> subprocess.CompletedProcess[bytes]:
             args = list(argv)  # type: ignore[arg-type]
             if args[1] == "version":
                 return subprocess.CompletedProcess(
@@ -1344,7 +1307,9 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         }
         return record
 
-    def test_valid_requires_two_fresh_keyless_containers_removed_before_signing(self) -> None:
+    def test_valid_requires_two_fresh_keyless_containers_removed_before_signing(
+        self,
+    ) -> None:
         record = self._mocked_supervisor_run(name="valid")
         observed = record.body["observations"]
         self.assertEqual(VerifierVerdict.VALID.value, observed["verdict"])
@@ -1359,7 +1324,38 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             ("elaborate", "check"), tuple(value["mode"] for value in requests)
         )
 
-    def test_elaborator_rejection_is_unknown_but_checker_rejection_is_invalid(self) -> None:
+    def test_supervisor_rejects_target_substitution_and_runtime_drift(self) -> None:
+        store = self.store("bound-inputs.sqlite")
+        supervisor = VerifierSupervisor(self.launcher, self.signer, store)
+        binding = self.binding(actual_dispatch_id=sha("bound-inputs"))
+        substituted_target = replace(
+            binding,
+            theorem_target_set_sha256=hashlib.sha256(
+                verifier_evidence_module.canonical_bytes(["beta"])
+            ).hexdigest(),
+        )
+        with self.assertRaisesRegex(ValueError, "frozen target set"):
+            supervisor.run_and_record(
+                substituted_target,
+                source=self.source,
+                candidate=self.candidate,
+                theorem_names=("alpha",),
+            )
+        drifted_runtime = replace(
+            binding,
+            actual_runtime_sha256=sha("unobserved-runtime"),
+        )
+        with self.assertRaisesRegex(ValueError, "host-observed runtime"):
+            supervisor.run_and_record(
+                drifted_runtime,
+                source=self.source,
+                candidate=self.candidate,
+                theorem_names=("alpha",),
+            )
+
+    def test_elaborator_rejection_is_unknown_but_checker_rejection_is_invalid(
+        self,
+    ) -> None:
         elaborator = self._mocked_supervisor_run(
             elaborator_status="INVALID", name="elaborator-invalid"
         ).body["observations"]
@@ -1380,14 +1376,35 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
 
     def test_two_phase_uncertainty_never_validates(self) -> None:
         cases = (
-            ({"elaborator_stdout": b"PASS\nVALID\n", "name": "fake"}, TerminationCause.MALFORMED_CHECKER_OUTPUT),
-            ({"elaborator_stdout": b"", "name": "early"}, TerminationCause.MALFORMED_CHECKER_OUTPUT),
-            ({"timeout_phase": "elaborator", "name": "timeout"}, TerminationCause.TIMEOUT),
+            (
+                {"elaborator_stdout": b"PASS\nVALID\n", "name": "fake"},
+                TerminationCause.MALFORMED_CHECKER_OUTPUT,
+            ),
+            (
+                {"elaborator_stdout": b"", "name": "early"},
+                TerminationCause.MALFORMED_CHECKER_OUTPUT,
+            ),
+            (
+                {"timeout_phase": "elaborator", "name": "timeout"},
+                TerminationCause.TIMEOUT,
+            ),
             ({"oom_phase": "elaborator", "name": "oom"}, TerminationCause.OOM),
-            ({"create_failure_phase": "elaborator", "name": "start"}, TerminationCause.SANDBOX_START_FAILURE),
-            ({"policy_failure_phase": "elaborator", "name": "policy"}, TerminationCause.SANDBOX_POLICY_VIOLATION),
-            ({"checker_status": "UNKNOWN", "name": "checker-unknown"}, TerminationCause.CHECKER_CRASH),
-            ({"timeout_phase": "checker", "name": "checker-timeout"}, TerminationCause.TIMEOUT),
+            (
+                {"create_failure_phase": "elaborator", "name": "start"},
+                TerminationCause.SANDBOX_START_FAILURE,
+            ),
+            (
+                {"policy_failure_phase": "elaborator", "name": "policy"},
+                TerminationCause.SANDBOX_POLICY_VIOLATION,
+            ),
+            (
+                {"checker_status": "UNKNOWN", "name": "checker-unknown"},
+                TerminationCause.CHECKER_CRASH,
+            ),
+            (
+                {"timeout_phase": "checker", "name": "checker-timeout"},
+                TerminationCause.TIMEOUT,
+            ),
         )
         for arguments, expected_cause in cases:
             with self.subTest(cause=expected_cause):
@@ -1396,28 +1413,52 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 self.assertEqual(VerifierVerdict.UNKNOWN.value, observed["verdict"])
                 self.assertEqual(expected_cause.value, observed["termination_cause"])
 
-    def test_real_bridge_blocks_authenticated_unknown_before_evaluator_projection(self) -> None:
+    def test_real_bridge_blocks_authenticated_unknown_before_evaluator_projection(
+        self,
+    ) -> None:
         completion = EvidenceBridgeTests.completions[0]
         request = completion.payload.request
-        binding = evidence_bridge_module._expected_verifier_binding(
-            completion,
+        result = completion.payload.attempt_result
+        source = f"problem:{request.problem.native_id}".encode()
+        candidate = (
+            f"by\n  exact proof_{request.arm.value}_{request.attempt}"
+        ).encode()
+        binding = self.binding(
             run_spec_id=EvidenceBridgeTests.manifest_bundle.public_manifest[
                 "manifest_sha256"
             ],
+            run_id=request.run_id,
+            experiment_id=request.experiment_id,
             execution_authority_sha256=EvidenceBridgeTests.ledger.execution_authority_sha256,
             protocol_rules_sha256=EvidenceBridgeTests.protocol["sealed_rules_sha256"],
             confirmatory_manifest_sha256=(
-                EvidenceBridgeTests.manifest_bundle.public_manifest[
-                    "manifest_sha256"
-                ]
+                EvidenceBridgeTests.manifest_bundle.public_manifest["manifest_sha256"]
             ),
+            protocol_dispatch_id=request.protocol_dispatch_id,
+            actual_dispatch_id=completion.dispatch_id,
+            dispatch_entry_sha256=completion.entry_sha256,
+            frozen_request_sha256=request.frozen_request_sha256,
+            normalized_request_sha256=request.frozen_request_sha256,
+            attempt_result_sha256=result.attempt_result_sha256,
+            problem_id=request.problem_id,
+            problem_identity=request.problem.canonical_id,
+            arm_id=request.arm.value,
+            attempt_id=request.attempt,
+            candidate_id=result.response_artifact.artifact_id,
+            candidate_source_sha256=result.response_artifact.sha256_hex,
+            theorem_target_set_sha256=hashlib.sha256(
+                verifier_evidence_module.canonical_bytes([request.problem.native_id])
+            ).hexdigest(),
+            source_construction_sha256=hashlib.sha256(source).hexdigest(),
+            requested_runtime_sha256=request.runtime_sha256,
+            actual_runtime_sha256=self.launcher.toolchain_lock_sha256,
         )
-        source = f"problem:{request.problem.native_id}".encode("utf-8")
-        candidate = (
-            f"by\n  exact proof_{request.arm.value}_{request.attempt}"
-        ).encode("utf-8")
-        self.assertEqual(binding.source_construction_sha256, hashlib.sha256(source).hexdigest())
-        self.assertEqual(binding.candidate_source_sha256, hashlib.sha256(candidate).hexdigest())
+        self.assertEqual(
+            binding.source_construction_sha256, hashlib.sha256(source).hexdigest()
+        )
+        self.assertEqual(
+            binding.candidate_source_sha256, hashlib.sha256(candidate).hexdigest()
+        )
         store = self.store("bridge.sqlite")
         observed = verifier_evidence_module.ObservedVerifierRun(
             binding=binding,
@@ -1458,10 +1499,21 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             stdout=b"",
             stderr=b"timeout",
         )
+        with self.assertRaisesRegex(ValueError, "pre-completion verifier binding"):
+            evidence_bridge_module._production_verifier_records(
+                (completion,),
+                store=store,
+                bindings_by_dispatch={},
+                run_spec_id=binding.run_spec_id,
+                execution_authority_sha256=binding.execution_authority_sha256,
+                protocol_rules_sha256=binding.protocol_rules_sha256,
+                confirmatory_manifest_sha256=binding.confirmatory_manifest_sha256,
+            )
         with self.assertRaisesRegex(PermissionError, "BLOCKED_UNKNOWN"):
             evidence_bridge_module._production_verifier_records(
                 (completion,),
                 store=store,
+                bindings_by_dispatch={completion.dispatch_id: binding},
                 run_spec_id=binding.run_spec_id,
                 execution_authority_sha256=binding.execution_authority_sha256,
                 protocol_rules_sha256=binding.protocol_rules_sha256,
@@ -1470,26 +1522,25 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
 
     def test_draft_bridge_rejects_production_store_boundary_bypass(self) -> None:
         store = self.store("draft-bypass.sqlite")
-        with patch(
-            "supernova_goal1.evidence_bridge.validate_draft_bundle",
-            return_value=None,
+        with (
+            patch(
+                "supernova_goal1.evidence_bridge.validate_draft_bundle",
+                return_value=None,
+            ),
+            self.assertRaisesRegex(ValueError, "draft bridge cannot consume"),
         ):
-            with self.assertRaisesRegex(ValueError, "draft bridge cannot consume"):
-                bridge_closed_evidence(
-                    dispatch_authority=EvidenceBridgeTests.authority,
-                    execution_ledger=EvidenceBridgeTests.ledger,
-                    closed_join=EvidenceBridgeTests.closed,
-                    protocol=EvidenceBridgeTests.protocol,
-                    public_manifest=(
-                        EvidenceBridgeTests.manifest_bundle.public_manifest
-                    ),
-                    operator_plan=EvidenceBridgeTests.fixture_operator_plan,
-                    cost_reports_by_problem={
-                        EvidenceBridgeTests.native_problem_id:
-                            EvidenceBridgeTests.report
-                    },
-                    verifier_evidence_store=store,
-                )
+            bridge_closed_evidence(
+                dispatch_authority=EvidenceBridgeTests.authority,
+                execution_ledger=EvidenceBridgeTests.ledger,
+                closed_join=EvidenceBridgeTests.closed,
+                protocol=EvidenceBridgeTests.protocol,
+                public_manifest=(EvidenceBridgeTests.manifest_bundle.public_manifest),
+                operator_plan=EvidenceBridgeTests.fixture_operator_plan,
+                cost_reports_by_problem={
+                    EvidenceBridgeTests.native_problem_id: EvidenceBridgeTests.report
+                },
+                verifier_evidence_store=store,
+            )
 
 
 if __name__ == "__main__":

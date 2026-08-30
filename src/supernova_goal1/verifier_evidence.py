@@ -12,6 +12,7 @@ second receives that data plus trusted challenge source, then applies Comparator
 and NanoDA.  Both containers are removed before the host signs or persists the
 observation.
 """
+
 from __future__ import annotations
 
 import base64
@@ -22,18 +23,19 @@ import sqlite3
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass, field as dataclass_field
-from datetime import datetime, timezone
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
 
 SCHEMA = "supernova.confirmatory.verifier-evidence.v2"
 SCHEMA_VERSION = 2
@@ -74,7 +76,8 @@ class TerminationCause(StrEnum):
 
 
 _UNKNOWN_CAUSES = frozenset(
-    cause for cause in TerminationCause
+    cause
+    for cause in TerminationCause
     if cause not in {TerminationCause.ACCEPTED, TerminationCause.REJECTED}
 )
 
@@ -141,10 +144,10 @@ def _utc_timestamp(value: object, field: str) -> str:
     if not value.endswith("Z"):
         raise ValueError(f"{field} must be an RFC3339 UTC timestamp")
     try:
-        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+        parsed = datetime.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(f"{field} must be an RFC3339 UTC timestamp") from exc
-    if parsed.tzinfo != timezone.utc:
+    if parsed.tzinfo != UTC:
         raise ValueError(f"{field} must be UTC")
     return value
 
@@ -194,6 +197,7 @@ class VerifierBinding:
     candidate_id: str
     candidate_source_sha256: str
     theorem_statement_sha256: str
+    theorem_target_set_sha256: str
     source_construction_sha256: str
     requested_runtime_sha256: str
     actual_runtime_sha256: str
@@ -214,6 +218,7 @@ class VerifierBinding:
             "attempt_result_sha256",
             "candidate_source_sha256",
             "theorem_statement_sha256",
+            "theorem_target_set_sha256",
             "source_construction_sha256",
             "requested_runtime_sha256",
             "actual_runtime_sha256",
@@ -232,13 +237,10 @@ class VerifierBinding:
         _natural(self.attempt_id, "attempt_id")
 
     def body(self) -> dict[str, object]:
-        return {
-            field: getattr(self, field)
-            for field in self.__dataclass_fields__
-        }
+        return {field: getattr(self, field) for field in self.__dataclass_fields__}
 
     @classmethod
-    def from_body(cls, raw: object) -> "VerifierBinding":
+    def from_body(cls, raw: object) -> VerifierBinding:
         if type(raw) is not dict or set(raw) != set(cls.__dataclass_fields__):
             raise ValueError("verifier binding fields changed")
         return cls(**raw)  # type: ignore[arg-type]
@@ -278,13 +280,10 @@ class VerifierIdentity:
             _sha256(getattr(self, field), field)
 
     def body(self) -> dict[str, object]:
-        return {
-            field: getattr(self, field)
-            for field in self.__dataclass_fields__
-        }
+        return {field: getattr(self, field) for field in self.__dataclass_fields__}
 
     @classmethod
-    def from_body(cls, raw: object) -> "VerifierIdentity":
+    def from_body(cls, raw: object) -> VerifierIdentity:
         if type(raw) is not dict or set(raw) != set(cls.__dataclass_fields__):
             raise ValueError("verifier identity fields changed")
         return cls(**raw)  # type: ignore[arg-type]
@@ -327,8 +326,12 @@ class ObservedVerifierRun:
         if type(self.verifier_identity) is not VerifierIdentity:
             raise TypeError("verifier_identity must be exact")
         for field in (
-            "source_bytes", "candidate_bytes", "exported_artifact",
-            "checker_output", "stdout", "stderr",
+            "source_bytes",
+            "candidate_bytes",
+            "exported_artifact",
+            "checker_output",
+            "stdout",
+            "stderr",
         ):
             if type(getattr(self, field)) is not bytes:
                 raise TypeError(f"{field} must be exact bytes")
@@ -337,13 +340,18 @@ class ObservedVerifierRun:
         if _sha(self.candidate_bytes) != self.binding.candidate_source_sha256:
             raise ValueError("candidate bytes do not match candidate source digest")
         for field in (
-            "elaborator_exit_status", "elaborator_signal",
-            "checker_exit_status", "checker_signal",
+            "elaborator_exit_status",
+            "elaborator_signal",
+            "checker_exit_status",
+            "checker_signal",
         ):
             _optional_int(getattr(self, field), field)
         for field in (
-            "timed_out", "oom_killed", "resource_limited",
-            "sandbox_policy_violated", "teardown_observed",
+            "timed_out",
+            "oom_killed",
+            "resource_limited",
+            "sandbox_policy_violated",
+            "teardown_observed",
         ):
             _boolean(getattr(self, field), field)
         _utc_timestamp(self.started_at_utc, "started_at_utc")
@@ -459,8 +467,15 @@ def _observation_body(observation: ObservedVerifierRun) -> dict[str, object]:
 
 def _validate_record_body(body: Mapping[str, Any]) -> None:
     expected = {
-        "artifacts", "binding", "issuer_id", "nonce", "observations",
-        "record_id", "schema", "schema_version", "signing_key_id",
+        "artifacts",
+        "binding",
+        "issuer_id",
+        "nonce",
+        "observations",
+        "record_id",
+        "schema",
+        "schema_version",
+        "signing_key_id",
         "verifier_identity",
     }
     if set(body) != expected or body.get("schema") != SCHEMA:
@@ -478,10 +493,18 @@ def _validate_record_body(body: Mapping[str, Any]) -> None:
     _sha256(body["nonce"], "nonce")
     artifacts = body["artifacts"]
     artifact_fields = {
-        "candidate_bytes", "candidate_source_sha256", "checker_output_bytes",
-        "checker_output_sha256", "exported_artifact_bytes",
-        "exported_artifact_sha256", "source_bytes", "source_sha256",
-        "stderr_bytes", "stderr_sha256", "stdout_bytes", "stdout_sha256",
+        "candidate_bytes",
+        "candidate_source_sha256",
+        "checker_output_bytes",
+        "checker_output_sha256",
+        "exported_artifact_bytes",
+        "exported_artifact_sha256",
+        "source_bytes",
+        "source_sha256",
+        "stderr_bytes",
+        "stderr_sha256",
+        "stdout_bytes",
+        "stdout_sha256",
     }
     if type(artifacts) is not dict or set(artifacts) != artifact_fields:
         raise ValueError("verifier artifact fields changed")
@@ -497,17 +520,39 @@ def _validate_record_body(body: Mapping[str, Any]) -> None:
         raise ValueError("signed source digest differs from binding")
     observed = body["observations"]
     observation_fields = {
-        "checker_exit_status", "checker_signal", "elapsed_milliseconds",
-        "elaborator_exit_status", "elaborator_signal", "ended_at_utc",
-        "oom_killed", "resource_limited", "resource_measurements",
-        "resource_usage_sha256", "sandbox_policy_violated", "started_at_utc",
-        "teardown_observed", "termination_cause", "timed_out", "verdict",
+        "checker_exit_status",
+        "checker_signal",
+        "elapsed_milliseconds",
+        "elaborator_exit_status",
+        "elaborator_signal",
+        "ended_at_utc",
+        "oom_killed",
+        "resource_limited",
+        "resource_measurements",
+        "resource_usage_sha256",
+        "sandbox_policy_violated",
+        "started_at_utc",
+        "teardown_observed",
+        "termination_cause",
+        "timed_out",
+        "verdict",
     }
     if type(observed) is not dict or set(observed) != observation_fields:
         raise ValueError("verifier observation fields changed")
-    for name in ("checker_exit_status", "checker_signal", "elaborator_exit_status", "elaborator_signal"):
+    for name in (
+        "checker_exit_status",
+        "checker_signal",
+        "elaborator_exit_status",
+        "elaborator_signal",
+    ):
         _optional_int(observed[name], name)
-    for name in ("oom_killed", "resource_limited", "sandbox_policy_violated", "teardown_observed", "timed_out"):
+    for name in (
+        "oom_killed",
+        "resource_limited",
+        "sandbox_policy_violated",
+        "teardown_observed",
+        "timed_out",
+    ):
         _boolean(observed[name], name)
     _utc_timestamp(observed["started_at_utc"], "started_at_utc")
     _utc_timestamp(observed["ended_at_utc"], "ended_at_utc")
@@ -541,7 +586,10 @@ class VerifierEvidenceRecord:
             signature = base64.b64decode(self.signature_b64, validate=True)
         except (TypeError, ValueError) as exc:
             raise ValueError("signature is not canonical base64") from exc
-        if len(signature) != 64 or base64.b64encode(signature).decode("ascii") != self.signature_b64:
+        if (
+            len(signature) != 64
+            or base64.b64encode(signature).decode("ascii") != self.signature_b64
+        ):
             raise ValueError("signature must encode exactly one Ed25519 signature")
 
     @property
@@ -550,7 +598,9 @@ class VerifierEvidenceRecord:
 
     @property
     def record_sha256(self) -> str:
-        return _sha(canonical_bytes({"body": self.body, "signature": self.signature_b64}))
+        return _sha(
+            canonical_bytes({"body": self.body, "signature": self.signature_b64})
+        )
 
     def verify(
         self,
@@ -563,7 +613,9 @@ class VerifierEvidenceRecord:
         if type(public_key) is not bytes or len(public_key) != 32:
             raise ValueError("public_key must be one raw Ed25519 public key")
         body = self.body
-        if body["signing_key_id"] != _token(expected_signing_key_id, "expected_signing_key_id"):
+        if body["signing_key_id"] != _token(
+            expected_signing_key_id, "expected_signing_key_id"
+        ):
             raise ValueError("verifier evidence signing key identity changed")
         try:
             Ed25519PublicKey.from_public_bytes(public_key).verify(
@@ -574,14 +626,36 @@ class VerifierEvidenceRecord:
             raise ValueError("verifier evidence signature is invalid") from exc
         if expected_binding is not None and body["binding"] != expected_binding.body():
             raise ValueError("verifier evidence run/arm/attempt/input binding changed")
-        if expected_identity is not None and body["verifier_identity"] != expected_identity.body():
+        if (
+            expected_identity is not None
+            and body["verifier_identity"] != expected_identity.body()
+        ):
             raise ValueError("verifier evidence toolchain/checker identity changed")
+
+
+@dataclass(frozen=True)
+class VerifierEvidenceBlobs:
+    """Exact host-side artifacts authenticated by one verifier record."""
+
+    source: bytes
+    candidate: bytes
+    exported_artifact: bytes
+    checker_output: bytes
+    stdout: bytes
+    stderr: bytes
+
+    def __post_init__(self) -> None:
+        for field in self.__dataclass_fields__:
+            if type(getattr(self, field)) is not bytes:
+                raise TypeError(f"{field} must be exact bytes")
 
 
 class HostVerifierSigner:
     """Host-only Ed25519 signer; never pass this object to candidate/checker code."""
 
-    def __init__(self, *, issuer_id: str, signing_key_id: str, private_key: bytes) -> None:
+    def __init__(
+        self, *, issuer_id: str, signing_key_id: str, private_key: bytes
+    ) -> None:
         self.issuer_id = _token(issuer_id, "issuer_id")
         self.signing_key_id = _token(signing_key_id, "signing_key_id")
         if type(private_key) is not bytes or len(private_key) != 32:
@@ -599,7 +673,9 @@ class HostVerifierSigner:
         _factory: object,
     ) -> VerifierEvidenceRecord:
         if _factory is not _SUPERVISOR_FACTORY:
-            raise TypeError("production verifier evidence is issued only by VerifierSupervisor")
+            raise TypeError(
+                "production verifier evidence is issued only by VerifierSupervisor"
+            )
         if type(observation) is not ObservedVerifierRun:
             raise TypeError("observation must be an exact ObservedVerifierRun")
         if not observation.teardown_observed:
@@ -644,7 +720,9 @@ class VerifierEvidenceStore:
             or raw_path.startswith("file:")
             or not Path(path).is_absolute()
         ):
-            raise ValueError("verifier evidence path must be an absolute durable SQLite file")
+            raise ValueError(
+                "verifier evidence path must be an absolute durable SQLite file"
+            )
         if type(verification_key) is not bytes or len(verification_key) != 32:
             raise ValueError("verification_key must be one raw Ed25519 public key")
         if type(expected_identity) is not VerifierIdentity:
@@ -740,7 +818,9 @@ class VerifierEvidenceStore:
         for name, blob, digest_field, size_field in values:
             if type(blob) is not bytes:
                 raise TypeError(f"{name} blob must be exact bytes")
-            if artifacts[digest_field] != _sha(blob) or artifacts[size_field] != len(blob):
+            if artifacts[digest_field] != _sha(blob) or artifacts[size_field] != len(
+                blob
+            ):
                 raise ValueError(f"{name} blob does not match signed verifier evidence")
 
     def append(
@@ -893,6 +973,44 @@ class VerifierEvidenceStore:
         finally:
             connection.close()
 
+    def read_blobs(self, binding: VerifierBinding) -> VerifierEvidenceBlobs:
+        """Read and re-authenticate the exact blobs for a bound evidence row."""
+
+        if type(binding) is not VerifierBinding:
+            raise TypeError("binding must be an exact VerifierBinding")
+        connection = self._connect()
+        try:
+            record = self._read_row(connection, binding)
+            row = connection.execute(
+                """SELECT source_blob,candidate_blob,exported_artifact_blob,
+                          checker_output_blob,stdout_blob,stderr_blob
+                     FROM verifier_evidence
+                    WHERE run_spec_id=? AND run_id=? AND problem_id=?
+                      AND arm_id=? AND attempt_id=?""",
+                (
+                    binding.run_spec_id,
+                    binding.run_id,
+                    binding.problem_id,
+                    binding.arm_id,
+                    binding.attempt_id,
+                ),
+            ).fetchone()
+            if row is None:
+                raise KeyError("missing verifier evidence blobs")
+            blobs = VerifierEvidenceBlobs(*(bytes(value) for value in row))
+            self._check_blobs(
+                record,
+                source=blobs.source,
+                candidate=blobs.candidate,
+                exported_artifact=blobs.exported_artifact,
+                checker_output=blobs.checker_output,
+                stdout=blobs.stdout,
+                stderr=blobs.stderr,
+            )
+            return blobs
+        finally:
+            connection.close()
+
     def read_complete(
         self,
         bindings: Sequence[VerifierBinding],
@@ -977,24 +1095,38 @@ class VerifierSandboxLauncher:
         if len(names) != len(set(names)):
             raise ValueError("image environment contains duplicate names")
         forbidden = {
-            "ANTHROPIC_API_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
-            "DATABASE_URL", "DOCKER_HOST", "GH_TOKEN", "GITHUB_TOKEN",
-            "OPENAI_API_KEY", "SUPERNOVA_VERIFIER_PRIVATE_KEY",
+            "ANTHROPIC_API_KEY",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "DATABASE_URL",
+            "DOCKER_HOST",
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
+            "OPENAI_API_KEY",
+            "SUPERNOVA_VERIFIER_PRIVATE_KEY",
         }
         if forbidden & set(names):
-            raise ValueError("verifier image environment exposes a credential or socket")
+            raise ValueError(
+                "verifier image environment exposes a credential or socket"
+            )
         user = _token(self.container_user, "container_user")
         if user.split(":", 1)[0].lower() in {"0", "root"}:
             raise ValueError("container_user must be non-root")
         for field in (
-            "memory_bytes", "nano_cpus", "pids_limit", "timeout_seconds",
-            "max_output_bytes", "tmpfs_size_bytes",
+            "memory_bytes",
+            "nano_cpus",
+            "pids_limit",
+            "timeout_seconds",
+            "max_output_bytes",
+            "tmpfs_size_bytes",
         ):
             if type(getattr(self, field)) is not int or getattr(self, field) <= 0:
                 raise ValueError(f"{field} must be a positive integer")
         for field in (
-            "toolchain_lock_sha256", "project_dependency_lock_sha256",
-            "checker_configuration_sha256", "immutable_inputs_sha256",
+            "toolchain_lock_sha256",
+            "project_dependency_lock_sha256",
+            "checker_configuration_sha256",
+            "immutable_inputs_sha256",
         ):
             _sha256(getattr(self, field), field)
 
@@ -1056,7 +1188,10 @@ def _invoke(
 ) -> subprocess.CompletedProcess[bytes]:
     if type(max_output_bytes) is not int or max_output_bytes <= 0:
         raise ValueError("max_output_bytes must be a positive integer")
-    with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+    with (
+        tempfile.TemporaryFile() as stdout_file,
+        tempfile.TemporaryFile() as stderr_file,
+    ):
         try:
             completed = subprocess.run(
                 list(argv),
@@ -1127,22 +1262,46 @@ def _image_identity(launcher: VerifierSandboxLauncher) -> str:
         or not image_id.startswith("sha256:")
         or launcher.image_ref not in (value[0].get("RepoDigests") or [])
     ):
-        raise RuntimeError("local verifier image does not match pinned repository digest")
+        raise RuntimeError(
+            "local verifier image does not match pinned repository digest"
+        )
     return image_id
 
 
 def _create_argv(launcher: VerifierSandboxLauncher) -> list[str]:
     tmpfs = f"rw,noexec,nosuid,nodev,size={launcher.tmpfs_size_bytes}"
     return [
-        "docker", "create", "--pull", "never", "--network", "none",
-        "--read-only", "--init", "--cap-drop", "ALL", "--security-opt",
-        "no-new-privileges:true", "--pids-limit", str(launcher.pids_limit),
-        "--ipc", "none", "--user", launcher.container_user, "--runtime",
-        "runc", "--memory", str(launcher.memory_bytes), "--cpus",
-        format(launcher.nano_cpus / 1_000_000_000, ".9f"), "--tmpfs",
-        f"/tmp:{tmpfs}", "--ulimit",
+        "docker",
+        "create",
+        "--pull",
+        "never",
+        "--network",
+        "none",
+        "--read-only",
+        "--init",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges:true",
+        "--pids-limit",
+        str(launcher.pids_limit),
+        "--ipc",
+        "none",
+        "--user",
+        launcher.container_user,
+        "--runtime",
+        "runc",
+        "--memory",
+        str(launcher.memory_bytes),
+        "--cpus",
+        format(launcher.nano_cpus / 1_000_000_000, ".9f"),
+        "--tmpfs",
+        f"/tmp:{tmpfs}",
+        "--ulimit",
         f"fsize={launcher.tmpfs_size_bytes}:{launcher.tmpfs_size_bytes}",
-        "--interactive", launcher.image_ref, *launcher.command,
+        "--interactive",
+        launcher.image_ref,
+        *launcher.command,
     ]
 
 
@@ -1183,7 +1342,8 @@ def _security_snapshot(
         or (host.get("Links") or []) != []
         or (host.get("VolumesFrom") or []) != []
         or (host.get("GroupAdd") or []) != []
-        or ulimits != [
+        or ulimits
+        != [
             {
                 "Hard": launcher.tmpfs_size_bytes,
                 "Name": "fsize",
@@ -1224,9 +1384,7 @@ def _remove_observed(container_id: str) -> None:
 
 
 def _now_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace(
-        "+00:00", "Z"
-    )
+    return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -1285,15 +1443,21 @@ def _parse_container_response(raw: bytes) -> tuple[dict[str, Any], bytes]:
     status = value.get("status")
     if status == "EXPORTED":
         expected = {
-            "schema", "solution_export_b64", "solution_export_sha256", "status",
+            "schema",
+            "solution_export_b64",
+            "solution_export_sha256",
+            "status",
         }
         if set(value) != expected:
             raise ValueError("elaborator response fields changed")
         return value, _decode_export(value, "solution_export")
     if status == VerifierVerdict.VALID.value:
         expected = {
-            "challenge_export_sha256", "checker", "schema",
-            "solution_export_sha256", "status",
+            "challenge_export_sha256",
+            "checker",
+            "schema",
+            "solution_export_sha256",
+            "status",
         }
         if set(value) != expected:
             raise ValueError("checker VALID response fields changed")
@@ -1338,7 +1502,9 @@ def _run_container_phase(
             stderr = created.stderr
         else:
             container_id = created.stdout.decode("ascii", errors="strict").strip()
-            if len(container_id) != 64 or any(char not in _HEX for char in container_id):
+            if len(container_id) != 64 or any(
+                char not in _HEX for char in container_id
+            ):
                 raise RuntimeError("docker create did not return one full container id")
             inspection = _docker_object(container_id)
             try:
@@ -1388,7 +1554,13 @@ def _run_container_phase(
                     except ValueError as exc:
                         cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
                         stderr = (stderr + b"\n" + str(exc).encode("utf-8")).strip()
-    except (OSError, RuntimeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+    except (
+        OSError,
+        RuntimeError,
+        UnicodeError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
         if cause not in {
             TerminationCause.RESOURCE_LIMIT,
             TerminationCause.SANDBOX_POLICY_VIOLATION,
@@ -1580,6 +1752,19 @@ class VerifierSupervisor:
             _token(theorem, "theorem_names[]")
         if len(exact_theorems) != len(set(exact_theorems)):
             raise ValueError("theorem_names contains duplicates")
+        if len(exact_theorems) != 1:
+            raise ValueError(
+                "production verification requires exactly one frozen theorem target"
+            )
+        if (
+            _sha(canonical_bytes(list(exact_theorems)))
+            != binding.theorem_target_set_sha256
+        ):
+            raise ValueError("theorem_names differ from the bound frozen target set")
+        if binding.actual_runtime_sha256 != self.launcher.toolchain_lock_sha256:
+            raise ValueError(
+                "actual runtime differs from the host-observed runtime lock"
+            )
 
         solution_source = source + candidate
         challenge_source = source + b"  sorry\n"
@@ -1588,7 +1773,9 @@ class VerifierSupervisor:
                 "mode": "elaborate",
                 "permitted_axioms": list(PERMITTED_AXIOMS),
                 "schema": CONTAINER_REQUEST_SCHEMA,
-                "solution_source_b64": base64.b64encode(solution_source).decode("ascii"),
+                "solution_source_b64": base64.b64encode(solution_source).decode(
+                    "ascii"
+                ),
                 "solution_source_sha256": _sha(solution_source),
                 "theorem_names": list(exact_theorems),
             }
@@ -1620,12 +1807,22 @@ class VerifierSupervisor:
             if elaborator.cause is not None:
                 cause = elaborator.cause
             else:
-                status = None if elaborator.response is None else elaborator.response["status"]
-                if status == VerifierVerdict.INVALID.value and elaborator.exit_status == 10:
+                status = (
+                    None
+                    if elaborator.response is None
+                    else elaborator.response["status"]
+                )
+                if (
+                    status == VerifierVerdict.INVALID.value
+                    and elaborator.exit_status == 10
+                ):
                     # An elaboration error can be produced by hostile metaprogram
                     # behavior, so it is not a mathematical rejection.
                     cause = TerminationCause.INDETERMINATE
-                elif status == VerifierVerdict.UNKNOWN.value and elaborator.exit_status == 20:
+                elif (
+                    status == VerifierVerdict.UNKNOWN.value
+                    and elaborator.exit_status == 20
+                ):
                     cause = TerminationCause.CHECKER_CRASH
                 elif status != "EXPORTED" or elaborator.exit_status != 0:
                     cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
@@ -1661,13 +1858,16 @@ class VerifierSupervisor:
                         cause = checker.cause
                     else:
                         checker_status = (
-                            None if checker.response is None else checker.response["status"]
+                            None
+                            if checker.response is None
+                            else checker.response["status"]
                         )
                         if (
                             checker_status == VerifierVerdict.VALID.value
                             and checker.exit_status == 0
                             and checker.response is not None
-                            and checker.response["solution_export_sha256"] == _sha(exported)
+                            and checker.response["solution_export_sha256"]
+                            == _sha(exported)
                         ):
                             verdict = VerifierVerdict.VALID
                             cause = TerminationCause.ACCEPTED
@@ -1684,7 +1884,13 @@ class VerifierSupervisor:
                             cause = TerminationCause.CHECKER_CRASH
                         else:
                             cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
-        except (OSError, RuntimeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        except (
+            OSError,
+            RuntimeError,
+            UnicodeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
             phases.append(
                 _PhaseObservation(
                     name="host",
@@ -1707,7 +1913,9 @@ class VerifierSupervisor:
             verdict = VerifierVerdict.UNKNOWN
             cause = TerminationCause.HOST_INFRASTRUCTURE_ERROR
 
-        elaborator = next((phase for phase in phases if phase.name == "elaborator"), None)
+        elaborator = next(
+            (phase for phase in phases if phase.name == "elaborator"), None
+        )
         checker = next((phase for phase in phases if phase.name == "checker"), None)
         timed_out = any(phase.timed_out for phase in phases)
         oom_killed = any(phase.oom_killed for phase in phases)
@@ -1740,7 +1948,9 @@ class VerifierSupervisor:
             stderr=stderr,
             cause=cause,
             verdict=verdict,
-            elaborator_exit_status=(None if elaborator is None else elaborator.exit_status),
+            elaborator_exit_status=(
+                None if elaborator is None else elaborator.exit_status
+            ),
             elaborator_signal=(None if elaborator is None else elaborator.signal),
             checker_exit_status=(None if checker is None else checker.exit_status),
             checker_signal=(None if checker is None else checker.signal),
@@ -1753,7 +1963,6 @@ class VerifierSupervisor:
             elapsed_milliseconds=int(elapsed),
             resource_measurements=measurements,
         )
-
 
     def run_and_record(
         self,
@@ -1777,13 +1986,15 @@ class VerifierSupervisor:
             theorem_names=theorem_names,
         )
 
+
 __all__ = [
-    "HostVerifierSigner",
     "INDEPENDENT_CHECKER_ID",
     "PRODUCTION_VALIDITY_BLOCKER",
     "SCHEMA",
+    "HostVerifierSigner",
     "TerminationCause",
     "VerifierBinding",
+    "VerifierEvidenceBlobs",
     "VerifierEvidenceRecord",
     "VerifierEvidenceStore",
     "VerifierIdentity",
