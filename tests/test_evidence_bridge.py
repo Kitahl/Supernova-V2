@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import inspect
+import os
 from dataclasses import replace
 import json
 import sqlite3
@@ -761,6 +762,14 @@ class EvidenceBridgeTests(unittest.TestCase):
 
 
 class VerifierEvidenceSecurityTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        EvidenceBridgeTests.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        EvidenceBridgeTests.tearDownClass()
+
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -909,7 +918,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         )
 
     def test_caller_cannot_issue_valid_or_submit_verifier_result(self) -> None:
-        with self.assertRaisesRegex(PermissionError, "INDEPENDENT_CHECKER"):
+        with self.assertRaisesRegex(PermissionError, "UNTRUSTED_VALIDITY"):
             self.observation(
                 verdict=VerifierVerdict.VALID,
                 cause=TerminationCause.ACCEPTED,
@@ -1070,51 +1079,232 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "repository@sha256"):
             replace(self.launcher, image_ref="example.invalid/verifier:latest")
 
+    @unittest.skipUnless(
+        os.environ.get("SUPERNOVA_RUN_HOSTILE_LEAN_TEST") == "1",
+        "set SUPERNOVA_RUN_HOSTILE_LEAN_TEST=1 after pulling the pinned image",
+    )
+    def test_hostile_lean_metaprogram_cannot_read_host_only_file(self) -> None:
+        image_ref = (
+            "ghcr.io/kitahl/supernova-goal1-verifier@sha256:"
+            "3fa91bdfb031e3ec271778dae2e419caccf17f6ac12fc8f00dfe7fcb35403ea1"
+        )
+        canary = "SUPERNOVA_HOST_ONLY_CANARY_7f61a28c"
+        host_only = (self.root / "host-only-sentinel.txt").resolve()
+        host_only.write_text(canary, encoding="utf-8")
+        if os.name == "nt":
+            drive = host_only.drive.removesuffix(":").lower()
+            rest = host_only.as_posix().split(":", 1)[1]
+            candidate_path = f"/run/desktop/mnt/host/{drive}{rest}"
+        else:
+            candidate_path = host_only.as_posix()
+
+        source = b"import Mathlib\n\ntheorem alpha : True := by\n"
+        candidate = (
+            "  run_tac\n"
+            f"    let contents <- IO.FS.readFile \"{candidate_path}\"\n"
+            f"    unless contents == \"{canary}\" do\n"
+            "      throwError \"host canary mismatch\"\n"
+            "  exact True.intro\n"
+        ).encode("utf-8")
+        binding = self.binding(
+            actual_dispatch_id=sha("hostile-host-file-dispatch"),
+            candidate_id="sha256:" + hashlib.sha256(candidate).hexdigest(),
+            candidate_source_sha256=hashlib.sha256(candidate).hexdigest(),
+            source_construction_sha256=hashlib.sha256(source).hexdigest(),
+        )
+        checker_configuration = verifier_evidence_module.canonical_bytes(
+            {
+                "check_exports_sha256": hashlib.sha256(
+                    (ROOT / "runtime" / "goal1_verifier" / "CheckExports.lean").read_bytes()
+                ).hexdigest(),
+                "permitted_axioms": list(verifier_evidence_module.PERMITTED_AXIOMS),
+            }
+        )
+        immutable_inputs = verifier_evidence_module.canonical_bytes(
+            {
+                name: hashlib.sha256(
+                    (ROOT / "runtime" / "goal1_verifier" / name).read_bytes()
+                ).hexdigest()
+                for name in ("Dockerfile", "entrypoint.py", "pins.json")
+            }
+        )
+        launcher = VerifierSandboxLauncher(
+            image_ref=image_ref,
+            command=("--stdio",),
+            image_environment=(
+                "PATH=/opt/lean/bin:/usr/local/bin:/usr/bin:/bin",
+            ),
+            container_user="10001:10001",
+            memory_bytes=4 * 1024 * 1024 * 1024,
+            nano_cpus=2_000_000_000,
+            pids_limit=256,
+            timeout_seconds=600,
+            max_output_bytes=64 * 1024 * 1024,
+            tmpfs_size_bytes=512 * 1024 * 1024,
+            toolchain_lock_sha256=hashlib.sha256(
+                (ROOT / "runtime" / "lean" / "lean-toolchain").read_bytes()
+            ).hexdigest(),
+            project_dependency_lock_sha256=hashlib.sha256(
+                (ROOT / "runtime" / "lean" / "lake-manifest.json").read_bytes()
+            ).hexdigest(),
+            checker_configuration_sha256=hashlib.sha256(
+                checker_configuration
+            ).hexdigest(),
+            immutable_inputs_sha256=hashlib.sha256(immutable_inputs).hexdigest(),
+        )
+        store = VerifierEvidenceStore(
+            (self.root / "hostile.sqlite").resolve(),
+            verification_key=self.signer.public_key,
+            expected_signing_key_id=self.signer.signing_key_id,
+            expected_identity=launcher.identity,
+        )
+        record = VerifierSupervisor(launcher, self.signer, store).run_and_record(
+            binding, source=source, candidate=candidate, theorem_names=("alpha",)
+        )
+        observation = record.body["observations"]
+        self.assertEqual(VerifierVerdict.UNKNOWN.value, observation["verdict"])
+        self.assertEqual(
+            TerminationCause.INDETERMINATE.value,
+            observation["termination_cause"],
+        )
+        self.assertNotIn(canary.encode("utf-8"), record.body_json)
+        self.assertNotIn(canary.encode("utf-8"), store.read(binding).body_json)
+
     def _mocked_supervisor_run(
         self,
         *,
-        stdout: bytes,
-        exit_code: int = 0,
-        oom_killed: bool = False,
-        timeout: bool = False,
-        create_failure: bool = False,
-        policy_failure: bool = False,
+        elaborator_status: str = "EXPORTED",
+        checker_status: str = "VALID",
+        elaborator_stdout: bytes | None = None,
+        checker_stdout: bytes | None = None,
+        timeout_phase: str | None = None,
+        oom_phase: str | None = None,
+        create_failure_phase: str | None = None,
+        policy_failure_phase: str | None = None,
         name: str,
     ) -> VerifierEvidenceRecord:
         binding = self.binding(actual_dispatch_id=sha("dispatch:" + name))
         store = self.store(name + ".sqlite")
         supervisor = VerifierSupervisor(self.launcher, self.signer, store)
-        captured_request: list[bytes] = []
+        exported = b'{"declarations":["alpha"]}'
+
+        def phase_response(status: str, *, checker: bool) -> bytes:
+            if status == "EXPORTED":
+                return verifier_evidence_module.canonical_bytes(
+                    {
+                        "schema": verifier_evidence_module.CONTAINER_RESPONSE_SCHEMA,
+                        "solution_export_b64": base64.b64encode(exported).decode("ascii"),
+                        "solution_export_sha256": hashlib.sha256(exported).hexdigest(),
+                        "status": status,
+                    }
+                )
+            if status == "VALID" and checker:
+                return verifier_evidence_module.canonical_bytes(
+                    {
+                        "challenge_export_sha256": sha("challenge-export"),
+                        "checker": "COMPARATOR_DATA_ONLY_PLUS_NANODA",
+                        "schema": verifier_evidence_module.CONTAINER_RESPONSE_SCHEMA,
+                        "solution_export_sha256": hashlib.sha256(exported).hexdigest(),
+                        "status": status,
+                    }
+                )
+            return verifier_evidence_module.canonical_bytes(
+                {
+                    "diagnostic": f"deterministic {status.lower()}",
+                    "schema": verifier_evidence_module.CONTAINER_RESPONSE_SCHEMA,
+                    "status": status,
+                }
+            )
+
+        phase_names = ("elaborator", "checker")
+        phase_stdout = (
+            phase_response(elaborator_status, checker=False)
+            if elaborator_stdout is None
+            else elaborator_stdout,
+            phase_response(checker_status, checker=True)
+            if checker_stdout is None
+            else checker_stdout,
+        )
+        phase_exit = (
+            0
+            if elaborator_status == "EXPORTED"
+            else 10
+            if elaborator_status == "INVALID"
+            else 20,
+            0 if checker_status == "VALID" else 10 if checker_status == "INVALID" else 20,
+        )
+        captured_requests: list[bytes] = []
+        created_containers: list[str] = []
+        removed_containers: list[str] = []
+        issue_removed_counts: list[int] = []
+        inspection_count: dict[str, int] = {}
+        phase_by_container: dict[str, int] = {}
 
         def invoke(argv: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
             args = list(argv)  # type: ignore[arg-type]
             if args[1] == "version":
-                return subprocess.CompletedProcess(args, 0, b'{"Server":{"Version":"test"}}', b"")
+                return subprocess.CompletedProcess(
+                    args, 0, b'{"Server":{"Version":"test"}}', b""
+                )
             if args[1] == "create":
-                if create_failure:
+                phase = len(created_containers)
+                phase_name = phase_names[phase]
+                if create_failure_phase == phase_name:
                     return subprocess.CompletedProcess(args, 1, b"", b"create denied")
-                return subprocess.CompletedProcess(args, 0, b"a" * 64 + b"\n", b"")
+                container_id = ("a" if phase == 0 else "b") * 64
+                created_containers.append(container_id)
+                phase_by_container[container_id] = phase
+                return subprocess.CompletedProcess(
+                    args, 0, container_id.encode("ascii") + b"\n", b""
+                )
             if args[1] == "start":
-                captured_request.append(kwargs["input_bytes"])  # type: ignore[arg-type]
-                if timeout:
-                    raise subprocess.TimeoutExpired(args, 10, output=b"", stderr=b"timeout")
-                return subprocess.CompletedProcess(args, exit_code, stdout, b"")
+                container_id = args[-1]
+                phase = phase_by_container[container_id]
+                captured_requests.append(kwargs["input_bytes"])  # type: ignore[arg-type]
+                if timeout_phase == phase_names[phase]:
+                    raise subprocess.TimeoutExpired(
+                        args, 10, output=b"", stderr=b"timeout"
+                    )
+                return subprocess.CompletedProcess(
+                    args, phase_exit[phase], phase_stdout[phase], b""
+                )
             raise AssertionError(args)
 
-        state = {
-            "State": {
-                "Dead": False,
-                "Error": "",
-                "ExitCode": exit_code,
-                "OOMKilled": oom_killed,
-                "Status": "exited",
+        def docker_object(container_id: str) -> dict[str, object]:
+            phase = phase_by_container[container_id]
+            inspection_count[container_id] = inspection_count.get(container_id, 0) + 1
+            if inspection_count[container_id] == 1:
+                return {"test_phase": phase_names[phase]}
+            oom_killed = oom_phase == phase_names[phase]
+            return {
+                "State": {
+                    "Dead": False,
+                    "Error": "",
+                    "ExitCode": 137 if oom_killed else phase_exit[phase],
+                    "OOMKilled": oom_killed,
+                    "Status": "exited",
+                }
             }
-        }
-        policy_effect = (
-            verifier_evidence_module._SandboxPolicyError("policy drift")
-            if policy_failure
-            else {"policy": self.launcher.sandbox_policy}
-        )
+
+        def security_snapshot(
+            inspection: dict[str, object],
+            _launcher: VerifierSandboxLauncher,
+            _image_id: str,
+        ) -> dict[str, object]:
+            phase_name = inspection["test_phase"]
+            if policy_failure_phase == phase_name:
+                raise verifier_evidence_module._SandboxPolicyError("policy drift")
+            return {"phase": phase_name, "policy": self.launcher.sandbox_policy}
+
+        def remove_observed(container_id: str) -> None:
+            removed_containers.append(container_id)
+
+        original_issue = self.signer._issue
+
+        def issue(*args: object, **kwargs: object) -> VerifierEvidenceRecord:
+            issue_removed_counts.append(len(removed_containers))
+            return original_issue(*args, **kwargs)  # type: ignore[arg-type]
+
         with (
             patch.object(verifier_evidence_module, "_invoke", side_effect=invoke),
             patch.object(
@@ -1123,35 +1313,81 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 return_value=self.launcher.image_digest,
             ),
             patch.object(
-                verifier_evidence_module,
-                "_docker_object",
-                side_effect=[{}, state],
+                verifier_evidence_module, "_docker_object", side_effect=docker_object
             ),
             patch.object(
                 verifier_evidence_module,
                 "_security_snapshot",
-                side_effect=policy_effect if policy_failure else None,
-                return_value=None if policy_failure else policy_effect,
+                side_effect=security_snapshot,
             ),
-            patch.object(verifier_evidence_module, "_remove_observed"),
+            patch.object(
+                verifier_evidence_module,
+                "_remove_observed",
+                side_effect=remove_observed,
+            ),
+            patch.object(self.signer, "_issue", side_effect=issue),
         ):
             record = supervisor.run_and_record(
-                binding, source=self.source, candidate=self.candidate
+                binding,
+                source=self.source,
+                candidate=self.candidate,
+                theorem_names=("alpha",),
             )
-        if not create_failure and not policy_failure:
-            request = captured_request[0]
+        for request in captured_requests:
             self.assertNotIn(b"k" * 32, request)
             self.assertNotIn(str(store.path).encode("utf-8"), request)
+        self.last_supervisor_trace = {
+            "captured_requests": tuple(captured_requests),
+            "created_containers": tuple(created_containers),
+            "issue_removed_counts": tuple(issue_removed_counts),
+            "removed_containers": tuple(removed_containers),
+        }
         return record
 
-    def test_fake_success_early_exit_timeout_oom_and_policy_failure_never_validate(self) -> None:
+    def test_valid_requires_two_fresh_keyless_containers_removed_before_signing(self) -> None:
+        record = self._mocked_supervisor_run(name="valid")
+        observed = record.body["observations"]
+        self.assertEqual(VerifierVerdict.VALID.value, observed["verdict"])
+        self.assertEqual(TerminationCause.ACCEPTED.value, observed["termination_cause"])
+        trace = self.last_supervisor_trace
+        self.assertEqual(2, len(trace["created_containers"]))
+        self.assertEqual(2, len(set(trace["created_containers"])))
+        self.assertEqual(trace["created_containers"], trace["removed_containers"])
+        self.assertEqual((2,), trace["issue_removed_counts"])
+        requests = tuple(json.loads(raw) for raw in trace["captured_requests"])
+        self.assertEqual(
+            ("elaborate", "check"), tuple(value["mode"] for value in requests)
+        )
+
+    def test_elaborator_rejection_is_unknown_but_checker_rejection_is_invalid(self) -> None:
+        elaborator = self._mocked_supervisor_run(
+            elaborator_status="INVALID", name="elaborator-invalid"
+        ).body["observations"]
+        self.assertEqual(VerifierVerdict.UNKNOWN.value, elaborator["verdict"])
+        self.assertEqual(
+            TerminationCause.INDETERMINATE.value,
+            elaborator["termination_cause"],
+        )
+
+        checker = self._mocked_supervisor_run(
+            checker_status="INVALID", name="checker-invalid"
+        ).body["observations"]
+        self.assertEqual(VerifierVerdict.INVALID.value, checker["verdict"])
+        self.assertEqual(
+            TerminationCause.REJECTED.value,
+            checker["termination_cause"],
+        )
+
+    def test_two_phase_uncertainty_never_validates(self) -> None:
         cases = (
-            ({"stdout": b"PASS\nVALID\n", "name": "fake"}, TerminationCause.INDETERMINATE),
-            ({"stdout": b"", "name": "early"}, TerminationCause.INCOMPLETE_EXPORT),
-            ({"stdout": b"", "timeout": True, "name": "timeout"}, TerminationCause.TIMEOUT),
-            ({"stdout": b"", "oom_killed": True, "exit_code": 137, "name": "oom"}, TerminationCause.OOM),
-            ({"stdout": b"", "create_failure": True, "name": "start"}, TerminationCause.SANDBOX_START_FAILURE),
-            ({"stdout": b"", "policy_failure": True, "name": "policy"}, TerminationCause.SANDBOX_POLICY_VIOLATION),
+            ({"elaborator_stdout": b"PASS\nVALID\n", "name": "fake"}, TerminationCause.MALFORMED_CHECKER_OUTPUT),
+            ({"elaborator_stdout": b"", "name": "early"}, TerminationCause.MALFORMED_CHECKER_OUTPUT),
+            ({"timeout_phase": "elaborator", "name": "timeout"}, TerminationCause.TIMEOUT),
+            ({"oom_phase": "elaborator", "name": "oom"}, TerminationCause.OOM),
+            ({"create_failure_phase": "elaborator", "name": "start"}, TerminationCause.SANDBOX_START_FAILURE),
+            ({"policy_failure_phase": "elaborator", "name": "policy"}, TerminationCause.SANDBOX_POLICY_VIOLATION),
+            ({"checker_status": "UNKNOWN", "name": "checker-unknown"}, TerminationCause.CHECKER_CRASH),
+            ({"timeout_phase": "checker", "name": "checker-timeout"}, TerminationCause.TIMEOUT),
         )
         for arguments, expected_cause in cases:
             with self.subTest(cause=expected_cause):

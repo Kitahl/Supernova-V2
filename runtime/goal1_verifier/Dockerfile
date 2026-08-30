@@ -78,8 +78,7 @@ RUN cd /opt/supernova/template \
     && lake update \
     && lake exe cache get
 
-RUN find /opt/supernova/template -type d -name .git -prune -exec rm -rf '{}' + \
-    && rm -rf /home/verifier/.cache /home/verifier/.cargo /home/verifier/.rustup \
+RUN rm -rf /home/verifier/.cache /home/verifier/.cargo /home/verifier/.rustup \
        /opt/supernova/src
 
 FROM docker.io/library/debian@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS runtime

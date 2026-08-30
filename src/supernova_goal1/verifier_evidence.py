@@ -6,10 +6,11 @@ authority.  Candidate-controlled Lean and the checker run without the signing
 key or evidence database.  Only the host supervisor may ask the signer to issue
 an append-only record over what it directly launched and observed.
 
-The current frozen Goal-1 runtime does not bind an independent exported-proof
-checker.  Consequently this version records uncertainty but rejects every
-attempt to issue production ``VALID``.  That fail-closed blocker is explicit so
-plain ``lake build`` success cannot silently become scientific credit.
+Production ``VALID`` requires two fresh keyless containers.  The first may
+execute hostile Lean metaprograms but emits only an exported environment.  The
+second receives that data plus trusted challenge source, then applies Comparator
+and NanoDA.  Both containers are removed before the host signs or persists the
+observation.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ import sqlite3
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
@@ -39,11 +40,15 @@ SCHEMA_VERSION = 2
 VERIFIER_PROTOCOL_VERSION = "goal1-host-verifier-evidence-v2"
 SIGNATURE_DOMAIN = b"supernova.confirmatory.verifier-evidence.signature.v2\0"
 INDEPENDENT_CHECKER_ID = "LEAN_COMPARATOR_PLUS_NANODA"
+CONTAINER_REQUEST_SCHEMA = "supernova.goal1.verifier-container-request.v1"
+CONTAINER_RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v1"
+PERMITTED_AXIOMS = ("propext", "Quot.sound", "Classical.choice")
 PRODUCTION_VALIDITY_BLOCKER = (
-    "BLOCKED_INDEPENDENT_CHECKER_NOT_FROZEN: Goal-1 runtime binds plain "
-    "lake env lean but no immutable comparator/external-checker identity"
+    "BLOCKED_UNTRUSTED_VALIDITY_ASSERTION: production VALID is constructible "
+    "only from the supervisor-observed two-container verifier protocol"
 )
 _SUPERVISOR_FACTORY = object()
+_SUPERVISOR_VALIDATION = object()
 _HEX = frozenset("0123456789abcdef")
 
 
@@ -310,6 +315,11 @@ class ObservedVerifierRun:
     elapsed_milliseconds: int
     resource_measurements: Mapping[str, object]
     teardown_observed: bool
+    _supervisor_validation: object | None = dataclass_field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if type(self.binding) is not VerifierBinding:
@@ -345,11 +355,15 @@ class ObservedVerifierRun:
         _validate_result_algebra(
             verdict=self.verdict,
             cause=self.termination_cause,
+            elaborator_exit_status=self.elaborator_exit_status,
             checker_exit_status=self.checker_exit_status,
             timed_out=self.timed_out,
             oom_killed=self.oom_killed,
             resource_limited=self.resource_limited,
             sandbox_policy_violated=self.sandbox_policy_violated,
+            supervisor_validated=(
+                self._supervisor_validation is _SUPERVISOR_VALIDATION
+            ),
         )
 
 
@@ -357,18 +371,32 @@ def _validate_result_algebra(
     *,
     verdict: VerifierVerdict,
     cause: TerminationCause,
+    elaborator_exit_status: int | None,
     checker_exit_status: int | None,
     timed_out: bool,
     oom_killed: bool,
     resource_limited: bool,
     sandbox_policy_violated: bool,
+    supervisor_validated: bool = True,
 ) -> None:
     if verdict is VerifierVerdict.VALID:
-        raise PermissionError(PRODUCTION_VALIDITY_BLOCKER)
+        if (
+            not supervisor_validated
+            or cause is not TerminationCause.ACCEPTED
+            or elaborator_exit_status != 0
+            or checker_exit_status != 0
+            or timed_out
+            or oom_killed
+            or resource_limited
+            or sandbox_policy_violated
+        ):
+            raise PermissionError(PRODUCTION_VALIDITY_BLOCKER)
+        return
     if verdict is VerifierVerdict.INVALID:
         if (
             cause is not TerminationCause.REJECTED
-            or checker_exit_status in {None, 0}
+            or elaborator_exit_status != 0
+            or checker_exit_status != 10
             or timed_out
             or oom_killed
             or resource_limited
@@ -492,6 +520,7 @@ def _validate_record_body(body: Mapping[str, Any]) -> None:
     _validate_result_algebra(
         verdict=VerifierVerdict(observed["verdict"]),
         cause=TerminationCause(observed["termination_cause"]),
+        elaborator_exit_status=observed["elaborator_exit_status"],
         checker_exit_status=observed["checker_exit_status"],
         timed_out=observed["timed_out"],
         oom_killed=observed["oom_killed"],
@@ -806,9 +835,11 @@ class VerifierEvidenceStore:
                       candidate_blob,exported_artifact_blob,checker_output_blob,
                       stdout_blob,stderr_blob
                  FROM verifier_evidence
-                WHERE run_spec_id=? AND problem_id=? AND arm_id=? AND attempt_id=?""",
+                WHERE run_spec_id=? AND run_id=? AND problem_id=?
+                  AND arm_id=? AND attempt_id=?""",
             (
                 binding.run_spec_id,
+                binding.run_id,
                 binding.problem_id,
                 binding.arm_id,
                 binding.attempt_id,
@@ -817,7 +848,7 @@ class VerifierEvidenceStore:
         if row is None:
             raise KeyError(
                 "missing verifier evidence for "
-                f"{binding.run_spec_id}/{binding.problem_id}/"
+                f"{binding.run_spec_id}/{binding.run_id}/{binding.problem_id}/"
                 f"{binding.arm_id}/{binding.attempt_id}"
             )
         (
@@ -872,7 +903,13 @@ class VerifierEvidenceStore:
         if not all(type(value) is VerifierBinding for value in exact):
             raise TypeError("bindings must contain exact VerifierBinding values")
         expected = {
-            (value.run_spec_id, value.problem_id, value.arm_id, value.attempt_id)
+            (
+                value.run_spec_id,
+                value.run_id,
+                value.problem_id,
+                value.arm_id,
+                value.attempt_id,
+            )
             for value in exact
         }
         if len(expected) != len(exact):
@@ -880,13 +917,14 @@ class VerifierEvidenceStore:
         connection = self._connect()
         try:
             rows = connection.execute(
-                "SELECT run_spec_id,problem_id,arm_id,attempt_id FROM verifier_evidence"
+                "SELECT run_spec_id,run_id,problem_id,arm_id,attempt_id "
+                "FROM verifier_evidence"
             ).fetchall()
         finally:
             connection.close()
         actual = {
-            (str(run_spec), str(problem), str(arm), int(attempt))
-            for run_spec, problem, arm, attempt in rows
+            (str(run_spec), str(run_id), str(problem), str(arm), int(attempt))
+            for run_spec, run_id, problem, arm, attempt in rows
         }
         if actual != expected:
             raise ValueError(
@@ -900,10 +938,9 @@ class VerifierEvidenceStore:
 class VerifierSandboxLauncher:
     """Immutable outer verifier container policy.
 
-    The pinned image is expected to contain a trusted runner that places hostile
-    Lean elaboration in its own inner sandbox and invokes the comparator plus
-    independent checker.  G1-135 cannot provision that image, so the host still
-    refuses ``VALID`` until a later reviewed runtime freeze supplies it.
+    The host launches the pinned image twice: first as a hostile elaborator and
+    then, in a fresh container, as the data-only Comparator plus NanoDA checker.
+    Neither container receives signing authority or the evidence-store path.
     """
 
     image_ref: str
@@ -1192,6 +1229,200 @@ def _now_utc() -> str:
     )
 
 
+@dataclass(frozen=True)
+class _PhaseObservation:
+    name: str
+    request_sha256: str
+    container_id: str | None
+    stdout: bytes
+    stderr: bytes
+    response: dict[str, Any] | None
+    exported_artifact: bytes
+    exit_status: int | None
+    signal: int | None
+    timed_out: bool
+    oom_killed: bool
+    resource_limited: bool
+    sandbox_policy_violated: bool
+    cause: TerminationCause | None
+    security_snapshot_sha256: str | None
+
+    def measurements(self) -> dict[str, object]:
+        return {
+            "cause": None if self.cause is None else self.cause.value,
+            "container_id": self.container_id,
+            "exit_status": self.exit_status,
+            "oom_killed": self.oom_killed,
+            "request_sha256": self.request_sha256,
+            "resource_limited": self.resource_limited,
+            "sandbox_policy_violated": self.sandbox_policy_violated,
+            "security_snapshot_sha256": self.security_snapshot_sha256,
+            "signal": self.signal,
+            "stderr_sha256": _sha(self.stderr),
+            "stdout_sha256": _sha(self.stdout),
+            "timed_out": self.timed_out,
+        }
+
+
+def _decode_export(value: Mapping[str, Any], field: str) -> bytes:
+    encoded = _token(value.get(f"{field}_b64"), f"{field}_b64")
+    expected = _sha256(value.get(f"{field}_sha256"), f"{field}_sha256")
+    try:
+        decoded = base64.b64decode(encoded, validate=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field}_b64 is not canonical base64") from exc
+    if base64.b64encode(decoded).decode("ascii") != encoded:
+        raise ValueError(f"{field}_b64 is not canonical base64")
+    if _sha(decoded) != expected:
+        raise ValueError(f"{field} digest mismatch")
+    return decoded
+
+
+def _parse_container_response(raw: bytes) -> tuple[dict[str, Any], bytes]:
+    value = _strict_object(raw, "verifier container response")
+    if value.get("schema") != CONTAINER_RESPONSE_SCHEMA:
+        raise ValueError("verifier container response schema changed")
+    status = value.get("status")
+    if status == "EXPORTED":
+        expected = {
+            "schema", "solution_export_b64", "solution_export_sha256", "status",
+        }
+        if set(value) != expected:
+            raise ValueError("elaborator response fields changed")
+        return value, _decode_export(value, "solution_export")
+    if status == VerifierVerdict.VALID.value:
+        expected = {
+            "challenge_export_sha256", "checker", "schema",
+            "solution_export_sha256", "status",
+        }
+        if set(value) != expected:
+            raise ValueError("checker VALID response fields changed")
+        _sha256(value["challenge_export_sha256"], "challenge_export_sha256")
+        _sha256(value["solution_export_sha256"], "solution_export_sha256")
+        if value["checker"] != "COMPARATOR_DATA_ONLY_PLUS_NANODA":
+            raise ValueError("independent checker identity changed")
+        return value, b""
+    if status in {VerifierVerdict.INVALID.value, VerifierVerdict.UNKNOWN.value}:
+        if set(value) != {"diagnostic", "schema", "status"}:
+            raise ValueError("non-valid verifier response fields changed")
+        if type(value["diagnostic"]) is not str:
+            raise ValueError("verifier diagnostic must be a string")
+        return value, b""
+    raise ValueError("verifier container response status changed")
+
+
+def _run_container_phase(
+    launcher: VerifierSandboxLauncher,
+    *,
+    image_id: str,
+    name: str,
+    request: bytes,
+) -> _PhaseObservation:
+    container_id: str | None = None
+    stdout = b""
+    stderr = b""
+    response: dict[str, Any] | None = None
+    exported = b""
+    exit_status: int | None = None
+    signal_value: int | None = None
+    timed_out = False
+    oom_killed = False
+    resource_limited = False
+    policy_violated = False
+    cause: TerminationCause | None = None
+    snapshot_sha: str | None = None
+    try:
+        created = _invoke(_create_argv(launcher))
+        if created.returncode != 0:
+            cause = TerminationCause.SANDBOX_START_FAILURE
+            stderr = created.stderr
+        else:
+            container_id = created.stdout.decode("ascii", errors="strict").strip()
+            if len(container_id) != 64 or any(char not in _HEX for char in container_id):
+                raise RuntimeError("docker create did not return one full container id")
+            inspection = _docker_object(container_id)
+            try:
+                snapshot = _security_snapshot(inspection, launcher, image_id)
+            except _SandboxPolicyError as exc:
+                cause = TerminationCause.SANDBOX_POLICY_VIOLATION
+                policy_violated = True
+                stderr = str(exc).encode("utf-8")
+            else:
+                snapshot_sha = _sha(canonical_bytes(snapshot))
+                try:
+                    started = _invoke(
+                        ["docker", "start", "--attach", "--interactive", container_id],
+                        input_bytes=request,
+                        timeout=launcher.timeout_seconds,
+                        max_output_bytes=launcher.max_output_bytes,
+                    )
+                    stdout = started.stdout
+                    stderr = started.stderr
+                except subprocess.TimeoutExpired as exc:
+                    timed_out = True
+                    cause = TerminationCause.TIMEOUT
+                    stdout = bytes(exc.stdout or b"")
+                    stderr = bytes(exc.stderr or b"")
+                except RuntimeError as exc:
+                    if "exceeded its byte limit" not in str(exc):
+                        raise
+                    cause = TerminationCause.RESOURCE_LIMIT
+                    resource_limited = True
+                    stderr = str(exc).encode("utf-8")
+                state = _docker_object(container_id).get("State") or {}
+                if type(state) is not dict:
+                    raise RuntimeError("docker state is unavailable")
+                exit_status = (
+                    state.get("ExitCode")
+                    if type(state.get("ExitCode")) is int
+                    else None
+                )
+                oom_killed = state.get("OOMKilled") is True
+                if type(exit_status) is int and 128 <= exit_status <= 255:
+                    signal_value = exit_status - 128
+                if oom_killed:
+                    cause = TerminationCause.OOM
+                if cause is None:
+                    try:
+                        response, exported = _parse_container_response(stdout)
+                    except ValueError as exc:
+                        cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
+                        stderr = (stderr + b"\n" + str(exc).encode("utf-8")).strip()
+    except (OSError, RuntimeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        if cause not in {
+            TerminationCause.RESOURCE_LIMIT,
+            TerminationCause.SANDBOX_POLICY_VIOLATION,
+            TerminationCause.SANDBOX_START_FAILURE,
+        }:
+            cause = TerminationCause.HOST_INFRASTRUCTURE_ERROR
+        stderr = (stderr + b"\n" + str(exc).encode("utf-8")).strip()
+    finally:
+        if container_id is not None:
+            try:
+                _remove_observed(container_id)
+            except (OSError, RuntimeError) as exc:
+                raise RuntimeError(
+                    f"{name} teardown was not observed; evidence was not signed"
+                ) from exc
+    return _PhaseObservation(
+        name=name,
+        request_sha256=_sha(request),
+        container_id=container_id,
+        stdout=stdout,
+        stderr=stderr,
+        response=response,
+        exported_artifact=exported,
+        exit_status=exit_status,
+        signal=signal_value,
+        timed_out=timed_out,
+        oom_killed=oom_killed,
+        resource_limited=resource_limited,
+        sandbox_policy_violated=policy_violated,
+        cause=cause,
+        security_snapshot_sha256=snapshot_sha,
+    )
+
+
 class VerifierSupervisor:
     """Trusted host launcher, observer, signer, and atomic persistence boundary."""
 
@@ -1230,6 +1461,7 @@ class VerifierSupervisor:
         cause: TerminationCause,
         elaborator_exit_status: int | None,
         elaborator_signal: int | None,
+        verdict: VerifierVerdict,
         checker_exit_status: int | None,
         checker_signal: int | None,
         timed_out: bool,
@@ -1250,7 +1482,7 @@ class VerifierSupervisor:
             checker_output=checker_output,
             stdout=stdout,
             stderr=stderr,
-            verdict=VerifierVerdict.UNKNOWN,
+            verdict=verdict,
             termination_cause=cause,
             elaborator_exit_status=elaborator_exit_status,
             elaborator_signal=elaborator_signal,
@@ -1265,6 +1497,7 @@ class VerifierSupervisor:
             elapsed_milliseconds=elapsed_milliseconds,
             resource_measurements=resource_measurements,
             teardown_observed=True,
+            _supervisor_validation=_SUPERVISOR_VALIDATION,
         )
         record = self.signer._issue(observation, _factory=_SUPERVISOR_FACTORY)
         self.store.append(
@@ -1305,6 +1538,7 @@ class VerifierSupervisor:
             stdout=b"",
             stderr=detail.encode("utf-8"),
             cause=cause,
+            verdict=VerifierVerdict.UNKNOWN,
             elaborator_exit_status=None,
             elaborator_signal=None,
             checker_exit_status=None,
@@ -1321,21 +1555,14 @@ class VerifierSupervisor:
             resource_measurements={"container_created": False, "detail": detail},
         )
 
-    def run_and_record(
+    def _run_two_phase_and_record(
         self,
         binding: VerifierBinding,
         *,
         source: bytes,
         candidate: bytes,
+        theorem_names: Sequence[str],
     ) -> VerifierEvidenceRecord:
-        """Launch one keyless sandbox and record a fail-closed observation.
-
-        Container output is evidence bytes only.  This method never parses a
-        candidate/checker supplied ``PASS`` or ``VALID``.  Until an independent
-        checker is frozen by a later authority change, every observed run is an
-        authenticated ``UNKNOWN``.
-        """
-
         if type(binding) is not VerifierBinding:
             raise TypeError("binding must be an exact VerifierBinding")
         if type(source) is not bytes or type(candidate) is not bytes:
@@ -1344,151 +1571,179 @@ class VerifierSupervisor:
             raise ValueError("source bytes differ from the bound source construction")
         if _sha(candidate) != binding.candidate_source_sha256:
             raise ValueError("candidate bytes differ from the bound candidate")
-        request = canonical_bytes(
+        if isinstance(theorem_names, (str, bytes)):
+            raise TypeError("theorem_names must be an ordered sequence")
+        exact_theorems = tuple(theorem_names)
+        if not exact_theorems:
+            raise ValueError("theorem_names must not be empty")
+        for theorem in exact_theorems:
+            _token(theorem, "theorem_names[]")
+        if len(exact_theorems) != len(set(exact_theorems)):
+            raise ValueError("theorem_names contains duplicates")
+
+        solution_source = source + candidate
+        challenge_source = source + b"  sorry\n"
+        elaborate_request = canonical_bytes(
             {
-                "binding": binding.body(),
-                "candidate_b64": base64.b64encode(candidate).decode("ascii"),
-                "candidate_source_sha256": _sha(candidate),
-                "schema": "supernova.confirmatory.verifier-request.v2",
-                "source_b64": base64.b64encode(source).decode("ascii"),
-                "source_sha256": _sha(source),
-                "verifier_identity": self.launcher.identity.body(),
+                "mode": "elaborate",
+                "permitted_axioms": list(PERMITTED_AXIOMS),
+                "schema": CONTAINER_REQUEST_SCHEMA,
+                "solution_source_b64": base64.b64encode(solution_source).decode("ascii"),
+                "solution_source_sha256": _sha(solution_source),
+                "theorem_names": list(exact_theorems),
             }
         )
         started_at = _now_utc()
         monotonic_start = time.monotonic_ns()
-        container_id: str | None = None
-        stdout = b""
-        stderr = b""
-        exported_artifact = b""
-        checker_output = b""
+        phases: list[_PhaseObservation] = []
+        docker_runtime_sha = ""
+        image_id = ""
+        verdict = VerifierVerdict.UNKNOWN
         cause = TerminationCause.HOST_INFRASTRUCTURE_ERROR
-        timed_out = False
-        oom_killed = False
-        resource_limited = False
-        policy_violated = False
-        elaborator_exit: int | None = None
-        checker_exit: int | None = None
-        observed_signal: int | None = None
-        measurements: dict[str, object] = {
-            "container_created": False,
-            "request_sha256": _sha(request),
-        }
+        exported = b""
+        checker_output = b""
         try:
             docker_version = _success(
                 _invoke(["docker", "version", "--format", "{{json .}}"]),
                 "docker version",
             )
             docker_value = json.loads(docker_version.decode("utf-8"))
-            measurements["docker_runtime_sha256"] = _sha(canonical_bytes(docker_value))
+            docker_runtime_sha = _sha(canonical_bytes(docker_value))
             image_id = _image_identity(self.launcher)
-            measurements["image_id"] = image_id
-            created = _invoke(_create_argv(self.launcher))
-            if created.returncode != 0:
-                cause = TerminationCause.SANDBOX_START_FAILURE
-                stderr = created.stderr
+            elaborator = _run_container_phase(
+                self.launcher,
+                image_id=image_id,
+                name="elaborator",
+                request=elaborate_request,
+            )
+            phases.append(elaborator)
+            if elaborator.cause is not None:
+                cause = elaborator.cause
             else:
-                container_id = created.stdout.decode("ascii", errors="strict").strip()
-                if len(container_id) != 64 or any(char not in _HEX for char in container_id):
-                    raise RuntimeError("docker create did not return one full container id")
-                measurements["container_created"] = True
-                inspection = _docker_object(container_id)
-                try:
-                    snapshot = _security_snapshot(inspection, self.launcher, image_id)
-                except _SandboxPolicyError as exc:
-                    cause = TerminationCause.SANDBOX_POLICY_VIOLATION
-                    policy_violated = True
-                    stderr = str(exc).encode("utf-8")
+                status = None if elaborator.response is None else elaborator.response["status"]
+                if status == VerifierVerdict.INVALID.value and elaborator.exit_status == 10:
+                    # An elaboration error can be produced by hostile metaprogram
+                    # behavior, so it is not a mathematical rejection.
+                    cause = TerminationCause.INDETERMINATE
+                elif status == VerifierVerdict.UNKNOWN.value and elaborator.exit_status == 20:
+                    cause = TerminationCause.CHECKER_CRASH
+                elif status != "EXPORTED" or elaborator.exit_status != 0:
+                    cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
+                elif not elaborator.exported_artifact:
+                    cause = TerminationCause.INCOMPLETE_EXPORT
                 else:
-                    measurements["sandbox_snapshot_sha256"] = _sha(
-                        canonical_bytes(snapshot)
+                    exported = elaborator.exported_artifact
+                    check_request = canonical_bytes(
+                        {
+                            "challenge_source_b64": base64.b64encode(
+                                challenge_source
+                            ).decode("ascii"),
+                            "challenge_source_sha256": _sha(challenge_source),
+                            "mode": "check",
+                            "permitted_axioms": list(PERMITTED_AXIOMS),
+                            "schema": CONTAINER_REQUEST_SCHEMA,
+                            "solution_export_b64": base64.b64encode(exported).decode(
+                                "ascii"
+                            ),
+                            "solution_export_sha256": _sha(exported),
+                            "theorem_names": list(exact_theorems),
+                        }
                     )
-                    try:
-                        started = _invoke(
-                            [
-                                "docker", "start", "--attach", "--interactive",
-                                container_id,
-                            ],
-                            input_bytes=request,
-                            timeout=self.launcher.timeout_seconds,
+                    checker = _run_container_phase(
+                        self.launcher,
+                        image_id=image_id,
+                        name="checker",
+                        request=check_request,
+                    )
+                    phases.append(checker)
+                    checker_output = checker.stdout
+                    if checker.cause is not None:
+                        cause = checker.cause
+                    else:
+                        checker_status = (
+                            None if checker.response is None else checker.response["status"]
                         )
-                        stdout = started.stdout
-                        stderr = started.stderr
-                    except subprocess.TimeoutExpired as exc:
-                        timed_out = True
-                        cause = TerminationCause.TIMEOUT
-                        stdout = bytes(exc.stdout or b"")
-                        stderr = bytes(exc.stderr or b"")
-                    state = _docker_object(container_id).get("State") or {}
-                    if type(state) is not dict:
-                        raise RuntimeError("docker state is unavailable")
-                    measurements["container_state"] = {
-                        "dead": state.get("Dead"),
-                        "error": state.get("Error"),
-                        "exit_code": state.get("ExitCode"),
-                        "oom_killed": state.get("OOMKilled"),
-                        "status": state.get("Status"),
-                    }
-                    if not timed_out:
-                        oom_killed = state.get("OOMKilled") is True
-                        elaborator_exit = (
-                            state.get("ExitCode")
-                            if type(state.get("ExitCode")) is int
-                            else None
-                        )
-                        checker_exit = elaborator_exit
                         if (
-                            type(elaborator_exit) is int
-                            and 128 <= elaborator_exit <= 255
+                            checker_status == VerifierVerdict.VALID.value
+                            and checker.exit_status == 0
+                            and checker.response is not None
+                            and checker.response["solution_export_sha256"] == _sha(exported)
                         ):
-                            observed_signal = elaborator_exit - 128
-                        if oom_killed:
-                            cause = TerminationCause.OOM
-                        elif len(stdout) > self.launcher.max_output_bytes or len(stderr) > self.launcher.max_output_bytes:
-                            cause = TerminationCause.RESOURCE_LIMIT
-                            resource_limited = True
-                        elif elaborator_exit not in {0, None}:
+                            verdict = VerifierVerdict.VALID
+                            cause = TerminationCause.ACCEPTED
+                        elif (
+                            checker_status == VerifierVerdict.INVALID.value
+                            and checker.exit_status == 10
+                        ):
+                            verdict = VerifierVerdict.INVALID
+                            cause = TerminationCause.REJECTED
+                        elif (
+                            checker_status == VerifierVerdict.UNKNOWN.value
+                            and checker.exit_status == 20
+                        ):
                             cause = TerminationCause.CHECKER_CRASH
-                        elif not stdout:
-                            cause = TerminationCause.INCOMPLETE_EXPORT
                         else:
-                            # Output may literally say PASS/VALID.  It remains
-                            # untrusted bytes until an independently frozen checker
-                            # is provisioned, so successful exit is still UNKNOWN.
-                            cause = TerminationCause.INDETERMINATE
-                            checker_output = stdout
+                            cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
         except (OSError, RuntimeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            if cause not in {
-                TerminationCause.SANDBOX_POLICY_VIOLATION,
-                TerminationCause.SANDBOX_START_FAILURE,
-            }:
-                cause = TerminationCause.HOST_INFRASTRUCTURE_ERROR
-            stderr = (stderr + b"\n" + str(exc).encode("utf-8")).strip()
-        finally:
-            if container_id is not None:
-                try:
-                    _remove_observed(container_id)
-                except (OSError, RuntimeError) as exc:
-                    raise RuntimeError(
-                        "verifier teardown was not observed; evidence was not signed"
-                    ) from exc
+            phases.append(
+                _PhaseObservation(
+                    name="host",
+                    request_sha256=_sha(elaborate_request),
+                    container_id=None,
+                    stdout=b"",
+                    stderr=str(exc).encode("utf-8"),
+                    response=None,
+                    exported_artifact=b"",
+                    exit_status=None,
+                    signal=None,
+                    timed_out=False,
+                    oom_killed=False,
+                    resource_limited=False,
+                    sandbox_policy_violated=False,
+                    cause=TerminationCause.HOST_INFRASTRUCTURE_ERROR,
+                    security_snapshot_sha256=None,
+                )
+            )
+            verdict = VerifierVerdict.UNKNOWN
+            cause = TerminationCause.HOST_INFRASTRUCTURE_ERROR
+
+        elaborator = next((phase for phase in phases if phase.name == "elaborator"), None)
+        checker = next((phase for phase in phases if phase.name == "checker"), None)
+        timed_out = any(phase.timed_out for phase in phases)
+        oom_killed = any(phase.oom_killed for phase in phases)
+        resource_limited = any(phase.resource_limited for phase in phases)
+        policy_violated = any(phase.sandbox_policy_violated for phase in phases)
+        stdout = b"" if elaborator is None else elaborator.stdout
+        stderr = b"\n".join(
+            phase.name.encode("ascii") + b":" + phase.stderr
+            for phase in phases
+            if phase.stderr
+        )
         elapsed = (time.monotonic_ns() - monotonic_start) // 1_000_000
-        stdout = stdout[: self.launcher.max_output_bytes]
-        stderr = stderr[: self.launcher.max_output_bytes]
-        measurements["output_truncated"] = resource_limited
+        measurements: dict[str, object] = {
+            "challenge_source_sha256": _sha(challenge_source),
+            "docker_runtime_sha256": docker_runtime_sha,
+            "image_id": image_id,
+            "permitted_axioms": list(PERMITTED_AXIOMS),
+            "phases": [phase.measurements() for phase in phases],
+            "solution_source_sha256": _sha(solution_source),
+            "theorem_names": list(exact_theorems),
+            "two_fresh_containers_required": True,
+        }
         return self._persist(
             binding=binding,
             source=source,
             candidate=candidate,
-            exported_artifact=exported_artifact,
-            checker_output=checker_output[: self.launcher.max_output_bytes],
+            exported_artifact=exported,
+            checker_output=checker_output,
             stdout=stdout,
             stderr=stderr,
             cause=cause,
-            elaborator_exit_status=elaborator_exit,
-            elaborator_signal=observed_signal,
-            checker_exit_status=checker_exit,
-            checker_signal=observed_signal,
+            verdict=verdict,
+            elaborator_exit_status=(None if elaborator is None else elaborator.exit_status),
+            elaborator_signal=(None if elaborator is None else elaborator.signal),
+            checker_exit_status=(None if checker is None else checker.exit_status),
+            checker_signal=(None if checker is None else checker.signal),
             timed_out=timed_out,
             oom_killed=oom_killed,
             resource_limited=resource_limited,
@@ -1499,6 +1754,28 @@ class VerifierSupervisor:
             resource_measurements=measurements,
         )
 
+
+    def run_and_record(
+        self,
+        binding: VerifierBinding,
+        *,
+        source: bytes,
+        candidate: bytes,
+        theorem_names: Sequence[str],
+    ) -> VerifierEvidenceRecord:
+        """Run the hostile elaborator and independent checker in fresh sandboxes.
+
+        Candidate output is never accepted as a verdict.  Only the host-observed
+        two-phase protocol may construct ``VALID`` or ``INVALID``; every
+        resource, policy, protocol, and infrastructure failure is ``UNKNOWN``.
+        """
+
+        return self._run_two_phase_and_record(
+            binding,
+            source=source,
+            candidate=candidate,
+            theorem_names=theorem_names,
+        )
 
 __all__ = [
     "HostVerifierSigner",
