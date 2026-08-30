@@ -26,10 +26,6 @@ NO_ANSWER = (
     b"-- supernova-kind: NO_ANSWER\n"
     b"-- supernova-schema: supernova.no-answer-emission.v1\n"
 )
-_FORBIDDEN_PRODUCT_TOKENS = re.compile(
-    rb"(?m)^\s*(?:import|namespace|end|section|variable|notation|macro|syntax|"
-    rb"attribute|set_option|axiom|opaque|unsafe)\b|\b(?:sorry|admit)\b"
-)
 _FORBIDDEN_FINAL_TOKENS = re.compile(
     rb"(?m)^\s*(?:import|theorem|lemma|axiom|namespace|section|variable|"
     rb"notation|macro|syntax|attribute|set_option|opaque|unsafe)\b|"
@@ -84,6 +80,7 @@ class ClassifiedResponse:
     kind: ConfirmatoryResponseKind
     visible_utf8: bytes
     verifier_candidate_utf8: bytes | None
+    product_parser_source_utf8: bytes | None
     theorem_name: str | None
     self_score: int | None
 
@@ -91,11 +88,22 @@ class ClassifiedResponse:
         _utf8(self.visible_utf8, "visible_utf8")
         if self.verifier_candidate_utf8 is not None:
             _utf8(self.verifier_candidate_utf8, "verifier_candidate_utf8")
+        if self.product_parser_source_utf8 is not None:
+            _utf8(self.product_parser_source_utf8, "product_parser_source_utf8")
+            if (
+                self.kind is not ConfirmatoryResponseKind.PRODUCT_CANDIDATE
+                or self.verifier_candidate_utf8 is None
+                or not self.verifier_candidate_utf8.endswith(
+                    self.product_parser_source_utf8
+                )
+            ):
+                raise ValueError("product parser source is not bound to response bytes")
         if self.kind is ConfirmatoryResponseKind.NO_ANSWER and (
             self.visible_utf8 not in {b"", NO_ANSWER}
             or self.theorem_name is not None
             or self.self_score is not None
             or self.verifier_candidate_utf8 not in {None, b""}
+            or self.product_parser_source_utf8 is not None
         ):
             raise ValueError("NO_ANSWER response fields changed")
 
@@ -243,43 +251,35 @@ def classify_product_response(
         raise ValueError("product response is empty or exceeds the frozen byte cap")
     if response == NO_ANSWER:
         return ClassifiedResponse(
-            ConfirmatoryResponseKind.NO_ANSWER,
-            response,
-            None,
-            None,
-            None,
+            kind=ConfirmatoryResponseKind.NO_ANSWER,
+            visible_utf8=response,
+            verifier_candidate_utf8=None,
+            product_parser_source_utf8=None,
+            theorem_name=None,
+            self_score=None,
         )
     if response.startswith(PRODUCT_PREFIX):
         body = response[len(PRODUCT_PREFIX) :]
         name = product_declaration_name(source, attempt)
-        declaration = re.compile(
-            rb"^(?:theorem|lemma) " + re.escape(name.encode()) + rb"\b"
-        )
-        if not declaration.match(body) or _FORBIDDEN_PRODUCT_TOKENS.search(body):
-            return ClassifiedResponse(
-                ConfirmatoryResponseKind.PRODUCT_CANDIDATE,
-                response,
-                None,
-                name,
-                None,
-            )
         return ClassifiedResponse(
-            ConfirmatoryResponseKind.PRODUCT_CANDIDATE,
-            response,
-            response,
-            name,
-            None,
+            kind=ConfirmatoryResponseKind.PRODUCT_CANDIDATE,
+            visible_utf8=response,
+            verifier_candidate_utf8=response,
+            product_parser_source_utf8=body,
+            theorem_name=name,
+            self_score=None,
         )
     if response.startswith(FINAL_PREFIX):
         body = response[len(FINAL_PREFIX) :]
         if not body or _FORBIDDEN_FINAL_TOKENS.search(body):
             raise ValueError("final answer violates the frozen tactic-body policy")
         return ClassifiedResponse(
-            ConfirmatoryResponseKind.FINAL_ANSWER,
-            response,
-            response,
-            source.native_id,
-            None,
+            kind=ConfirmatoryResponseKind.FINAL_ANSWER,
+            visible_utf8=response,
+            verifier_candidate_utf8=response,
+            product_parser_source_utf8=None,
+            theorem_name=source.native_id,
+            self_score=None,
         )
     raise ValueError("product response lacks one exact frozen discriminator")
 
@@ -294,11 +294,12 @@ def classify_baseline_response(
     response = _utf8(visible_utf8, "visible response")
     if not response:
         return ClassifiedResponse(
-            ConfirmatoryResponseKind.NO_ANSWER,
-            response,
-            response if require_self_score else None,
-            None,
-            None,
+            kind=ConfirmatoryResponseKind.NO_ANSWER,
+            visible_utf8=response,
+            verifier_candidate_utf8=response if require_self_score else None,
+            product_parser_source_utf8=None,
+            theorem_name=None,
+            self_score=None,
         )
     if len(response) > maximum_bytes or _FORBIDDEN_FINAL_TOKENS.search(response):
         raise ValueError("baseline response violates the frozen tactic-body policy")
@@ -308,11 +309,12 @@ def classify_baseline_response(
         match = _SELF_SCORE.fullmatch(first_line)
         score = -1 if match is None else int(match.group(1))
     return ClassifiedResponse(
-        ConfirmatoryResponseKind.FINAL_ANSWER,
-        response,
-        response,
-        source.native_id,
-        score,
+        kind=ConfirmatoryResponseKind.FINAL_ANSWER,
+        visible_utf8=response,
+        verifier_candidate_utf8=response,
+        product_parser_source_utf8=None,
+        theorem_name=source.native_id,
+        self_score=score,
     )
 
 
@@ -342,6 +344,12 @@ def build_verification_subject(
         theorem_statement_sha256=statement_digest,
         theorem_target_set_sha256=canonical_sha256(list(theorem_names)),
         source_construction_sha256=sha256(challenge).hexdigest(),
+        product_parser_source=response.product_parser_source_utf8,
+        product_parser_expected_name=(
+            response.theorem_name
+            if response.kind is ConfirmatoryResponseKind.PRODUCT_CANDIDATE
+            else None
+        ),
     )
 
 

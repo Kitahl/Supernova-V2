@@ -95,7 +95,14 @@ class ConfirmatoryIOTests(unittest.TestCase):
             attempt=0,
         )
         self.assertIs(malformed.kind, ConfirmatoryResponseKind.PRODUCT_CANDIDATE)
-        self.assertIsNone(malformed.verifier_candidate_utf8)
+        self.assertEqual(
+            PRODUCT_PREFIX + b"lemma wrong : True := by trivial\n",
+            malformed.verifier_candidate_utf8,
+        )
+        self.assertEqual(
+            b"lemma wrong : True := by trivial\n",
+            malformed.product_parser_source_utf8,
+        )
 
     def test_product_subject_excludes_target_and_final_subject_preserves_it(
         self,

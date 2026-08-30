@@ -930,8 +930,9 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             ),
         )
         for changed in variants:
-            with self.subTest(field=changed), self.assertRaises(
-                (KeyError, ValueError, sqlite3.IntegrityError)
+            with (
+                self.subTest(field=changed),
+                self.assertRaises((KeyError, ValueError, sqlite3.IntegrityError)),
             ):
                 self.append(store, record, changed)
 
@@ -986,9 +987,10 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         binding = self.binding()
         record = self.issue_unpersisted(binding)
         store = self.store("rollback.sqlite")
-        with patch.object(
-            store, "_read_row", side_effect=RuntimeError("forced")
-        ), self.assertRaisesRegex(RuntimeError, "forced"):
+        with (
+            patch.object(store, "_read_row", side_effect=RuntimeError("forced")),
+            self.assertRaisesRegex(RuntimeError, "forced"),
+        ):
             self.append(store, record, binding)
         connection = sqlite3.connect(store.path)
         try:
@@ -1136,6 +1138,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         oom_phase: str | None = None,
         create_failure_phase: str | None = None,
         policy_failure_phase: str | None = None,
+        parser_status: str | None = None,
         name: str,
     ) -> VerifierEvidenceRecord:
         binding = self.binding(actual_dispatch_id=sha("dispatch:" + name))
@@ -1152,6 +1155,17 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                             "ascii"
                         ),
                         "solution_export_sha256": hashlib.sha256(exported).hexdigest(),
+                        "status": status,
+                    }
+                )
+            if status == "PARSED":
+                return verifier_evidence_module.canonical_bytes(
+                    {
+                        "declaration_name": "alpha",
+                        "product_source_sha256": hashlib.sha256(
+                            self.candidate
+                        ).hexdigest(),
+                        "schema": verifier_evidence_module.CONTAINER_RESPONSE_SCHEMA,
                         "status": status,
                     }
                 )
@@ -1173,8 +1187,12 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 }
             )
 
-        phase_names = ("elaborator", "checker")
-        phase_stdout = (
+        phase_names = (
+            ("elaborator", "checker")
+            if parser_status is None
+            else ("product_parser", "elaborator", "checker")
+        )
+        base_stdout = (
             phase_response(elaborator_status, checker=False)
             if elaborator_stdout is None
             else elaborator_stdout,
@@ -1182,7 +1200,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             if checker_stdout is None
             else checker_stdout,
         )
-        phase_exit = (
+        base_exit = (
             0
             if elaborator_status == "EXPORTED"
             else 10
@@ -1194,6 +1212,15 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             if checker_status == "INVALID"
             else 20,
         )
+        phase_stdout = (
+            base_stdout
+            if parser_status is None
+            else (phase_response(parser_status, checker=False), *base_stdout)
+        )
+        parser_exit = (
+            0 if parser_status == "PARSED" else 10 if parser_status == "INVALID" else 20
+        )
+        phase_exit = base_exit if parser_status is None else (parser_exit, *base_exit)
         captured_requests: list[bytes] = []
         created_containers: list[str] = []
         removed_containers: list[str] = []
@@ -1214,7 +1241,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 phase_name = phase_names[phase]
                 if create_failure_phase == phase_name:
                     return subprocess.CompletedProcess(args, 1, b"", b"create denied")
-                container_id = ("a" if phase == 0 else "b") * 64
+                container_id = chr(ord("a") + phase) * 64
                 created_containers.append(container_id)
                 phase_by_container[container_id] = phase
                 return subprocess.CompletedProcess(
@@ -1290,11 +1317,20 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             ),
             patch.object(self.signer, "_issue", side_effect=issue),
         ):
+            parser_kwargs = (
+                {}
+                if parser_status is None
+                else {
+                    "product_parser_source": self.candidate,
+                    "product_parser_expected_name": "alpha",
+                }
+            )
             record = supervisor.run_and_record(
                 binding,
                 source=self.source,
                 candidate=self.candidate,
                 theorem_names=("alpha",),
+                **parser_kwargs,
             )
         for request in captured_requests:
             self.assertNotIn(b"k" * 32, request)
@@ -1322,6 +1358,46 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         requests = tuple(json.loads(raw) for raw in trace["captured_requests"])
         self.assertEqual(
             ("elaborate", "check"), tuple(value["mode"] for value in requests)
+        )
+
+    def test_product_parser_admission_is_bound_inside_signed_evidence(self) -> None:
+        admitted = self._mocked_supervisor_run(
+            parser_status="PARSED",
+            name="parser-admitted",
+        )
+        measurement = admitted.body["observations"]["resource_measurements"][
+            "product_parser"
+        ]
+        self.assertEqual(
+            {
+                "admissible": True,
+                "expected_name": "alpha",
+                "source_bytes": len(self.candidate),
+                "source_sha256": hashlib.sha256(self.candidate).hexdigest(),
+            },
+            measurement,
+        )
+        requests = tuple(
+            json.loads(raw) for raw in self.last_supervisor_trace["captured_requests"]
+        )
+        self.assertEqual(
+            ("parse_product", "elaborate", "check"),
+            tuple(value["mode"] for value in requests),
+        )
+        self.assertEqual(3, len(self.last_supervisor_trace["created_containers"]))
+
+        rejected = self._mocked_supervisor_run(
+            parser_status="INVALID",
+            name="parser-rejected",
+        )
+        self.assertFalse(
+            rejected.body["observations"]["resource_measurements"]["product_parser"][
+                "admissible"
+            ]
+        )
+        self.assertEqual(
+            VerifierVerdict.VALID.value,
+            rejected.body["observations"]["verdict"],
         )
 
     def test_supervisor_rejects_target_substitution_and_runtime_drift(self) -> None:

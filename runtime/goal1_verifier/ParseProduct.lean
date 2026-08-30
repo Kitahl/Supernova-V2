@@ -1,4 +1,4 @@
-import Mathlib
+import Lean
 
 open Lean
 

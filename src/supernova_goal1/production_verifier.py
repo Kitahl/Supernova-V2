@@ -143,6 +143,8 @@ class VerificationSubject:
     theorem_statement_sha256: str
     theorem_target_set_sha256: str
     source_construction_sha256: str
+    product_parser_source: bytes | None = None
+    product_parser_expected_name: str | None = None
 
     def __post_init__(self) -> None:
         for value, field in (
@@ -168,6 +170,52 @@ class VerificationSubject:
             raise ValueError("source construction digest mismatch")
         if canonical_sha256(list(self.theorem_names)) != self.theorem_target_set_sha256:
             raise ValueError("theorem target-set digest mismatch")
+        parser_required = self.product_parser_source is not None
+        if parser_required != (self.product_parser_expected_name is not None):
+            raise ValueError("product parser source and name must be supplied together")
+        if self.product_parser_source is not None:
+            if (
+                type(self.product_parser_source) is not bytes
+                or not self.product_parser_source
+            ):
+                raise TypeError("product_parser_source must be non-empty exact bytes")
+            try:
+                self.product_parser_source.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("product_parser_source must be UTF-8") from exc
+            if not self.candidate_source.endswith(self.product_parser_source):
+                raise ValueError(
+                    "product parser source is not bound to candidate bytes"
+                )
+            _text(self.product_parser_expected_name, "product_parser_expected_name")
+
+
+def _product_parser_measurement(
+    record: VerifierEvidenceRecord,
+    candidate: bytes,
+) -> dict[str, object] | None:
+    measurements = record.body["observations"]["resource_measurements"]
+    raw = measurements.get("product_parser")
+    if raw is None:
+        return None
+    expected = {"admissible", "expected_name", "source_bytes", "source_sha256"}
+    if type(raw) is not dict or set(raw) != expected:
+        raise ValueError("signed product parser evidence fields changed")
+    if raw["admissible"] not in {True, False, None}:
+        raise ValueError("signed product parser admission changed")
+    name = _text(raw["expected_name"], "product parser expected_name")
+    size = raw["source_bytes"]
+    if type(size) is not int or size <= 0 or size > len(candidate):
+        raise ValueError("signed product parser source size changed")
+    digest = _sha256(raw["source_sha256"], "product parser source_sha256")
+    if _sha(candidate[-size:]) != digest:
+        raise ValueError("signed product parser source is not bound to candidate")
+    return {
+        "admissible": raw["admissible"],
+        "expected_name": name,
+        "source_bytes": size,
+        "source_sha256": digest,
+    }
 
 
 @dataclass(frozen=True)
@@ -203,6 +251,12 @@ class ProductionVerification:
             raise ValueError(
                 "compatibility result differs from signed verifier evidence"
             )
+        _product_parser_measurement(self.record, self.blobs.candidate)
+
+    @property
+    def product_parser_admissible(self) -> bool | None:
+        measurement = _product_parser_measurement(self.record, self.blobs.candidate)
+        return None if measurement is None else measurement["admissible"]  # type: ignore[return-value]
 
 
 def _default_subject(
@@ -548,6 +602,8 @@ class ProductionVerifierPort:
             source=subject.challenge_source,
             candidate=subject.candidate_source,
             theorem_names=subject.theorem_names,
+            product_parser_source=subject.product_parser_source,
+            product_parser_expected_name=subject.product_parser_expected_name,
         )
         blobs = self.supervisor.store.read_blobs(binding)
         result = verifier_result_from_evidence(
@@ -555,7 +611,19 @@ class ProductionVerifierPort:
             blobs,
             command=self.supervisor.launcher.command,
         )
-        return ProductionVerification(binding, record, blobs, result)
+        verification = ProductionVerification(binding, record, blobs, result)
+        parser = _product_parser_measurement(record, blobs.candidate)
+        if subject.product_parser_source is None:
+            if parser is not None:
+                raise ValueError("unexpected signed product parser evidence")
+        elif (
+            parser is None
+            or parser["expected_name"] != subject.product_parser_expected_name
+            or parser["source_bytes"] != len(subject.product_parser_source)
+            or parser["source_sha256"] != _sha(subject.product_parser_source)
+        ):
+            raise ValueError("signed product parser evidence differs from subject")
+        return verification
 
     def __call__(self, dispatch: BaselineDispatch, candidate: bytes) -> VerifierResult:
         return self.verify(dispatch, candidate).result

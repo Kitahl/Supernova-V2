@@ -91,13 +91,21 @@ def product_admission_decision(
     arm: ProductChainArm | str,
     response_kind: ConfirmatoryResponseKind,
     verifier_status: VerifierStatus,
+    *,
+    syntax_admissible: bool,
 ) -> bool:
     """Pure frozen rule; callers still need signed evidence to supply status."""
 
     parsed_arm = ProductChainArm(arm)
-    return response_kind is ConfirmatoryResponseKind.PRODUCT_CANDIDATE and (
-        parsed_arm is ProductChainArm.PRODUCT_ONLY
-        or verifier_status is VerifierStatus.PASS
+    if type(syntax_admissible) is not bool:
+        raise TypeError("syntax_admissible must be an exact bool")
+    return (
+        syntax_admissible
+        and response_kind is ConfirmatoryResponseKind.PRODUCT_CANDIDATE
+        and (
+            parsed_arm is ProductChainArm.PRODUCT_ONLY
+            or verifier_status is VerifierStatus.PASS
+        )
     )
 
 
@@ -178,14 +186,13 @@ class ProductChainController:
         if attempt != len(self._records) or attempt not in ATTEMPTS:
             raise ValueError("product response is outside the frozen linear order")
         response = classify_product_response(visible_utf8, self.source, attempt=attempt)
-        syntax_admissible = response.verifier_candidate_utf8 is not None
-        if response.kind is ConfirmatoryResponseKind.NO_ANSWER or not syntax_admissible:
+        if response.kind is ConfirmatoryResponseKind.NO_ANSWER:
             self._records.append(
                 ProductAttemptRecord(
                     attempt=attempt,
                     response_kind=response.kind,
                     response_sha256=sha256(response.visible_utf8).hexdigest(),
-                    syntax_admissible=syntax_admissible,
+                    syntax_admissible=False,
                     verifier_invoked=False,
                     verifier_record_sha256=None,
                     verifier_status=None,
@@ -211,10 +218,22 @@ class ProductChainController:
         attempt, response, subject = self._pending
         _subject_matches(verification, subject)
         status = verification.result.status
+        if response.kind is ConfirmatoryResponseKind.PRODUCT_CANDIDATE:
+            parser_admissible = verification.product_parser_admissible
+            if type(parser_admissible) is not bool:
+                raise ValueError("product candidate lacks signed parser admission")
+            syntax_admissible = parser_admissible
+        else:
+            if verification.product_parser_admissible is not None:
+                raise ValueError(
+                    "final answer unexpectedly has product parser evidence"
+                )
+            syntax_admissible = True
         product_admitted = product_admission_decision(
             self.arm,
             response.kind,
             status,
+            syntax_admissible=syntax_admissible,
         )
         final_solved = final_solve_decision(response.kind, status)
         if product_admitted:
@@ -223,7 +242,7 @@ class ProductChainController:
             attempt=attempt,
             response_kind=response.kind,
             response_sha256=sha256(response.visible_utf8).hexdigest(),
-            syntax_admissible=True,
+            syntax_admissible=syntax_admissible,
             verifier_invoked=True,
             verifier_record_sha256=verification.record.record_sha256,
             verifier_status=status,

@@ -1451,6 +1451,18 @@ def _parse_container_response(raw: bytes) -> tuple[dict[str, Any], bytes]:
         if set(value) != expected:
             raise ValueError("elaborator response fields changed")
         return value, _decode_export(value, "solution_export")
+    if status == "PARSED":
+        expected = {
+            "declaration_name",
+            "product_source_sha256",
+            "schema",
+            "status",
+        }
+        if set(value) != expected:
+            raise ValueError("parser response fields changed")
+        _token(value["declaration_name"], "declaration_name")
+        _sha256(value["product_source_sha256"], "product_source_sha256")
+        return value, b""
     if status == VerifierVerdict.VALID.value:
         expected = {
             "challenge_export_sha256",
@@ -1734,11 +1746,27 @@ class VerifierSupervisor:
         source: bytes,
         candidate: bytes,
         theorem_names: Sequence[str],
+        product_parser_source: bytes | None,
+        product_parser_expected_name: str | None,
     ) -> VerifierEvidenceRecord:
         if type(binding) is not VerifierBinding:
             raise TypeError("binding must be an exact VerifierBinding")
         if type(source) is not bytes or type(candidate) is not bytes:
             raise TypeError("source and candidate must be exact bytes")
+        parser_required = product_parser_source is not None
+        if parser_required != (product_parser_expected_name is not None):
+            raise ValueError("product parser source and name must be supplied together")
+        if product_parser_source is not None:
+            if type(product_parser_source) is not bytes or not product_parser_source:
+                raise TypeError("product_parser_source must be non-empty exact bytes")
+            if not candidate.endswith(product_parser_source):
+                raise ValueError(
+                    "product parser source is not bound to candidate bytes"
+                )
+            product_parser_expected_name = _token(
+                product_parser_expected_name,
+                "product_parser_expected_name",
+            )
         if _sha(source) != binding.source_construction_sha256:
             raise ValueError("source bytes differ from the bound source construction")
         if _sha(candidate) != binding.candidate_source_sha256:
@@ -1783,6 +1811,8 @@ class VerifierSupervisor:
         started_at = _now_utc()
         monotonic_start = time.monotonic_ns()
         phases: list[_PhaseObservation] = []
+        parser_admissible: bool | None = None
+        parser_blocking_cause: TerminationCause | None = None
         docker_runtime_sha = ""
         image_id = ""
         verdict = VerifierVerdict.UNKNOWN
@@ -1797,6 +1827,55 @@ class VerifierSupervisor:
             docker_value = json.loads(docker_version.decode("utf-8"))
             docker_runtime_sha = _sha(canonical_bytes(docker_value))
             image_id = _image_identity(self.launcher)
+            if product_parser_source is not None:
+                parse_request = canonical_bytes(
+                    {
+                        "expected_name": product_parser_expected_name,
+                        "mode": "parse_product",
+                        "product_source_b64": base64.b64encode(
+                            product_parser_source
+                        ).decode("ascii"),
+                        "product_source_sha256": _sha(product_parser_source),
+                        "schema": CONTAINER_REQUEST_SCHEMA,
+                    }
+                )
+                parser = _run_container_phase(
+                    self.launcher,
+                    image_id=image_id,
+                    name="product_parser",
+                    request=parse_request,
+                )
+                phases.append(parser)
+                if parser.cause is not None:
+                    parser_blocking_cause = parser.cause
+                else:
+                    parser_status = (
+                        None if parser.response is None else parser.response["status"]
+                    )
+                    if (
+                        parser_status == "PARSED"
+                        and parser.exit_status == 0
+                        and parser.response is not None
+                        and parser.response["declaration_name"]
+                        == product_parser_expected_name
+                        and parser.response["product_source_sha256"]
+                        == _sha(product_parser_source)
+                    ):
+                        parser_admissible = True
+                    elif (
+                        parser_status == VerifierVerdict.INVALID.value
+                        and parser.exit_status == 10
+                    ):
+                        parser_admissible = False
+                    elif (
+                        parser_status == VerifierVerdict.UNKNOWN.value
+                        and parser.exit_status == 20
+                    ):
+                        parser_blocking_cause = TerminationCause.CHECKER_CRASH
+                    else:
+                        parser_blocking_cause = (
+                            TerminationCause.MALFORMED_CHECKER_OUTPUT
+                        )
             elaborator = _run_container_phase(
                 self.launcher,
                 image_id=image_id,
@@ -1884,6 +1963,9 @@ class VerifierSupervisor:
                             cause = TerminationCause.CHECKER_CRASH
                         else:
                             cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
+            if parser_blocking_cause is not None:
+                verdict = VerifierVerdict.UNKNOWN
+                cause = parser_blocking_cause
         except (
             OSError,
             RuntimeError,
@@ -1938,6 +2020,13 @@ class VerifierSupervisor:
             "theorem_names": list(exact_theorems),
             "two_fresh_containers_required": True,
         }
+        if product_parser_source is not None:
+            measurements["product_parser"] = {
+                "admissible": parser_admissible,
+                "expected_name": product_parser_expected_name,
+                "source_bytes": len(product_parser_source),
+                "source_sha256": _sha(product_parser_source),
+            }
         return self._persist(
             binding=binding,
             source=source,
@@ -1971,6 +2060,8 @@ class VerifierSupervisor:
         source: bytes,
         candidate: bytes,
         theorem_names: Sequence[str],
+        product_parser_source: bytes | None = None,
+        product_parser_expected_name: str | None = None,
     ) -> VerifierEvidenceRecord:
         """Run the hostile elaborator and independent checker in fresh sandboxes.
 
@@ -1984,6 +2075,8 @@ class VerifierSupervisor:
             source=source,
             candidate=candidate,
             theorem_names=theorem_names,
+            product_parser_source=product_parser_source,
+            product_parser_expected_name=product_parser_expected_name,
         )
 
 

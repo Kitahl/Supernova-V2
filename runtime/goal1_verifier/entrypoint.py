@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -57,6 +58,11 @@ PRIMITIVE_TARGETS = (
     "Nat.shiftLeft",
     "Nat.shiftRight",
     "String.ofList",
+)
+FORBIDDEN_PRODUCT_SYNTAX = re.compile(
+    rb"(?m)^\s*(?:import|namespace|end|section|variable|notation|macro|syntax|"
+    rb"attribute|set_option|axiom|opaque|unsafe)\b|\b(?:sorry|admit)\b|"
+    rb"^\s*@\["
 )
 
 
@@ -391,6 +397,8 @@ def parse_product(request: dict[str, Any], lock: dict[str, Any]) -> None:
         for prefix in allowed_prefixes
     ):
         raise Rejected("product declaration kind or exact name changed")
+    if FORBIDDEN_PRODUCT_SYNTAX.search(source):
+        raise Rejected("product declaration contains frozen forbidden syntax")
     with tempfile.TemporaryDirectory(dir="/tmp") as raw:
         root = Path(raw)
         (root / "home").mkdir()

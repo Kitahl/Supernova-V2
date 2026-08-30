@@ -63,6 +63,7 @@ class ConfirmatoryControllerTests(unittest.TestCase):
                     ProductChainArm.PRODUCT_ONLY,
                     ConfirmatoryResponseKind.PRODUCT_CANDIDATE,
                     status,
+                    syntax_admissible=True,
                 )
             )
             self.assertEqual(
@@ -71,7 +72,16 @@ class ConfirmatoryControllerTests(unittest.TestCase):
                     ProductChainArm.VERIFIED_CHAIN,
                     ConfirmatoryResponseKind.PRODUCT_CANDIDATE,
                     status,
+                    syntax_admissible=True,
                 ),
+            )
+            self.assertFalse(
+                product_admission_decision(
+                    ProductChainArm.PRODUCT_ONLY,
+                    ConfirmatoryResponseKind.PRODUCT_CANDIDATE,
+                    status,
+                    syntax_admissible=False,
+                )
             )
             self.assertFalse(
                 final_solve_decision(
@@ -87,23 +97,27 @@ class ConfirmatoryControllerTests(unittest.TestCase):
                 ),
             )
 
-    def test_product_syntax_failure_is_complete_but_never_visible(self) -> None:
+    def test_product_syntax_failure_still_requires_bound_verifier_event(self) -> None:
         controller = ProductChainController(
             arm=ProductChainArm.PRODUCT_ONLY,
             source=self.source,
             product_contract=self.products,
         )
         controller.render_request(0)
+        visible = PRODUCT_PREFIX + b"lemma wrong : True := by trivial\n"
         subject = controller.submit_response(
             0,
-            PRODUCT_PREFIX + b"lemma wrong : True := by trivial\n",
+            visible,
         )
-        self.assertIsNone(subject)
-        self.assertEqual(1, len(controller.records))
-        self.assertFalse(controller.records[0].syntax_admissible)
-        self.assertFalse(controller.records[0].verifier_invoked)
+        self.assertIsNotNone(subject)
+        self.assertEqual(0, len(controller.records))
+        self.assertEqual(
+            b"lemma wrong : True := by trivial\n",
+            subject.product_parser_source,  # type: ignore[union-attr]
+        )
         self.assertEqual((), controller.admitted_products)
-        self.assertNotIn(b"lemma wrong", controller.render_request(1))
+        with self.assertRaisesRegex(RuntimeError, "previous verifier"):
+            controller.render_request(1)
 
     def test_product_or_final_verification_requires_signed_capability(self) -> None:
         controller = ProductChainController(

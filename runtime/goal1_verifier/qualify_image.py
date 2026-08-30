@@ -85,8 +85,9 @@ def run_container(
     if completed.returncode != expected_exit:
         raise RuntimeError(
             f"verifier exit {completed.returncode}, expected {expected_exit}: "
-            + (completed.stdout + b"\n" + completed.stderr)
-            .decode("utf-8", "replace")[:4000]
+            + (completed.stdout + b"\n" + completed.stderr).decode("utf-8", "replace")[
+                :4000
+            ]
         )
     try:
         response = json.loads(completed.stdout.decode("utf-8"))
@@ -158,12 +159,12 @@ def qualify(image: str) -> dict[str, str]:
         raise RuntimeError("runtime lock does not bind cgroup-only memory authority")
 
     product_name = "SupernovaProduct.P_" + ("a" * 64) + ".a00"
-    parse_only_source = f'''theorem {product_name} : True := by
+    parse_only_source = f"""theorem {product_name} : True := by
   run_tac
     let inside <- IO.FS.readFile "/opt/supernova/sandbox_sentinel.txt"
     IO.println inside
   trivial
-'''.encode()
+""".encode()
     parse_request: dict[str, Any] = {
         "expected_name": product_name,
         "mode": "parse_product",
@@ -187,6 +188,17 @@ def qualify(image: str) -> dict[str, str]:
     rejected_parse, _ = run_container(image, two_request, expected_exit=10)
     if rejected_parse.get("status") != "INVALID":
         raise RuntimeError("parser-only mode accepted two declarations")
+
+    forbidden_source = f"theorem {product_name} : True := by\n  sorry\n".encode()
+    forbidden_request: dict[str, Any] = {
+        "expected_name": product_name,
+        "mode": "parse_product",
+        "schema": REQUEST_SCHEMA,
+        **blob_fields("product_source", forbidden_source),
+    }
+    rejected_forbidden, _ = run_container(image, forbidden_request, expected_exit=10)
+    if rejected_forbidden.get("status") != "INVALID":
+        raise RuntimeError("parser-only mode accepted frozen forbidden syntax")
 
     theorem = "supernova_benign"
     benign_source = (
@@ -314,13 +326,8 @@ def main() -> int:
             "image": args.image,
             "status": "FAILED",
         }
-        message = github_command_escape(
-            f"{result['error_type']}: {result['error']}"
-        )
-        print(
-            "::error file=runtime/goal1_verifier/qualify_image.py::"
-            + message
-        )
+        message = github_command_escape(f"{result['error_type']}: {result['error']}")
+        print("::error file=runtime/goal1_verifier/qualify_image.py::" + message)
         exit_code = 1
     raw = json.dumps(result, allow_nan=False, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
