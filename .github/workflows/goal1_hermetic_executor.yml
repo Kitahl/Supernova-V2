@@ -10,6 +10,8 @@ on:
       - "tests/test_goal1_verifier_runtime.py"
   push:
     branches: [main]
+    tags:
+      - "publish-goal1-verifier-g1-activation-20260829"
     paths:
       - "runtime/goal1_hermetic_executor/**"
       - ".github/workflows/goal1_hermetic_executor.yml"
@@ -34,7 +36,10 @@ env:
 
 jobs:
   build-test-publish:
-    if: github.event_name != 'workflow_dispatch' || inputs.publish_target == 'executor'
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'executor')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -152,7 +157,10 @@ jobs:
           if-no-files-found: error
 
   build-test-publish-verifier:
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'verifier')
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'verifier') ||
+      (github.event_name == 'push' && github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -181,7 +189,9 @@ jobs:
             "$CANDIDATE_TAG" \
             --output verifier-qualification.json
       - name: Log in to GHCR
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -189,7 +199,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the exact tested verifier image
         id: publish-verifier
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829'
         shell: bash
         run: |
           set -euo pipefail
@@ -206,7 +218,9 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "image_ref=$immutable_ref" >> "$GITHUB_OUTPUT"
       - name: Attest published verifier image
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829'
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
           subject-name: ${{ env.IMAGE_NAME }}
