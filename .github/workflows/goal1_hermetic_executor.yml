@@ -4,15 +4,29 @@ on:
   pull_request:
     paths:
       - "runtime/goal1_hermetic_executor/**"
+      - "runtime/goal1_verifier/**"
       - ".github/workflows/goal1_hermetic_executor.yml"
       - "tests/test_goal1_hermetic_executor.py"
+      - "tests/test_goal1_verifier_runtime.py"
   push:
     branches: [main]
+    tags:
+      - "publish-goal1-verifier-g1-activation-20260829"
+      - "publish-goal1-verifier-g1-activation-20260829-parser"
     paths:
       - "runtime/goal1_hermetic_executor/**"
       - ".github/workflows/goal1_hermetic_executor.yml"
       - "tests/test_goal1_hermetic_executor.py"
   workflow_dispatch:
+    inputs:
+      publish_target:
+        description: "Artifact to build, test, and publish"
+        required: true
+        default: executor
+        type: choice
+        options:
+          - executor
+          - verifier
 
 permissions:
   contents: read
@@ -23,6 +37,10 @@ env:
 
 jobs:
   build-test-publish:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'executor')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -137,4 +155,85 @@ jobs:
             executor-build-lock.json
             executor-components.json
             executor-image-inspect.json
+          if-no-files-found: error
+
+  build-test-publish-verifier:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'verifier') ||
+      (github.event_name == 'push' && (github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' || github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    env:
+      IMAGE_NAME: ghcr.io/kitahl/supernova-goal1-verifier
+      CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-verifier:candidate-${{ github.sha }}
+      RELEASE_TAG: ghcr.io/kitahl/supernova-goal1-verifier:g1-activation-20260829
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build one local single-platform verifier image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --platform linux/amd64 --load \
+            --tag "$CANDIDATE_TAG" \
+            --file runtime/goal1_verifier/Dockerfile .
+      - name: Qualify real benign VALID and hostile containment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python runtime/goal1_verifier/qualify_image.py \
+            "$CANDIDATE_TAG" \
+            --output verifier-qualification.json
+      - name: Log in to GHCR
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the exact tested verifier image
+        id: publish-verifier
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_id="$(docker image inspect "$CANDIDATE_TAG" --format '{{.Id}}')"
+          docker tag "$CANDIDATE_TAG" "$RELEASE_TAG"
+          push_output="$(docker push "$RELEASE_TAG")"
+          printf '%s\n' "$push_output"
+          digest="$(printf '%s\n' "$push_output" | sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\).*$/\1/p' | tail -n 1)"
+          test -n "$digest"
+          immutable_ref="${IMAGE_NAME}@${digest}"
+          docker pull "$immutable_ref"
+          published_id="$(docker image inspect "$immutable_ref" --format '{{.Id}}')"
+          test "$candidate_id" = "$published_id"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$immutable_ref" >> "$GITHUB_OUTPUT"
+      - name: Attest published verifier image
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829' ||
+          github.ref == 'refs/tags/publish-goal1-verifier-g1-activation-20260829-parser'
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.publish-verifier.outputs.digest }}
+          push-to-registry: true
+      - name: Upload verifier qualification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: goal1-verifier-qualification-${{ github.sha }}
+          path: verifier-qualification.json
           if-no-files-found: error
