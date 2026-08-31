@@ -1275,7 +1275,7 @@ class ExecutionLedgerAuthority:
             "persistent_writable_state": "DISABLED",
             "problem_id": request.problem.native_id,
             "protocol_dispatch_id": slot["dispatch_id"],
-            "request_artifact_sha256": request.frozen_request_sha256,
+            "request_artifact_sha256": request.request_artifact.sha256_hex,
             "response_artifact_sha256": response.sha256_hex,
             "run_id": self.run_id,
             "schema": PRODUCTION_RECEIPT_SCHEMA,
