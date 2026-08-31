@@ -1,0 +1,60 @@
+{
+  "schema": "supernova.goal1.validation-pilot-plan.v1",
+  "classification": "NON_CREDIT_VALIDATION_ONLY",
+  "scientific_credit": "NONE",
+  "countable_attempts_before": 0,
+  "countable_attempts_after": 0,
+  "benchmark": {
+    "name": "miniF2F-Lean4-Kimina-composite",
+    "version": "deepseek-v1.5-2c4ba911+kimina-5def318",
+    "allowed_split": "validation",
+    "forbidden_split": "test",
+    "validation_file_sha256": "4da5c1f69143e2633cf7c300d8946eb28d6b88d0f94441147ff4d54ec8c09926",
+    "validation_records": 244,
+    "benchmark_root_sha256": "914c05427e1e7e0979f4ca058f90fb3138ee0d3319233b415194c10e67d3683b"
+  },
+  "selection": {
+    "algorithm": "SORT_BY_SHA256_OF_UTF8_SEED_NUL_PROBLEM_ID_THEN_PROBLEM_ID",
+    "seed": "supernova-goal1-validation-pilot-2026-08-31-v1",
+    "frozen_before_model_observations": true
+  },
+  "model": {
+    "upstream_exact_version": "AI-MO/Kimina-Prover-Preview-Distill-1.5B@737ff8442bdd883bf18c9b76f46f8e63d03949d1",
+    "quantization_exact_version": "mradermacher/Kimina-Prover-Preview-Distill-1.5B-GGUF@5c087d3181668115364bc9c2d76186d9bcf81640#q4_k_m",
+    "gguf_sha256": "f2d0fdabe97814b7d3fe1fec4a6dd32418c081b6953882ec31d3352f0058b65d",
+    "interface": "FRESH_NETWORKLESS_CONTAINER_LLAMA_SERVER_CHAT_JSON"
+  },
+  "stages": {
+    "smoke_0_1_percent": {
+      "attempt_count": 2,
+      "problem_count": 1,
+      "attempts_per_problem_arm": 1,
+      "arms": ["ordinary", "verified_chain"],
+      "stop_after_report": true
+    },
+    "pilot_1_percent": {
+      "attempt_count": 20,
+      "problem_count": 5,
+      "attempts_per_problem_arm": 2,
+      "arms": ["ordinary", "verified_chain"],
+      "requires_clean_smoke_report": true,
+      "stop_after_report": true
+    }
+  },
+  "pre_model_gates": [
+    "PINNED_VERIFIER_RUNTIME_INVENTORY",
+    "BENIGN_SIGNED_VALID",
+    "PROSE_SIGNED_INVALID_UNDER_5000_MS",
+    "HOSTILE_METAPROGRAM_EXECUTION_AND_CONTAINMENT"
+  ],
+  "one_percent_admission": [
+    "EXACTLY_TWO_REAL_MODEL_ATTEMPTS",
+    "SAME_LOCKED_VALIDATION_PROBLEM",
+    "ONE_ATTEMPT_PER_DECLARED_ARM",
+    "NO_INTERACTIVE_TRANSCRIPT_CAPTURE",
+    "NO_MODEL_OR_VERIFIER_TIMEOUT",
+    "SIGNED_VERIFIER_EVIDENCE_FOR_EVERY_ANSWERED_RESPONSE",
+    "AT_LEAST_ONE_SIGNED_VALID_MODEL_RESPONSE",
+    "COUNTABLE_ATTEMPTS_REMAIN_ZERO"
+  ]
+}

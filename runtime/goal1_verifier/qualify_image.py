@@ -15,6 +15,7 @@ PERMITTED_AXIOMS = ["propext", "Quot.sound", "Classical.choice"]
 INSIDE_SENTINEL = "SUPERNOVA_SANDBOX_SENTINEL_20260830_BOUNDED"
 HOST_SENTINEL = "SUPERNOVA_HOST_SENTINEL_MUST_NEVER_CROSS_20260830"
 HOST_SENTINEL_PATH = "/tmp/supernova_goal1_host_sentinel.txt"
+QUALIFICATION_PHASE_TIMEOUT_SECONDS = 120
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -72,16 +73,22 @@ def run_container(
     image: str,
     request: dict[str, Any],
     *,
+    phase: str,
     expected_exit: int,
 ) -> tuple[dict[str, Any], bytes]:
     raw_request = canonical_bytes(request)
-    completed = subprocess.run(
-        [*docker_base(image), "-i", image],
-        input=raw_request,
-        capture_output=True,
-        check=False,
-        timeout=600,
-    )
+    try:
+        completed = subprocess.run(
+            [*docker_base(image), "-i", image],
+            input=raw_request,
+            capture_output=True,
+            check=False,
+            timeout=QUALIFICATION_PHASE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"{phase}: timed out after {QUALIFICATION_PHASE_TIMEOUT_SECONDS} seconds"
+        ) from exc
     if completed.returncode != expected_exit:
         raise RuntimeError(
             f"verifier exit {completed.returncode}, expected {expected_exit}: "
@@ -125,12 +132,18 @@ test -x /opt/supernova/bin/parse_product
 test -f /opt/supernova/VERIFIER_RUNTIME_LOCK.json
 cat /opt/supernova/VERIFIER_RUNTIME_LOCK.json
 """.strip()
-    completed = subprocess.run(
-        [*docker_base(image), "--entrypoint", "/bin/sh", image, "-c", script],
-        capture_output=True,
-        check=False,
-        timeout=600,
-    )
+    try:
+        completed = subprocess.run(
+            [*docker_base(image), "--entrypoint", "/bin/sh", image, "-c", script],
+            capture_output=True,
+            check=False,
+            timeout=QUALIFICATION_PHASE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            "runtime-inventory: timed out after "
+            f"{QUALIFICATION_PHASE_TIMEOUT_SECONDS} seconds"
+        ) from exc
     if completed.returncode != 0:
         raise RuntimeError(
             "runtime inventory failed: "
@@ -171,7 +184,12 @@ def qualify(image: str) -> dict[str, str]:
         "schema": REQUEST_SCHEMA,
         **blob_fields("product_source", parse_only_source),
     }
-    parsed, parser_stderr = run_container(image, parse_request, expected_exit=0)
+    parsed, parser_stderr = run_container(
+        image,
+        parse_request,
+        phase="parser-valid-declaration",
+        expected_exit=0,
+    )
     if parsed.get("status") != "PARSED":
         raise RuntimeError(f"parser-only mode rejected a valid declaration: {parsed}")
     parser_artifact = canonical_bytes(parsed) + parser_stderr
@@ -185,7 +203,12 @@ def qualify(image: str) -> dict[str, str]:
         "schema": REQUEST_SCHEMA,
         **blob_fields("product_source", second_declaration),
     }
-    rejected_parse, _ = run_container(image, two_request, expected_exit=10)
+    rejected_parse, _ = run_container(
+        image,
+        two_request,
+        phase="parser-reject-extra-declaration",
+        expected_exit=10,
+    )
     if rejected_parse.get("status") != "INVALID":
         raise RuntimeError("parser-only mode accepted two declarations")
 
@@ -196,7 +219,12 @@ def qualify(image: str) -> dict[str, str]:
         "schema": REQUEST_SCHEMA,
         **blob_fields("product_source", forbidden_source),
     }
-    rejected_forbidden, _ = run_container(image, forbidden_request, expected_exit=10)
+    rejected_forbidden, _ = run_container(
+        image,
+        forbidden_request,
+        phase="parser-reject-forbidden-syntax",
+        expected_exit=10,
+    )
     if rejected_forbidden.get("status") != "INVALID":
         raise RuntimeError("parser-only mode accepted frozen forbidden syntax")
 
@@ -216,6 +244,7 @@ def qualify(image: str) -> dict[str, str]:
     elaborated, elaborator_stderr = run_container(
         image,
         benign_request,
+        phase="benign-elaboration",
         expected_exit=0,
     )
     if elaborated.get("status") != "EXPORTED":
@@ -232,7 +261,12 @@ def qualify(image: str) -> dict[str, str]:
         **blob_fields("challenge_source", challenge_source),
         **blob_fields("solution_export", solution_export),
     }
-    checked, checker_stderr = run_container(image, check_request, expected_exit=0)
+    checked, checker_stderr = run_container(
+        image,
+        check_request,
+        phase="benign-independent-check",
+        expected_exit=0,
+    )
     if checked.get("status") != "VALID":
         raise RuntimeError(f"benign checker did not return VALID: {checked}")
     if checked.get("solution_export_sha256") != sha256(solution_export):
@@ -269,6 +303,7 @@ theorem supernova_hostile : True := by
         hostile, hostile_stderr = run_container(
             image,
             hostile_request,
+            phase="hostile-metaprogram-containment",
             expected_exit=10,
         )
     finally:

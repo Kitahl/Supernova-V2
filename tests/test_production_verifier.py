@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import sys
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from supernova_goal1 import verifier_evidence as verifier_evidence_module
 from supernova_goal1.artifacts import (
     ScheduledChatArtifactEnvelope,
     ScheduledChatArtifactKind,
@@ -122,12 +124,16 @@ class ProductionVerifierTests(unittest.TestCase):
         binding = self.binding(source, actual_runtime)
 
         self.assertEqual(source.source_sha256, binding.source_construction_sha256)
+        self.assertEqual(source.source_sha256, binding.source_template_sha256)
+        self.assertEqual(source.source_sha256, binding.rendered_source_sha256)
         self.assertEqual(sha(b"theorem demo : True "), binding.theorem_statement_sha256)
         self.assertEqual(canonical_sha256(["demo"]), binding.theorem_target_set_sha256)
         self.assertEqual(actual_runtime, binding.actual_runtime_sha256)
         self.assertNotEqual(
             binding.requested_runtime_sha256, binding.actual_runtime_sha256
         )
+        with self.assertRaisesRegex(ValueError, "rendered source digest"):
+            replace(binding, rendered_source_sha256=sha("substituted-rendered-source"))
 
     def test_binding_rejects_source_identity_or_content_substitution(self) -> None:
         source = self.source()
@@ -249,6 +255,29 @@ class ProductionVerifierTests(unittest.TestCase):
         self.assertIn("HOST_INFRASTRUCTURE_ERROR", result.error or "")
         self.assertEqual("docker unavailable", result.stderr)
         self.assertEqual(sha(blobs.stderr), record.body["artifacts"]["stderr_sha256"])
+
+    def test_structured_elaborator_rejection_is_invalid_but_timeout_is_not(self) -> None:
+        verifier_evidence_module._validate_result_algebra(
+            verdict=verifier_evidence_module.VerifierVerdict.INVALID,
+            cause=TerminationCause.REJECTED,
+            elaborator_exit_status=10,
+            checker_exit_status=None,
+            timed_out=False,
+            oom_killed=False,
+            resource_limited=False,
+            sandbox_policy_violated=False,
+        )
+        with self.assertRaisesRegex(ValueError, "normal deterministic"):
+            verifier_evidence_module._validate_result_algebra(
+                verdict=verifier_evidence_module.VerifierVerdict.INVALID,
+                cause=TerminationCause.REJECTED,
+                elaborator_exit_status=10,
+                checker_exit_status=None,
+                timed_out=True,
+                oom_killed=False,
+                resource_limited=False,
+                sandbox_policy_violated=False,
+            )
 
 
 if __name__ == "__main__":

@@ -37,10 +37,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-SCHEMA = "supernova.confirmatory.verifier-evidence.v2"
-SCHEMA_VERSION = 2
-VERIFIER_PROTOCOL_VERSION = "goal1-host-verifier-evidence-v2"
-SIGNATURE_DOMAIN = b"supernova.confirmatory.verifier-evidence.signature.v2\0"
+SCHEMA = "supernova.confirmatory.verifier-evidence.v3"
+SCHEMA_VERSION = 3
+VERIFIER_PROTOCOL_VERSION = "goal1-host-verifier-evidence-v3"
+SIGNATURE_DOMAIN = b"supernova.confirmatory.verifier-evidence.signature.v3\0"
 INDEPENDENT_CHECKER_ID = "LEAN_COMPARATOR_PLUS_NANODA"
 CONTAINER_REQUEST_SCHEMA = "supernova.goal1.verifier-container-request.v1"
 CONTAINER_RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v1"
@@ -197,6 +197,8 @@ class VerifierBinding:
     candidate_id: str
     candidate_source_sha256: str
     theorem_statement_sha256: str
+    source_template_sha256: str
+    rendered_source_sha256: str
     theorem_target_set_sha256: str
     source_construction_sha256: str
     requested_runtime_sha256: str
@@ -218,6 +220,8 @@ class VerifierBinding:
             "attempt_result_sha256",
             "candidate_source_sha256",
             "theorem_statement_sha256",
+            "source_template_sha256",
+            "rendered_source_sha256",
             "theorem_target_set_sha256",
             "source_construction_sha256",
             "requested_runtime_sha256",
@@ -235,6 +239,10 @@ class VerifierBinding:
             "protocol_dispatch_id",
         )
         _natural(self.attempt_id, "attempt_id")
+        if self.rendered_source_sha256 != self.source_construction_sha256:
+            raise ValueError(
+                "rendered source digest differs from source construction digest"
+            )
 
     def body(self) -> dict[str, object]:
         return {field: getattr(self, field) for field in self.__dataclass_fields__}
@@ -401,17 +409,21 @@ def _validate_result_algebra(
             raise PermissionError(PRODUCTION_VALIDITY_BLOCKER)
         return
     if verdict is VerifierVerdict.INVALID:
+        deterministic_rejection = (
+            elaborator_exit_status == 10 and checker_exit_status is None
+        ) or (
+            elaborator_exit_status == 0 and checker_exit_status == 10
+        )
         if (
             cause is not TerminationCause.REJECTED
-            or elaborator_exit_status != 0
-            or checker_exit_status != 10
+            or not deterministic_rejection
             or timed_out
             or oom_killed
             or resource_limited
             or sandbox_policy_violated
         ):
             raise ValueError(
-                "INVALID requires a normal deterministic external-checker rejection"
+                "INVALID requires a normal deterministic elaborator or external-checker rejection"
             )
         return
     if verdict is not VerifierVerdict.UNKNOWN or cause not in _UNKNOWN_CAUSES:
@@ -1895,9 +1907,8 @@ class VerifierSupervisor:
                     status == VerifierVerdict.INVALID.value
                     and elaborator.exit_status == 10
                 ):
-                    # An elaboration error can be produced by hostile metaprogram
-                    # behavior, so it is not a mathematical rejection.
-                    cause = TerminationCause.INDETERMINATE
+                    verdict = VerifierVerdict.INVALID
+                    cause = TerminationCause.REJECTED
                 elif (
                     status == VerifierVerdict.UNKNOWN.value
                     and elaborator.exit_status == 20

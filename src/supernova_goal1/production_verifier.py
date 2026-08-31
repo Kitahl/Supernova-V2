@@ -445,6 +445,8 @@ def build_verifier_binding(
         candidate_id=response.artifact_id,
         candidate_source_sha256=response.sha256_hex,
         theorem_statement_sha256=subject.theorem_statement_sha256,
+        source_template_sha256=source.source_sha256,
+        rendered_source_sha256=subject.source_construction_sha256,
         theorem_target_set_sha256=subject.theorem_target_set_sha256,
         source_construction_sha256=subject.source_construction_sha256,
         requested_runtime_sha256=request.runtime_sha256,
@@ -477,9 +479,13 @@ def verifier_result_from_evidence(
         error = None
     elif verdict is VerifierVerdict.INVALID:
         status = VerifierStatus.FAIL
-        returncode = observed["checker_exit_status"]
+        returncode = (
+            observed["checker_exit_status"]
+            if observed["checker_exit_status"] is not None
+            else observed["elaborator_exit_status"]
+        )
         if type(returncode) is not int or returncode == 0:
-            raise ValueError("authenticated INVALID lacks a nonzero checker status")
+            raise ValueError("authenticated INVALID lacks a nonzero rejection status")
         error = None
     else:
         status = (
@@ -568,15 +574,20 @@ class ProductionVerifierPort:
             if self.subject_builder is None
             else self.subject_builder(dispatch, candidate, source)
         )
-        return self.verify_subject(dispatch, candidate, subject)
+        return self._verify_resolved_subject(dispatch, candidate, subject)
 
-    def verify_subject(
+    def _verify_resolved_subject(
         self,
         dispatch: BaselineDispatch,
         candidate: bytes,
         subject: VerificationSubject,
     ) -> ProductionVerification:
-        """Verify one caller-constructed subject after binding every exact byte."""
+        """Verify one service-resolved subject after binding every exact byte.
+
+        This method is deliberately private. Production callers cross the
+        locator-only boundary in :mod:`supernova_goal1.verifier_service`; they
+        cannot supply a theorem target, source, runtime, or verdict.
+        """
 
         source = self.sources_by_problem_id.get(dispatch.request.problem_id)
         if source is None:

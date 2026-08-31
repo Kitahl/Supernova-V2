@@ -175,6 +175,33 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
         self.assertNotIn("--volume", command)
         self.assertNotIn("--mount", command)
 
+    def test_qualification_reports_the_timed_out_phase(self) -> None:
+        timeout = subprocess.TimeoutExpired(["docker", "run"], 120)
+        with (
+            patch.object(qualify_image.subprocess, "run", side_effect=timeout),
+            self.assertRaisesRegex(
+                RuntimeError,
+                r"^benign-elaboration: timed out after 120 seconds$",
+            ),
+        ):
+            qualify_image.run_container(
+                "candidate",
+                {"schema": qualify_image.REQUEST_SCHEMA},
+                phase="benign-elaboration",
+                expected_exit=0,
+            )
+
+    def test_runtime_inventory_reports_its_timeout_phase(self) -> None:
+        timeout = subprocess.TimeoutExpired(["docker", "run"], 120)
+        with (
+            patch.object(qualify_image.subprocess, "run", side_effect=timeout),
+            self.assertRaisesRegex(
+                RuntimeError,
+                r"^runtime-inventory: timed out after 120 seconds$",
+            ),
+        ):
+            qualify_image.assert_runtime_inventory("candidate")
+
     def test_failed_qualification_persists_exact_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             output = Path(raw) / "qualification.json"

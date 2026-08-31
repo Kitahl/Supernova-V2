@@ -771,6 +771,8 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             "candidate_id": "sha256:" + hashlib.sha256(self.candidate).hexdigest(),
             "candidate_source_sha256": hashlib.sha256(self.candidate).hexdigest(),
             "theorem_statement_sha256": sha("statement"),
+            "source_template_sha256": hashlib.sha256(self.source).hexdigest(),
+            "rendered_source_sha256": hashlib.sha256(self.source).hexdigest(),
             "theorem_target_set_sha256": hashlib.sha256(
                 verifier_evidence_module.canonical_bytes(["alpha"])
             ).hexdigest(),
@@ -1429,15 +1431,15 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 theorem_names=("alpha",),
             )
 
-    def test_elaborator_rejection_is_unknown_but_checker_rejection_is_invalid(
+    def test_elaborator_and_checker_rejections_are_invalid(
         self,
     ) -> None:
         elaborator = self._mocked_supervisor_run(
             elaborator_status="INVALID", name="elaborator-invalid"
         ).body["observations"]
-        self.assertEqual(VerifierVerdict.UNKNOWN.value, elaborator["verdict"])
+        self.assertEqual(VerifierVerdict.INVALID.value, elaborator["verdict"])
         self.assertEqual(
-            TerminationCause.INDETERMINATE.value,
+            TerminationCause.REJECTED.value,
             elaborator["termination_cause"],
         )
 

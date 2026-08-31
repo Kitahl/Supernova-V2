@@ -36,6 +36,7 @@ from .execution_authority import (
 
 PREFLIGHT_SCHEMA = "supernova.hermetic-preflight-receipt.v1"
 PREFLIGHT_RESPONSE_SCHEMA = "supernova.hermetic-preflight-response.v1"
+GENERATION_RESPONSE_SCHEMA = "supernova.hermetic-generation-response.v1"
 PREFLIGHT_VALIDATION_SCHEMA = "supernova.preflight-validation-record.v1"
 TRUST_ROOT_SCHEMA = "supernova.confirmatory-trust-root.v1"
 LAUNCHER_SCHEMA = "supernova.hermetic-launcher.v1"
@@ -131,6 +132,55 @@ _PUBLICATION_FIELDS = frozenset(
 
 class SupervisorError(RuntimeError):
     """The host could not prove the required hermetic lifecycle."""
+
+
+@dataclass(frozen=True)
+class ProcessObservation:
+    """Host-observed subprocess outcome; a timeout never has an exit status."""
+
+    phase: str
+    termination_cause: str
+    exit_status: int | None
+    timed_out: bool
+    stdout_bytes: int
+    stderr_bytes: int
+    stdout_sha256: str
+    stderr_sha256: str
+    teardown_observed: bool
+
+
+class ExecutorProcessError(SupervisorError):
+    """Executor failed with a typed host process observation."""
+
+    def __init__(self, message: str, observation: ProcessObservation) -> None:
+        super().__init__(message)
+        self.observation = observation
+
+
+class ExecutorResponseError(SupervisorError):
+    """Executor stdout did not contain one exact generation response frame."""
+
+    def __init__(
+        self, code: str, message: str, observation: ProcessObservation
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.observation = observation
+
+
+class _HostCommandTimeout(SupervisorError):
+    def __init__(
+        self,
+        argv: Sequence[str],
+        timeout_seconds: int | None,
+        stdout: bytes,
+        stderr: bytes,
+    ) -> None:
+        super().__init__(f"host command timed out: {argv[0]}")
+        self.argv = tuple(argv)
+        self.timeout_seconds = timeout_seconds
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 def _utc_now() -> str:
@@ -364,6 +414,7 @@ class SupervisedAttempt:
     response: bytes
     context_receipt: HermeticContextReceipt
     elapsed_milliseconds: int
+    process_observation: ProcessObservation
 
 
 @dataclass(frozen=True)
@@ -374,6 +425,7 @@ class _Lifecycle:
     opened_at: str
     closed_at: str
     elapsed_milliseconds: int
+    process_observation: ProcessObservation
 
 
 def _invoke(
@@ -389,8 +441,132 @@ def _invoke(
             shell=False,
             timeout=timeout,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout if type(exc.stdout) is bytes else b""
+        stderr = exc.stderr if type(exc.stderr) is bytes else b""
+        raise _HostCommandTimeout(argv, timeout, stdout, stderr) from exc
+    except OSError as exc:
         raise SupervisorError(f"host command failed: {argv[0]}") from exc
+
+
+def _process_observation(
+    *,
+    phase: str,
+    termination_cause: str,
+    exit_status: int | None,
+    timed_out: bool,
+    stdout: bytes,
+    stderr: bytes,
+    teardown_observed: bool,
+) -> ProcessObservation:
+    if timed_out and exit_status is not None:
+        raise ValueError("a timed-out process cannot have an exit status")
+    return ProcessObservation(
+        phase=phase,
+        termination_cause=termination_cause,
+        exit_status=exit_status,
+        timed_out=timed_out,
+        stdout_bytes=len(stdout),
+        stderr_bytes=len(stderr),
+        stdout_sha256=sha256(stdout).hexdigest(),
+        stderr_sha256=sha256(stderr).hexdigest(),
+        teardown_observed=teardown_observed,
+    )
+
+
+def _generation_completion(
+    raw: bytes, observation: ProcessObservation, max_output_bytes: int
+) -> bytes:
+    if not raw.strip():
+        raise ExecutorResponseError(
+            "MISSING_FRAME",
+            "executor returned no generation response frame",
+            observation,
+        )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ExecutorResponseError(
+            "MALFORMED_FRAME",
+            "generation response frame is not UTF-8",
+            observation,
+        ) from exc
+    decoder = json.JSONDecoder(
+        object_pairs_hook=_reject_duplicate_pairs,
+        parse_constant=_reject_nonfinite_json,
+    )
+    stripped = text.lstrip()
+    try:
+        frame, end = decoder.raw_decode(stripped)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ExecutorResponseError(
+            "MALFORMED_FRAME",
+            "executor stdout is not one generation response frame",
+            observation,
+        ) from exc
+    remainder = stripped[end:].strip()
+    if remainder:
+        try:
+            decoder.raw_decode(remainder)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ExecutorResponseError(
+                "MALFORMED_FRAME",
+                "generation response frame has trailing non-frame bytes",
+                observation,
+            ) from exc
+        raise ExecutorResponseError(
+            "MULTIPLE_FRAMES",
+            "executor returned multiple generation response frames",
+            observation,
+        )
+    if type(frame) is not dict:
+        raise ExecutorResponseError(
+            "MALFORMED_FRAME",
+            "generation response frame is not an object",
+            observation,
+        )
+    if set(frame) != {"completion_utf8", "schema", "status"}:
+        raise ExecutorResponseError(
+            "FRAME_FIELDS",
+            "generation response frame fields differ",
+            observation,
+        )
+    if frame["schema"] != GENERATION_RESPONSE_SCHEMA:
+        raise ExecutorResponseError(
+            "FRAME_SCHEMA",
+            "generation response frame schema differs",
+            observation,
+        )
+    completion = frame["completion_utf8"]
+    status = frame["status"]
+    if type(completion) is not str or type(status) is not str:
+        raise ExecutorResponseError(
+            "MALFORMED_FRAME",
+            "generation response frame types differ",
+            observation,
+        )
+    completion_bytes = completion.encode("utf-8")
+    if len(completion_bytes) > max_output_bytes:
+        raise ExecutorResponseError(
+            "OUTPUT_LIMIT",
+            "generation completion exceeded the frozen output limit",
+            observation,
+        )
+    if (status == "ANSWERED" and not completion_bytes) or (
+        status == "NO_ANSWER" and completion_bytes
+    ):
+        raise ExecutorResponseError(
+            "FRAME_STATUS",
+            "generation response status contradicts completion",
+            observation,
+        )
+    if status not in {"ANSWERED", "NO_ANSWER"}:
+        raise ExecutorResponseError(
+            "FRAME_STATUS",
+            "generation response status is unsupported",
+            observation,
+        )
+    return completion_bytes
 
 
 def _require_success(
@@ -592,10 +768,13 @@ def _run_fresh_container(
     launcher: HermeticLauncher,
     request: bytes,
     *,
+    phase: str,
     expected_clean_image_sha256: str | None = None,
 ) -> _Lifecycle:
     if type(request) is not bytes:
         raise TypeError("request must be exact bytes")
+    if phase not in {"GENERATION", "PREFLIGHT"}:
+        raise ValueError("phase must be GENERATION or PREFLIGHT")
     docker_runtime_identity_sha256 = _docker_runtime_identity()
     image_id = _image_identity(launcher)
     created = _invoke(_create_argv(launcher))
@@ -617,22 +796,49 @@ def _run_fresh_container(
             raise SupervisorError("clean container image/configuration digest drifted")
         nonce = secrets.token_hex(32)
         opened_at = _utc_now()
-        started = _invoke(
-            ["docker", "start", "--attach", "--interactive", container_id],
-            input_bytes=request,
-            timeout=launcher.timeout_seconds,
-        )
-        response = _require_success(started, "docker start")
+        try:
+            started = _invoke(
+                ["docker", "start", "--attach", "--interactive", container_id],
+                input_bytes=request,
+                timeout=launcher.timeout_seconds,
+            )
+        except _HostCommandTimeout as timeout_error:
+            observation = _process_observation(
+                phase=phase,
+                termination_cause="TIMEOUT_KILLED",
+                exit_status=None,
+                timed_out=True,
+                stdout=timeout_error.stdout,
+                stderr=timeout_error.stderr,
+                teardown_observed=True,
+            )
+            raise ExecutorProcessError(
+                "executor timed out", observation
+            ) from timeout_error
         closed_at = _utc_now()
-        if len(response) > launcher.max_output_bytes:
-            raise SupervisorError("executor response exceeded the frozen output limit")
         stopped = _container_object(container_id).get("State")
         if (
             type(stopped) is not dict
             or stopped.get("Status") != "exited"
-            or stopped.get("ExitCode") != 0
+            or type(stopped.get("ExitCode")) is not int
         ):
-            raise SupervisorError("executor did not terminate cleanly")
+            raise SupervisorError("executor termination state was not observable")
+        observation = _process_observation(
+            phase=phase,
+            termination_cause="EXITED",
+            exit_status=stopped["ExitCode"],
+            timed_out=False,
+            stdout=started.stdout,
+            stderr=started.stderr,
+            teardown_observed=True,
+        )
+        if started.returncode != 0 or stopped["ExitCode"] != 0:
+            raise ExecutorProcessError(
+                "executor exited unsuccessfully", observation
+            )
+        response = started.stdout
+        if len(response) > launcher.max_output_bytes:
+            raise SupervisorError("executor response exceeded the frozen output limit")
         opened = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
         closed = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
         lifecycle = _Lifecycle(
@@ -644,6 +850,7 @@ def _run_fresh_container(
             elapsed_milliseconds=max(
                 0, int((closed - opened).total_seconds() * 1000)
             ),
+            process_observation=observation,
         )
     except BaseException as primary_error:
         _observed_teardown(container_id, primary_error=primary_error)
@@ -677,7 +884,7 @@ def run_hermetic_preflight(
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    lifecycle = _run_fresh_container(launcher, request)
+    lifecycle = _run_fresh_container(launcher, request, phase="PREFLIGHT")
     response = _json_object(lifecycle.response, "preflight response")
     if response != {
         "executor_artifact_sha256": launcher.executor_artifact_sha256,
@@ -891,7 +1098,11 @@ def run_supervised_attempt(
     lifecycle = _run_fresh_container(
         launcher,
         request,
+        phase="GENERATION",
         expected_clean_image_sha256=authority.clean_image_sha256,
+    )
+    completion = _generation_completion(
+        lifecycle.response, lifecycle.process_observation, launcher.max_output_bytes
     )
     body = {
         "arm": arm,
@@ -912,7 +1123,7 @@ def run_supervised_attempt(
         "problem_id": problem_id,
         "protocol_dispatch_id": protocol_dispatch_id,
         "request_artifact_sha256": sha256(request).hexdigest(),
-        "response_artifact_sha256": sha256(lifecycle.response).hexdigest(),
+        "response_artifact_sha256": sha256(completion).hexdigest(),
         "run_id": run_id,
         "schema": PRODUCTION_RECEIPT_SCHEMA,
         "sequence": sequence,
@@ -936,7 +1147,7 @@ def run_supervised_attempt(
         clean_image_sha256=lifecycle.clean_image_sha256,
         initial_context_sha256=EMPTY_CONTEXT_SHA256,
         request_artifact_sha256=sha256(request).hexdigest(),
-        response_artifact_sha256=sha256(lifecycle.response).hexdigest(),
+        response_artifact_sha256=sha256(completion).hexdigest(),
         opened_at=lifecycle.opened_at,
         closed_at=lifecycle.closed_at,
         network_policy="NONE",
@@ -948,9 +1159,10 @@ def run_supervised_attempt(
         receipt.signature, domain=PRODUCTION_RECEIPT_SCHEMA, body=receipt.body()
     )
     return SupervisedAttempt(
-        response=lifecycle.response,
+        response=completion,
         context_receipt=receipt,
         elapsed_milliseconds=lifecycle.elapsed_milliseconds,
+        process_observation=lifecycle.process_observation,
     )
 
 
