@@ -108,3 +108,53 @@ The prior MM06, MF06, and BIL00 artifacts are archived with exact merge
 evidence. Their new tickets are initially `WAITING` because dependencies are
 unresolved; each becomes `READY` when its dependencies are `DONE`. Their
 review-only, integration-only, and status-only authority restrictions remain.
+
+## 2026-09-01 Goal-1 activation handoff
+
+Scientific state remains **NOT EVALUATED** with **zero countable attempts**.
+No model call occurred in the latest validation smoke.
+
+Current activation branch is `work/PM/G1-147` at `97c44e3`; PR #96 targets
+`main`. The two-phase verifier independently qualified and published in GitHub
+Actions run `33498934176` from source `4383a104`. Its immutable identity is:
+
+- image: `ghcr.io/kitahl/supernova-goal1-verifier@sha256:dc7e5754612925b8d0de1482fc87ba13b39370c7965f8286912587f030efddc5`;
+- runtime lock root: `45810b9ad1046511f5ee9b1562bcb5542ee4c53c49fb4aca02ad38b82d4ebfe2`;
+- Lake manifest hash: `11bc0ecb997ccd02526acc604d6da03ad3434c575d1746d3d3020780550d196b`.
+
+PR run `33501251455` passed executor build, exact networkless preflight, locked
+miniF2F validation preparation, and immutable-verifier qualification. It then
+stopped in the preregistered synthetic gates before either Kimina model call:
+the signed prose rejection took 7,217 ms, exceeding the frozen 5,000 ms wall
+limit. Failure evidence was uploaded as artifact `9797961730` with ZIP SHA-256
+`f87cd45bce31f451bb6b439352802edd7f3731ac9ba444412a9e043a4a3f1753`.
+
+The performance observations are now three bounded failures on fresh GitHub
+runners:
+
+1. original serial runtime inventory validation: 6,616 ms (run `33491424376`);
+2. two-worker inventory hashing: 7,556 ms (run `33497954822`);
+3. serial `hashlib.file_digest` with one-open/fstat validation: 7,217 ms (run
+   `33501251455`).
+
+The common cost is intentional re-hashing of 8,711 runtime artifacts totaling
+2,475,986,864 bytes in every fresh verifier container. The evidence rejects the
+hypothesis that Python hash-loop overhead or two-worker scheduling can bring
+that complete check below five seconds on the current runner. It does **not**
+show that Lean proof checking takes this long, and it does not invalidate the
+verifier's security qualification.
+
+No further repair should be attempted without choosing and recording one of
+these protocol/architecture decisions before any model output exists:
+
+1. amend the non-scientific prose wall gate prospectively to a measured bound
+   with margin (for example 10 seconds), retaining the 600-second Lean timeout
+   and every runtime hash; or
+2. specify a separately identified trusted lexical pre-classifier that can
+   reject obvious non-Lean prose before the full Lean runtime is launched,
+   while all candidate-shaped Lean continues through full runtime attestation
+   and the hostile two-phase sandbox.
+
+Do not silently move the five-second threshold, remove runtime artifacts from
+the lock, count any failed smoke as scientific evidence, run the 20-attempt
+pilot, or merge PR #96 while this decision is unresolved.
