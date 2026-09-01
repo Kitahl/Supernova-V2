@@ -29,6 +29,9 @@ RUN test -x /app/llama-server && \
 LABEL org.opencontainers.image.source="https://github.com/Kitahl/Supernova-V2" \
       org.opencontainers.image.description="Pinned CPU-only hermetic executor for Supernova Goal 1"
 USER 65532:65532
-WORKDIR /opt/supernova
+# The pinned llama.cpp image links libllama-server-impl.so through a relative
+# runtime search path. Keep the final process in /app so the dynamic loader can
+# resolve the colocated server libraries without an ambient LD_LIBRARY_PATH.
+WORKDIR /app
 ENTRYPOINT []
 CMD ["/opt/supernova/executor", "--stdio"]

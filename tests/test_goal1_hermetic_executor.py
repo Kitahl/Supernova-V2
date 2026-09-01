@@ -32,6 +32,7 @@ class HermeticExecutorBuildTests(unittest.TestCase):
             "737ff8442bdd883bf18c9b76f46f8e63d03949d1",
         )
         self.assertEqual(lock["command"], ["/opt/supernova/executor", "--stdio"])
+        self.assertEqual(lock["working_directory"], "/app")
         self.assertEqual(lock["container_user"], "65532:65532")
         self.assertEqual(lock["generation_settings"]["device"], "none")
 
@@ -46,6 +47,7 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn(lock["model"]["file"], dockerfile)
         self.assertIn(lock["model"]["sha256"], dockerfile)
         self.assertIn('CMD ["/opt/supernova/executor", "--stdio"]', dockerfile)
+        self.assertIn(f"WORKDIR {lock['working_directory']}", dockerfile)
         settings = lock["generation_settings"]
         expected_fragments = (
             f'MaxTokens: {settings["max_output_tokens"]}',
@@ -79,6 +81,8 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertNotIn("ARG ", dockerfile)
         self.assertNotIn("--mount=type=secret", dockerfile)
         self.assertIn("USER 65532:65532", dockerfile)
+        self.assertIn("WORKDIR /app", dockerfile)
+        self.assertNotIn("WORKDIR /opt/supernova", dockerfile)
         self.assertIn('ENTRYPOINT []', dockerfile)
         self.assertIn('CMD ["/opt/supernova/executor", "--stdio"]', dockerfile)
         self.assertIn("sha256sum --check --strict", dockerfile)
