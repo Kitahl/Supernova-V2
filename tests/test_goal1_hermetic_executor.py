@@ -83,8 +83,8 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn('CMD ["/opt/supernova/executor", "--stdio"]', dockerfile)
         self.assertIn("sha256sum --check --strict", dockerfile)
         self.assertIn("COPY BUILD_LOCK.json /opt/supernova/BUILD_LOCK.json", dockerfile)
-        self.assertIn("cp -P /app/*.so* /usr/local/lib/", dockerfile)
-        self.assertIn("test -r /usr/local/lib/libllama-cli-impl.so", dockerfile)
+        self.assertIn("test -x /app/llama-server", dockerfile)
+        self.assertIn("server-b10666@sha256:5c8d0ec9d1d9c1f302e2c30071f8eb89456808306ececc381480fb9e90d7e8c1", dockerfile)
         self.assertIn("/app/llama-server --version", dockerfile)
         self.assertFalse(dockerfile.startswith("# syntax="))
 

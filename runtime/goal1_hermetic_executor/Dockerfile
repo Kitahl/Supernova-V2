@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.mod main.go main_test.go ./
 RUN go test ./... && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o /out/executor .
 
-FROM ghcr.io/ggml-org/llama.cpp:light@sha256:dda507ed4361d468bf06d23d4d2cbe11b66d481355d1a11b4c86250736c0d32e AS model-fetch
+FROM ghcr.io/ggml-org/llama.cpp:server-b10666@sha256:5c8d0ec9d1d9c1f302e2c30071f8eb89456808306ececc381480fb9e90d7e8c1 AS model-fetch
 USER root
 RUN mkdir -p /opt/supernova && \
     curl --fail --location --retry 3 \
@@ -11,14 +11,12 @@ RUN mkdir -p /opt/supernova && \
       --output /opt/supernova/model.gguf && \
     echo "f2d0fdabe97814b7d3fe1fec4a6dd32418c081b6953882ec31d3352f0058b65d  /opt/supernova/model.gguf" | sha256sum --check --strict
 
-FROM ghcr.io/ggml-org/llama.cpp:light@sha256:dda507ed4361d468bf06d23d4d2cbe11b66d481355d1a11b4c86250736c0d32e
+FROM ghcr.io/ggml-org/llama.cpp:server-b10666@sha256:5c8d0ec9d1d9c1f302e2c30071f8eb89456808306ececc381480fb9e90d7e8c1
 USER root
 COPY --from=wrapper-builder /out/executor /opt/supernova/executor
 COPY --from=model-fetch /opt/supernova/model.gguf /opt/supernova/model.gguf
 COPY BUILD_LOCK.json /opt/supernova/BUILD_LOCK.json
-RUN cp -P /app/*.so* /usr/local/lib/ && \
-    ldconfig && \
-    test -r /usr/local/lib/libllama-cli-impl.so && \
+RUN test -x /app/llama-server && \
     /app/llama-server --version >/dev/null && \
     executor_sha="$(sha256sum /opt/supernova/executor | cut -d' ' -f1)" && \
     llama_server_sha="$(sha256sum /app/llama-server | cut -d' ' -f1)" && \
