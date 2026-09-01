@@ -1,10 +1,10 @@
 {
   "schema": "supernova.goal1.verifier-publication.v1",
   "status": "PUBLISHED_IMMUTABLE",
-  "image_ref": "ghcr.io/kitahl/supernova-goal1-verifier@sha256:3f6ca7c7dbecd96676e825b29dd85f4c8f49067fca7553be9ea27e41ea75b370",
-  "source_commit": "a1bf19087a479999b740ce592cdebc2f53ce8a5f",
-  "workflow_run_id": 33495791538,
-  "workflow_url": "https://github.com/Kitahl/Supernova-V2/actions/runs/33495791538",
+  "image_ref": "ghcr.io/kitahl/supernova-goal1-verifier@sha256:dc7e5754612925b8d0de1482fc87ba13b39370c7965f8286912587f030efddc5",
+  "source_commit": "4383a10477943103c367db9dae81fcfb4cbf29b9",
+  "workflow_run_id": 33498934176,
+  "workflow_url": "https://github.com/Kitahl/Supernova-V2/actions/runs/33498934176",
   "command": [
     "supernova-two-phase-verification"
   ],
@@ -18,7 +18,7 @@
   "timeout_seconds": 600,
   "max_output_bytes": 67108864,
   "tmpfs_size_bytes": 536870912,
-  "toolchain_lock_sha256": "b7796afe6780573ad3099f17f17f005a6883bf2bc2b8dafc24255be26592c502",
+  "toolchain_lock_sha256": "45810b9ad1046511f5ee9b1562bcb5542ee4c53c49fb4aca02ad38b82d4ebfe2",
   "runtime_lock_manifest_sha256": "11bc0ecb997ccd02526acc604d6da03ad3434c575d1746d3d3020780550d196b",
   "project_dependency_lock_sha256": "bd28f97bb3d4cd96d88d43df7247f85d7b231e6f123e7986ed4b611c4bf6e57c",
   "checker_configuration_sha256": "d6dd074dbce4bc3e0da16e615c5f329f9343b2fe50f43cfbd9de65ad1bbfcd8c",

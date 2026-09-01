@@ -111,7 +111,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          verifier='ghcr.io/kitahl/supernova-goal1-verifier@sha256:3f6ca7c7dbecd96676e825b29dd85f4c8f49067fca7553be9ea27e41ea75b370'
+          verifier='ghcr.io/kitahl/supernova-goal1-verifier@sha256:dc7e5754612925b8d0de1482fc87ba13b39370c7965f8286912587f030efddc5'
           docker pull "$verifier"
           python runtime/goal1_verifier/qualify_image.py \
             "$verifier" \
