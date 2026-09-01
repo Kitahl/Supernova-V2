@@ -11,6 +11,7 @@ dependencies = ["cryptography==50.0.0"]
 
 [project.scripts]
 supernova-confirmatory-provision = "supernova_goal1.confirmatory_supervisor:main"
+supernova-confirmatory-run = "supernova_goal1.confirmatory_run:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

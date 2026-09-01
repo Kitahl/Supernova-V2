@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 import unittest
@@ -23,7 +24,12 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn("@sha256:", lock["runtime_image"])
         self.assertEqual(
             lock["model"]["sha256"],
-            "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32",
+            "f2d0fdabe97814b7d3fe1fec4a6dd32418c081b6953882ec31d3352f0058b65d",
+        )
+        self.assertEqual(
+            lock["model"]["upstream_exact_version"],
+            "AI-MO/Kimina-Prover-Preview-Distill-1.5B@"
+            "737ff8442bdd883bf18c9b76f46f8e63d03949d1",
         )
         self.assertEqual(lock["command"], ["/opt/supernova/executor", "--stdio"])
         self.assertEqual(lock["container_user"], "65532:65532")
@@ -42,21 +48,29 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn('CMD ["/opt/supernova/executor", "--stdio"]', dockerfile)
         settings = lock["generation_settings"]
         expected_fragments = (
-            f'"-n", "{settings["max_output_tokens"]}"',
+            f'MaxTokens: {settings["max_output_tokens"]}',
             f'"--ctx-size", "{settings["context_tokens"]}"',
             f'"--threads", "{settings["cpu_threads"]}"',
             f'"--batch-size", "{settings["batch_size"]}"',
-            f'"--seed", "{settings["seed"]}"',
-            f'"--temp", "{settings["temperature"]:.2f}"',
-            f'"--top-k", "{settings["top_k"]}"',
-            f'"--top-p", "{settings["top_p"]}"',
+            f'Seed:        {settings["seed"]}',
+            f'Temperature: {settings["temperature"]:.2f}',
+            f'TopK:        {settings["top_k"]}',
+            f'TopP:        {settings["top_p"]}',
+            settings["model_alias"],
+            settings["system_prompt"],
         )
         for fragment in expected_fragments:
             self.assertIn(fragment, wrapper)
-        self.assertGreaterEqual(wrapper.count('"--single-turn"'), 2)
-        self.assertEqual(wrapper.count('"--prompt"'), 1)
-        self.assertIn('"--prompt", "PREFLIGHT"', wrapper)
-        self.assertNotIn('"-no-cnv"', wrapper)
+        self.assertNotIn('"--single-turn"', wrapper)
+        self.assertNotIn('"--prompt"', wrapper)
+        self.assertIn('"--jinja"', wrapper)
+        self.assertIn('"/v1/chat/completions"', wrapper)
+        self.assertEqual(settings["engine"], "llama-server")
+        self.assertEqual(settings["engine_path"], "/app/llama-server")
+        self.assertEqual(
+            settings["interface"],
+            "LOOPBACK_HTTP_JSON_POST_V1_CHAT_COMPLETIONS_ONE_MESSAGE_CONTENT_FIELD",
+        )
 
     def test_dockerfile_has_no_mutable_runtime_or_secret_input(self) -> None:
         dockerfile = (CONTEXT / "Dockerfile").read_text(encoding="utf-8")
@@ -69,9 +83,9 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertIn('CMD ["/opt/supernova/executor", "--stdio"]', dockerfile)
         self.assertIn("sha256sum --check --strict", dockerfile)
         self.assertIn("COPY BUILD_LOCK.json /opt/supernova/BUILD_LOCK.json", dockerfile)
-        self.assertIn("cp -P /app/*.so* /usr/local/lib/", dockerfile)
-        self.assertIn("test -r /usr/local/lib/libllama-cli-impl.so", dockerfile)
-        self.assertIn("/app/llama-cli --version", dockerfile)
+        self.assertIn("test -x /app/llama-server", dockerfile)
+        self.assertIn("server-b10666@sha256:5c8d0ec9d1d9c1f302e2c30071f8eb89456808306ececc381480fb9e90d7e8c1", dockerfile)
+        self.assertIn("/app/llama-server --version", dockerfile)
         self.assertFalse(dockerfile.startswith("# syntax="))
 
     def test_workflow_builds_only_narrow_context_and_never_receives_signing_keys(self) -> None:
@@ -100,11 +114,16 @@ class HermeticExecutorBuildTests(unittest.TestCase):
             self.assertIn(action, workflow)
 
     def test_public_launcher_and_capacity_bind_published_executor(self) -> None:
-        launcher, capacity = load_repository_execution_bindings(ROOT)
         publication = json.loads(
             (CONTEXT / "PUBLISHED_IMAGE.json").read_text(encoding="utf-8")
         )
-        lock = json.loads((CONTEXT / "BUILD_LOCK.json").read_text(encoding="utf-8"))
+        lock_raw = (CONTEXT / "BUILD_LOCK.json").read_bytes()
+        lock = json.loads(lock_raw)
+        if publication["build_lock_sha256"] != hashlib.sha256(lock_raw).hexdigest():
+            with self.assertRaisesRegex(ValueError, "different build lock"):
+                load_repository_execution_bindings(ROOT)
+            return
+        launcher, capacity = load_repository_execution_bindings(ROOT)
         runtime = json.loads(
             (ROOT / "goal1" / "CONFIRMATORY_RUNTIME.json").read_text(encoding="utf-8")
         )
