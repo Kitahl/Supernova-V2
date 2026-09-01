@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -32,11 +31,6 @@ CHECK_EXPORTS = Path("/opt/supernova/bin/check_exports")
 NANODA = Path("/opt/supernova/bin/nanoda_bin")
 PARSE_PRODUCT = Path("/opt/supernova/bin/parse_product")
 TOOLCHAIN_BIN = "/opt/lean/bin"
-# The sandbox is frozen at two CPUs. Hashing the immutable runtime inventory is
-# independent per artifact, and hashlib releases the GIL while processing file
-# blocks, so two bounded workers preserve the complete digest check without
-# serializing every trusted .olean before malformed input can be rejected.
-RUNTIME_HASH_WORKERS = 2
 PERMITTED_AXIOMS = ("propext", "Quot.sound", "Classical.choice")
 PRIMITIVE_TARGETS = (
     "Nat",
@@ -144,14 +138,6 @@ def response(status: str, **fields: object) -> None:
     sys.stdout.buffer.flush()
 
 
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def validate_runtime_artifact(item: object) -> None:
     if not isinstance(item, dict) or set(item) != {"path", "sha256", "size"}:
         raise InfrastructureError("verifier runtime artifact entry changed")
@@ -161,10 +147,12 @@ def validate_runtime_artifact(item: object) -> None:
     if not path.is_absolute() or type(expected_size) is not int:
         raise InfrastructureError("verifier runtime artifact identity changed")
     try:
-        stat = path.stat()
+        with path.open("rb", buffering=0) as handle:
+            actual_size = os.fstat(handle.fileno()).st_size
+            actual_sha = hashlib.file_digest(handle, "sha256").hexdigest()
     except OSError as exc:
         raise InfrastructureError("verifier runtime artifact is missing") from exc
-    if stat.st_size != expected_size or file_sha256(path) != expected_sha:
+    if actual_size != expected_size or actual_sha != expected_sha:
         raise InfrastructureError("verifier runtime artifact digest mismatch")
 
 
@@ -191,8 +179,8 @@ def runtime_lock() -> dict[str, Any]:
     if not isinstance(binary_map, dict) or not isinstance(trusted_oleans, list):
         raise InfrastructureError("verifier runtime artifact inventory changed")
     inventory = [*binary_map.values(), *trusted_oleans]
-    with ThreadPoolExecutor(max_workers=RUNTIME_HASH_WORKERS) as executor:
-        tuple(executor.map(validate_runtime_artifact, inventory))
+    for item in inventory:
+        validate_runtime_artifact(item)
     if not TRUSTED_WORKING_DIRECTORY.is_dir():
         raise InfrastructureError("trusted mathlib working directory is missing")
     return value
