@@ -150,6 +150,24 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
         ):
             entrypoint.runtime_environment(lock, Path(raw))
 
+    def test_parallel_runtime_inventory_still_rejects_digest_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            artifact = Path(raw) / "trusted.olean"
+            artifact.write_bytes(b"trusted bytes")
+            item = {
+                "path": str(artifact.resolve()),
+                "sha256": "0" * 64,
+                "size": artifact.stat().st_size,
+            }
+            with self.assertRaisesRegex(
+                entrypoint.InfrastructureError,
+                "runtime artifact digest mismatch",
+            ):
+                entrypoint.validate_runtime_artifact(item)
+
+    def test_runtime_inventory_workers_match_frozen_cpu_limit(self) -> None:
+        self.assertEqual(2, entrypoint.RUNTIME_HASH_WORKERS)
+
     def test_build_environment_paths_are_normalized(self) -> None:
         with patch.dict(
             freeze_runtime.os.environ,
