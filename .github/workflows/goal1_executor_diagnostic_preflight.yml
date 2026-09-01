@@ -1,0 +1,291 @@
+name: goal1-executor-diagnostic-preflight
+
+on:
+  push:
+    branches:
+      - work/PM/G1-147
+    paths:
+      - ".github/workflows/goal1_executor_diagnostic_preflight.yml"
+      - "runtime/goal1_hermetic_executor/**"
+
+permissions:
+  contents: read
+
+env:
+  CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-executor:diagnostic-${{ github.sha }}
+
+jobs:
+  diagnostic-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build the exact local candidate image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: runtime/goal1_hermetic_executor
+          file: runtime/goal1_hermetic_executor/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.CANDIDATE_TAG }}
+      - name: Run one instrumented non-generating preflight
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostic-preflight
+          docker image inspect "$CANDIDATE_TAG" \
+            > diagnostic-preflight/image-inspect.json
+          docker image inspect "$CANDIDATE_TAG" \
+            --format '{{.Id}}' \
+            > diagnostic-preflight/image-id.txt
+
+          cidfile="$RUNNER_TEMP/goal1-diagnostic-preflight.cid"
+          rm -f "$cidfile"
+          cleanup() {
+            if test -s "$cidfile"; then
+              docker rm -f "$(cat "$cidfile")" >/dev/null 2>&1 || true
+            fi
+            rm -f "$cidfile"
+          }
+          trap cleanup EXIT
+
+          set +e
+          timeout --signal=KILL 180s docker run \
+            --cidfile "$cidfile" --rm \
+            --network none --read-only --runtime runc --init \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --pids-limit 256 --memory 4g --cpus 2 \
+            --user 65532:65532 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=536870912 \
+            --tmpfs /run:rw,noexec,nosuid,size=16777216 \
+            --entrypoint /bin/sh \
+            "$CANDIDATE_TAG" -ceu '
+          ts() { date -u +%FT%T.%NZ; }
+
+          missing_tools=""
+          for tool in date id pwd stat sha256sum find ldd grep cat curl tr seq kill sleep env; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              missing_tools="$missing_tools $tool"
+            fi
+          done
+          if test -n "$missing_tools"; then
+            echo "RESULT=DIAGNOSTIC_TOOL_MISSING TOOLS=$missing_tools"
+            exit 46
+          fi
+
+          echo "$(ts) STATE=container_started"
+          id
+          pwd
+
+          echo "$(ts) STATE=file_identity"
+          if ! stat /app /app/llama-server /opt/supernova/model.gguf; then
+            echo "$(ts) RESULT=FILE_IDENTITY_FAILED"
+            exit 41
+          fi
+          if ! test -r /app/llama-server || ! test -r /opt/supernova/model.gguf; then
+            echo "$(ts) RESULT=FINAL_UID_READABILITY_FAILED"
+            exit 41
+          fi
+          sha256sum /opt/supernova/model.gguf | tee /tmp/model.sha256
+          if ! grep -q "^f2d0fdabe97814b7d3fe1fec4a6dd32418c081b6953882ec31d3352f0058b65d " /tmp/model.sha256; then
+            echo "$(ts) RESULT=MODEL_DIGEST_MISMATCH"
+            exit 47
+          fi
+
+          echo "$(ts) STATE=library_inventory"
+          find /app -maxdepth 1 -name "lib*.so*" -exec stat {} \;
+          if command -v readelf >/dev/null 2>&1; then
+            echo "$(ts) STATE=elf_dynamic_section"
+            readelf -d /app/llama-server || true
+          else
+            echo "$(ts) INFO=READELF_UNAVAILABLE"
+          fi
+
+          echo "$(ts) STATE=dynamic_closure"
+          ldd /app/llama-server > /tmp/ldd.stdout 2> /tmp/ldd.stderr || true
+          cat /tmp/ldd.stdout
+          cat /tmp/ldd.stderr
+
+          run_loader_variant() {
+            variant="$1"
+            workdir="$2"
+            library_path="$3"
+            stdout="/tmp/loader-$variant.stdout"
+            stderr="/tmp/loader-$variant.stderr"
+            echo "$(ts) STATE=loader_variant VARIANT=$variant WORKDIR=$workdir LD_LIBRARY_PATH=${library_path:-UNSET}"
+            set +e
+            if test -n "$library_path"; then
+              (cd "$workdir" && LD_LIBRARY_PATH="$library_path" LD_DEBUG=libs \
+                /app/llama-server --version) > "$stdout" 2> "$stderr"
+            else
+              (cd "$workdir" && env -u LD_LIBRARY_PATH LD_DEBUG=libs \
+                /app/llama-server --version) > "$stdout" 2> "$stderr"
+            fi
+            rc=$?
+            set -e
+            echo "$(ts) LOADER_VARIANT=$variant RC=$rc"
+            cat "$stdout"
+            cat "$stderr"
+            return "$rc"
+          }
+
+          selected_variant=""
+          selected_workdir=""
+          selected_library_path=""
+          if run_loader_variant A /opt/supernova ""; then
+            selected_variant=A
+            selected_workdir=/opt/supernova
+          elif run_loader_variant B /app ""; then
+            selected_variant=B
+            selected_workdir=/app
+          elif run_loader_variant C /opt/supernova /app; then
+            selected_variant=C
+            selected_workdir=/opt/supernova
+            selected_library_path=/app
+          else
+            echo "$(ts) RESULT=ALL_LOADER_VARIANTS_FAILED"
+            exit 42
+          fi
+          echo "$(ts) STATE=loader_variant_selected VARIANT=$selected_variant"
+
+          echo "$(ts) STATE=server_spawn VARIANT=$selected_variant"
+          cd "$selected_workdir"
+          if test -n "$selected_library_path"; then
+            LD_LIBRARY_PATH="$selected_library_path" /app/llama-server \
+              -m /opt/supernova/model.gguf \
+              --host 127.0.0.1 \
+              --port 8080 \
+              --no-webui \
+              --jinja \
+              --alias supernova-kimina-prover-1.5b-q4_k_m \
+              --device none \
+              --threads 1 \
+              --ctx-size 4096 \
+              --batch-size 512 \
+              > /tmp/server.stdout 2> /tmp/server.stderr &
+          else
+            env -u LD_LIBRARY_PATH /app/llama-server \
+            -m /opt/supernova/model.gguf \
+            --host 127.0.0.1 \
+            --port 8080 \
+            --no-webui \
+            --jinja \
+            --alias supernova-kimina-prover-1.5b-q4_k_m \
+            --device none \
+            --threads 1 \
+            --ctx-size 4096 \
+            --batch-size 512 \
+            > /tmp/server.stdout 2> /tmp/server.stderr &
+          fi
+          pid=$!
+          echo "$(ts) CHILD_PID=$pid VARIANT=$selected_variant"
+          deadline_epoch=$(( $(date +%s) + 150 ))
+
+          while test "$(date +%s)" -lt "$deadline_epoch"; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              set +e
+              wait "$pid"
+              child_rc=$?
+              set -e
+              echo "$(ts) CHILD_EXIT_RC=$child_rc"
+              cat /tmp/server.stdout
+              cat /tmp/server.stderr
+              echo "$(ts) RESULT=EARLY_CHILD_EXIT"
+              exit 44
+            fi
+
+            code="$(curl -sS --connect-timeout 1 --max-time 2 \
+              -o /tmp/health.body -w "%{http_code}" \
+              http://127.0.0.1:8080/health || true)"
+            body="$(tr "\n" " " < /tmp/health.body 2>/dev/null || true)"
+            echo "$(ts) HEALTH=$code BODY=$body"
+
+            grep -E "^(State|VmRSS|VmPeak|Threads):" \
+              /proc/"$pid"/status 2>/dev/null || true
+            cat /sys/fs/cgroup/memory.current 2>/dev/null || true
+            cat /sys/fs/cgroup/memory.events 2>/dev/null || true
+            grep -i ":1F90 " /proc/net/tcp /proc/net/tcp6 2>/dev/null || true
+
+            if test "$code" = "503" || test "$code" = "200"; then
+              echo "$(ts) RESULT=REACHED_LOADING_OR_READY VARIANT=$selected_variant HEALTH=$code"
+              kill -TERM "$pid" 2>/dev/null || true
+              for _ in $(seq 1 20); do
+                kill -0 "$pid" 2>/dev/null || break
+                sleep 0.25
+              done
+              kill -KILL "$pid" 2>/dev/null || true
+              set +e
+              wait "$pid"
+              shutdown_rc=$?
+              set -e
+              echo "$(ts) SHUTDOWN_RC=$shutdown_rc"
+              cat /tmp/server.stdout
+              cat /tmp/server.stderr
+              exit 0
+            fi
+
+            sleep 0.5
+          done
+
+          echo "$(ts) RESULT=ALIVE_NOT_READY_WITHIN_150S"
+          kill -TERM "$pid" 2>/dev/null || true
+          for _ in $(seq 1 20); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.25
+          done
+          kill -KILL "$pid" 2>/dev/null || true
+          set +e
+          wait "$pid"
+          shutdown_rc=$?
+          set -e
+          echo "$(ts) SHUTDOWN_RC=$shutdown_rc"
+          cat /tmp/server.stdout
+          cat /tmp/server.stderr
+          exit 45
+          ' 2>&1 | tee diagnostic-preflight/container.log
+          probe_rc=${PIPESTATUS[0]}
+          set -e
+
+          cleanup
+          trap - EXIT
+          printf 'probe_exit_code=%s\n' "$probe_rc" \
+            > diagnostic-preflight/result.env
+          if ! grep -q 'RESULT=' diagnostic-preflight/container.log; then
+            if test "$probe_rc" -eq 137 || test "$probe_rc" -eq 124; then
+              printf 'RESULT=HOST_TIMEOUT PROBE_RC=%s\n' "$probe_rc" \
+                | tee -a diagnostic-preflight/container.log
+            else
+              printf 'RESULT=NO_TYPED_RESULT PROBE_RC=%s\n' "$probe_rc" \
+                | tee -a diagnostic-preflight/container.log
+            fi
+          fi
+          result_line="$(grep 'RESULT=' diagnostic-preflight/container.log | tail -n 1)"
+          printf '%s\n' "$result_line" > diagnostic-preflight/result.txt
+          printf 'result=%s\n' "$result_line" >> "$GITHUB_OUTPUT"
+      - name: Upload complete diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: goal1-executor-diagnostic-${{ github.sha }}
+          path: diagnostic-preflight/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Require one typed diagnostic outcome
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s diagnostic-preflight/result.txt
+          result="$(cat diagnostic-preflight/result.txt)"
+          test -n "$result"
+          printf 'Diagnostic outcome: %s\n' "$result"
+          {
+            echo '## Goal 1 executor diagnostic'
+            echo
+            printf '`%s`\n' "$result"
+            echo
+            echo 'No completion request or experiment attempt was made.'
+          } >> "$GITHUB_STEP_SUMMARY"
