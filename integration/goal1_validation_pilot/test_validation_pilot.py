@@ -12,6 +12,7 @@ from integration.goal1_validation_pilot.run_validation_pilot import (
     ModelContainerObservation,
     adapt_model_completion,
     completion_summary,
+    github_failure_annotation,
     parse_generation_frame,
     selected_problem_ids,
     verifier_launcher,
@@ -207,6 +208,39 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         self.assertEqual(
             "FINAL_LEAN_FENCE_EXACT_THEOREM_BODY", summary["adaptation_rule"]
         )
+
+    def test_github_failure_annotation_contains_only_typed_metadata(self) -> None:
+        annotation = github_failure_annotation(
+            {
+                "attempts": [
+                    {
+                        "adaptation_rule": "RAW_UNCHANGED",
+                        "arm": "ordinary",
+                        "attempt_status": "ANSWERED",
+                        "candidate_bytes": 4,
+                        "candidate_sha256": "a" * 64,
+                        "model_elapsed_milliseconds": 12,
+                        "model_error": None,
+                        "raw_completion_bytes": 4,
+                        "raw_completion_sha256": "b" * 64,
+                        "verifier_evidence": {
+                            "elapsed_milliseconds": 7,
+                            "record_sha256": "c" * 64,
+                            "termination_cause": "EXITED",
+                            "verdict": "INVALID",
+                        },
+                    }
+                ],
+                "one_percent_admission": "FAIL",
+                "signed_valid_model_responses": 0,
+            }
+        )
+        self.assertTrue(
+            annotation.startswith("::error title=Goal-1 0.1-percent admission failed::")
+        )
+        self.assertNotIn("candidate_utf8", annotation)
+        self.assertNotIn("raw_completion_utf8", annotation)
+        self.assertIn('"verdict":"INVALID"', annotation)
 
 
 if __name__ == "__main__":

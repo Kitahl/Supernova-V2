@@ -486,6 +486,7 @@ def completion_summary(
     if binding is not None:
         try:
             record = verifier_port.supervisor.store.read(binding)
+            blobs = verifier_port.supervisor.store.read_blobs(binding)
             evidence = {
                 "elapsed_milliseconds": record.body["observations"][
                     "elapsed_milliseconds"
@@ -494,6 +495,10 @@ def completion_summary(
                     "phases"
                 ],
                 "record_sha256": record.record_sha256,
+                "stderr_bytes": len(blobs.stderr),
+                "stderr_sha256": sha256(blobs.stderr),
+                "stdout_bytes": len(blobs.stdout),
+                "stdout_sha256": sha256(blobs.stdout),
                 "termination_cause": record.body["observations"]["termination_cause"],
                 "verdict": record.body["observations"]["verdict"],
             }
@@ -737,6 +742,59 @@ def run_smoke(
     return report
 
 
+def github_failure_annotation(report: dict[str, object]) -> str:
+    """Expose only bounded hashes and typed outcomes through check annotations."""
+
+    attempts = report.get("attempts")
+    if type(attempts) is not list:
+        raise ValueError("smoke report attempts changed")
+    compact = []
+    for item in attempts:
+        if type(item) is not dict:
+            raise ValueError("smoke report attempt changed")
+        evidence = item.get("verifier_evidence")
+        compact.append(
+            {
+                "adaptation_rule": item.get("adaptation_rule"),
+                "arm": item.get("arm"),
+                "attempt_status": item.get("attempt_status"),
+                "candidate_bytes": item.get("candidate_bytes"),
+                "candidate_sha256": item.get("candidate_sha256"),
+                "model_elapsed_milliseconds": item.get("model_elapsed_milliseconds"),
+                "model_error": item.get("model_error"),
+                "raw_completion_bytes": item.get("raw_completion_bytes"),
+                "raw_completion_sha256": item.get("raw_completion_sha256"),
+                "record_sha256": (
+                    evidence.get("record_sha256") if type(evidence) is dict else None
+                ),
+                "termination_cause": (
+                    evidence.get("termination_cause")
+                    if type(evidence) is dict
+                    else None
+                ),
+                "verdict": (
+                    evidence.get("verdict") if type(evidence) is dict else None
+                ),
+                "verifier_elapsed_milliseconds": (
+                    evidence.get("elapsed_milliseconds")
+                    if type(evidence) is dict
+                    else None
+                ),
+            }
+        )
+    message = json.dumps(
+        {
+            "attempts": compact,
+            "one_percent_admission": report.get("one_percent_admission"),
+            "signed_valid_model_responses": report.get("signed_valid_model_responses"),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"::error title=Goal-1 0.1-percent admission failed::{message}"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--validation-file", type=Path, required=True)
@@ -749,7 +807,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_directory=args.output_directory.resolve(strict=False),
     )
     print(json.dumps(report, allow_nan=False, indent=2, sort_keys=True))
-    return 0 if report["one_percent_admission"] == "PASS" else 1
+    if report["one_percent_admission"] == "PASS":
+        return 0
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(github_failure_annotation(report))
+    return 1
 
 
 if __name__ == "__main__":
