@@ -3,14 +3,21 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from integration.goal1_validation_pilot.run_validation_pilot import (
     MODEL_TIMEOUT_SECONDS,
     PLAN_PATH,
+    completion_summary,
     parse_generation_frame,
     selected_problem_ids,
     verifier_launcher,
 )
+from supernova_goal1.artifacts import (
+    ScheduledChatArtifactEnvelope,
+    ScheduledChatArtifactKind,
+)
+from supernova_goal1.execution.common import Arm, AttemptStatus
 
 
 class Goal1ValidationPilotTests(unittest.TestCase):
@@ -49,6 +56,37 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         self.assertEqual(b"  norm_num\n", parse_generation_frame(raw))
         with self.assertRaisesRegex(ValueError, "trailing transcript"):
             parse_generation_frame(raw + b"Loading model...\n")
+
+    def test_typed_model_error_is_reported_without_observation(self) -> None:
+        artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
+            b"",
+            kind=ScheduledChatArtifactKind.TERMINAL_RESPONSE,
+            run_id="run",
+            problem_id="sha256:" + "a" * 64,
+            arm=Arm.ORDINARY,
+            attempt=0,
+        )
+        completion = SimpleNamespace(
+            dispatch_id="dispatch",
+            status=SimpleNamespace(value="COMPLETED"),
+            payload=SimpleNamespace(
+                verifier_receipt=None,
+                attempt_result=SimpleNamespace(
+                    response_artifact=artifact,
+                    status=AttemptStatus.ERROR,
+                    error="original model failure",
+                ),
+            ),
+        )
+        summary = completion_summary(
+            arm=Arm.ORDINARY,
+            completion=completion,
+            model_observation=None,
+            verifier_port=SimpleNamespace(bindings_by_dispatch={}),
+        )
+        self.assertEqual("ERROR", summary["attempt_status"])
+        self.assertEqual("original model failure", summary["model_error"])
+        self.assertIsNone(summary["model_elapsed_milliseconds"])
 
 
 if __name__ == "__main__":

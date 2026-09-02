@@ -435,9 +435,7 @@ def completion_summary(
             }
         except (KeyError, ValueError):
             evidence = None
-    if model_observation is None:
-        raise RuntimeError("model observation is missing for completed dispatch")
-    response = model_observation.completion
+    response = b"" if model_observation is None else model_observation.completion
     if not payload.attempt_result.response_artifact.verifies(response):
         raise RuntimeError("captured model bytes do not match the completed artifact")
     return {
@@ -452,6 +450,7 @@ def completion_summary(
         ),
         "model_image_id": None if model_observation is None else model_observation.image_id,
         "model_stderr": None if model_observation is None else model_observation.stderr,
+        "model_error": payload.attempt_result.error,
         "verifier_status": None if receipt is None else receipt.status.value,
         "verifier_evidence": evidence,
     }

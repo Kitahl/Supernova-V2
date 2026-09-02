@@ -195,3 +195,8 @@ sealed prospectively.
   and uses a 300 s model-generation watchdog derived from the slower observed
   token rate. The independent Lean-verifier watchdog remains 60 s.
 - These are validation-only observations. Countable Goal-1 attempts remain zero.
+
+The next workflow reached both terminal dispatches, but its reporter replaced the
+typed model error with a secondary model-observation-missing exception.
+The report path now verifies the empty terminal artifact for an ERROR dispatch
+and records the original typed model error instead of throwing.
