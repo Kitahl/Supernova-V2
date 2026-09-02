@@ -13,6 +13,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from supernova_goal1.confirmatory_supervisor import (
     EMPTY_CONTEXT_SHA256,
+    ExecutorProcessError,
+    ExecutorResponseError,
+    GENERATION_RESPONSE_SCHEMA,
     HermeticLauncher,
     SupervisorError,
     load_launcher_file,
@@ -194,6 +197,8 @@ class _FakeDocker:
         remove_failure: bool = False,
         start_failure: bool = False,
         host_overrides: dict[str, object] | None = None,
+        generation_stdout: bytes | None = None,
+        timeout_on_start: bool = False,
     ) -> None:
         self.launcher = launcher
         self.network_mode = network_mode
@@ -202,6 +207,8 @@ class _FakeDocker:
         self.remove_failure = remove_failure
         self.start_failure = start_failure
         self.host_overrides = host_overrides or {}
+        self.generation_stdout = generation_stdout
+        self.timeout_on_start = timeout_on_start
         self.calls: list[tuple[list[str], bytes | None, int | None]] = []
         self.started = False
         self.removed = False
@@ -298,6 +305,12 @@ class _FakeDocker:
             )
         if argv[:2] == ["docker", "start"]:
             self.started = True
+            if self.timeout_on_start:
+                from supernova_goal1.confirmatory_supervisor import _HostCommandTimeout
+
+                raise _HostCommandTimeout(
+                    argv, timeout, b"partial", b"still running"
+                )
             if self.start_failure:
                 return _completed(argv, returncode=1, stderr=b"executor failed")
             request = json.loads((input_bytes or b"{}").decode("utf-8"))
@@ -314,7 +327,20 @@ class _FakeDocker:
                         response, separators=(",", ":"), sort_keys=True
                     ).encode("utf-8"),
                 )
-            return _completed(argv, stdout=b"opaque-model-response")
+            if self.generation_stdout is not None:
+                return _completed(argv, stdout=self.generation_stdout)
+            return _completed(
+                argv,
+                stdout=json.dumps(
+                    {
+                        "completion_utf8": "opaque-model-response",
+                        "schema": GENERATION_RESPONSE_SCHEMA,
+                        "status": "ANSWERED",
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8"),
+            )
         if argv[:3] == ["docker", "rm", "--force"]:
             if self.remove_failure:
                 return _completed(argv, returncode=1, stderr=b"remove failed")
@@ -374,6 +400,22 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
         )
         return sealed, _issue_validated_authority(validation)
 
+    def _run_attempt(self, capability, request: bytes):
+        return run_supervised_attempt(
+            self.launcher,
+            capability,
+            request,
+            receipt_private_key=self.receipt_private,
+            confirmatory_manifest_sha256="7" * 64,
+            run_id="goal1-run-v1",
+            protocol_dispatch_id="dispatch-" + "8" * 64,
+            dispatch_id="9" * 64,
+            problem_id="aime_1983_p1",
+            arm="ordinary",
+            attempt_index=0,
+            sequence=0,
+        )
+
     def test_preflight_uses_a_fresh_networkless_read_only_container(self) -> None:
         fake = _FakeDocker(self.launcher)
         evidence = self._preflight(fake)
@@ -430,6 +472,8 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
                 sequence=0,
             )
         self.assertEqual(result.response, b"opaque-model-response")
+        self.assertEqual(result.process_observation.exit_status, 0)
+        self.assertFalse(result.process_observation.timed_out)
         self.assertEqual(
             result.context_receipt.request_artifact_sha256,
             __import__("hashlib").sha256(request).hexdigest(),
@@ -437,6 +481,94 @@ class ConfirmatorySupervisorTests(unittest.TestCase):
         self.assertEqual(result.context_receipt.initial_context_sha256, EMPTY_CONTEXT_SHA256)
         self.assertTrue(result.context_receipt.teardown_observed)
         self.assertTrue(fake.removed)
+
+    def test_captured_llama_cli_transcript_is_rejected_before_verification(self) -> None:
+        _, capability = self._sealed_and_validated()
+        transcript = (
+            b"Loading model...\nllama-cli\nmodel : /opt/supernova/model.gguf\n"
+            b"available commands:\nFROZEN_THEOREM_NAME=aime_1983_p1\n"
+            b"The answer is \\boxed{3}.\nExiting...\n"
+        )
+        fake = _FakeDocker(self.launcher, generation_stdout=transcript)
+        with (
+            patch(
+                "supernova_goal1.confirmatory_supervisor._invoke",
+                side_effect=fake,
+            ),
+            self.assertRaisesRegex(
+                ExecutorResponseError, "not one generation response"
+            ) as caught,
+        ):
+            self._run_attempt(capability, b'{"prompt":"frozen prompt"}')
+        self.assertEqual(caught.exception.code, "MALFORMED_FRAME")
+        self.assertEqual(caught.exception.observation.exit_status, 0)
+        self.assertTrue(fake.removed)
+
+    def test_missing_multiple_and_malformed_generation_frames_are_typed(self) -> None:
+        _, capability = self._sealed_and_validated()
+        cases = {
+            "missing": (b"", "MISSING_FRAME"),
+            "multiple": (b"{}\n{}", "MULTIPLE_FRAMES"),
+            "malformed": (b'{"schema":', "MALFORMED_FRAME"),
+        }
+        for name, (stdout, code) in cases.items():
+            with self.subTest(name=name):
+                fake = _FakeDocker(self.launcher, generation_stdout=stdout)
+                with (
+                    patch(
+                        "supernova_goal1.confirmatory_supervisor._invoke",
+                        side_effect=fake,
+                    ),
+                    self.assertRaises(ExecutorResponseError) as caught,
+                ):
+                    self._run_attempt(capability, b'{"prompt":"frozen prompt"}')
+                self.assertEqual(caught.exception.code, code)
+                self.assertTrue(fake.removed)
+
+    def test_executor_timeout_has_no_exit_status_and_preserves_observation(self) -> None:
+        _, capability = self._sealed_and_validated()
+        fake = _FakeDocker(self.launcher, timeout_on_start=True)
+        with (
+            patch(
+                "supernova_goal1.confirmatory_supervisor._invoke",
+                side_effect=fake,
+            ),
+            self.assertRaisesRegex(ExecutorProcessError, "timed out") as caught,
+        ):
+            self._run_attempt(capability, b'{"prompt":"frozen prompt"}')
+        observation = caught.exception.observation
+        self.assertEqual(observation.phase, "GENERATION")
+        self.assertEqual(observation.termination_cause, "TIMEOUT_KILLED")
+        self.assertTrue(observation.timed_out)
+        self.assertIsNone(observation.exit_status)
+        self.assertEqual(observation.stdout_bytes, len(b"partial"))
+        self.assertEqual(observation.stderr_bytes, len(b"still running"))
+        self.assertTrue(observation.teardown_observed)
+        self.assertTrue(fake.removed)
+
+    def test_host_timeout_preserves_partial_streams_without_exit_status(self) -> None:
+        from supernova_goal1.confirmatory_supervisor import (
+            _HostCommandTimeout,
+            _invoke,
+        )
+
+        expired = subprocess.TimeoutExpired(
+            cmd=["docker", "start"],
+            timeout=1,
+            output=b"partial stdout",
+            stderr=b"partial stderr",
+        )
+        with (
+            patch(
+                "supernova_goal1.confirmatory_supervisor.subprocess.run",
+                side_effect=expired,
+            ),
+            self.assertRaises(_HostCommandTimeout) as caught,
+        ):
+            _invoke(["docker", "start"], timeout=1)
+        self.assertEqual(caught.exception.stdout, b"partial stdout")
+        self.assertEqual(caught.exception.stderr, b"partial stderr")
+        self.assertEqual(caught.exception.timeout_seconds, 1)
 
     def test_network_or_clean_image_drift_blocks_before_model_start(self) -> None:
         bad = _FakeDocker(self.launcher, network_mode="bridge")

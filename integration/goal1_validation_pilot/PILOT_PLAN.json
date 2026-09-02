@@ -1,0 +1,86 @@
+{
+  "schema": "supernova.goal1.validation-pilot-plan.v1",
+  "classification": "NON_CREDIT_VALIDATION_ONLY",
+  "scientific_credit": "NONE",
+  "countable_attempts_before": 0,
+  "countable_attempts_after": 0,
+  "benchmark": {
+    "name": "miniF2F-Lean4-Kimina-composite",
+    "version": "deepseek-v1.5-2c4ba911+kimina-5def318",
+    "allowed_split": "validation",
+    "forbidden_split": "test",
+    "validation_file_sha256": "4da5c1f69143e2633cf7c300d8946eb28d6b88d0f94441147ff4d54ec8c09926",
+    "validation_records": 244,
+    "benchmark_root_sha256": "914c05427e1e7e0979f4ca058f90fb3138ee0d3319233b415194c10e67d3683b"
+  },
+  "selection": {
+    "algorithm": "SORT_BY_SHA256_OF_UTF8_SEED_NUL_PROBLEM_ID_THEN_PROBLEM_ID",
+    "seed": "supernova-goal1-validation-pilot-2026-08-31-v1",
+    "frozen_before_model_observations": true
+  },
+  "model": {
+    "upstream_exact_version": "AI-MO/Kimina-Prover-Preview-Distill-1.5B@737ff8442bdd883bf18c9b76f46f8e63d03949d1",
+    "quantization_exact_version": "mradermacher/Kimina-Prover-Preview-Distill-1.5B-GGUF@5c087d3181668115364bc9c2d76186d9bcf81640#q4_k_m",
+    "gguf_sha256": "f2d0fdabe97814b7d3fe1fec4a6dd32418c081b6953882ec31d3352f0058b65d",
+    "interface": "FRESH_NETWORKLESS_CONTAINER_LLAMA_SERVER_CHAT_JSON"
+  },
+  "stages": {
+    "smoke_0_1_percent": {
+      "attempt_count": 2,
+      "problem_count": 1,
+      "attempts_per_problem_arm": 1,
+      "arms": ["ordinary", "verified_chain"],
+      "stop_after_report": true
+    },
+    "pilot_1_percent": {
+      "attempt_count": 20,
+      "problem_count": 5,
+      "attempts_per_problem_arm": 2,
+      "arms": ["ordinary", "verified_chain"],
+      "requires_clean_smoke_report": true,
+      "stop_after_report": true
+    }
+  },
+  "pre_model_gates": [
+    "PINNED_VERIFIER_RUNTIME_INVENTORY",
+    "BENIGN_SIGNED_VALID",
+    "PROSE_SIGNED_INVALID_WITH_RECORDED_TIMING",
+    "HOSTILE_METAPROGRAM_EXECUTION_AND_CONTAINMENT"
+  ],
+  "timing_policy": {
+    "classification": "NON_CREDIT_PILOT_LIVENESS_ONLY",
+    "outer_watchdog_seconds": 60,
+    "timeout_verdict": "UNKNOWN",
+    "runtime_statistic": "REPORT_OBSERVED_PHASE_AND_TOTAL_MILLISECONDS",
+    "derivation": {
+      "local_prose_observations_milliseconds": [6616, 7556, 7217],
+      "local_prose_mean_milliseconds": 7129.67,
+      "local_prose_maximum_milliseconds": 7556,
+      "external_reference": "LEAN_DEFAULT_HEARTBEAT_EXHAUSTION_OBSERVED_AT_33090_TO_35590_MS",
+      "external_reference_url": "https://github.com/leanprover/lean4/issues/14704",
+      "rule": "NEXT_WHOLE_MINUTE_ABOVE_LOCAL_ATTESTATION_MAXIMUM_PLUS_EXTERNAL_DEFAULT_HEARTBEAT_EXHAUSTION_MAXIMUM"
+    }
+  },
+  "model_timing_policy": {
+    "classification": "NON_CREDIT_PILOT_LIVENESS_ONLY",
+    "outer_watchdog_seconds": 300,
+    "incomplete_finish_reason": "NO_ANSWER",
+    "derivation": {
+      "observed_1024_token_attempts_milliseconds": [66590, 68567],
+      "observed_mean_milliseconds": 67578.5,
+      "observed_generation_rate_tokens_per_second": [19.21, 18.34],
+      "new_output_cap_tokens": 4096,
+      "rule": "NEXT_WHOLE_MINUTE_ABOVE_CONSERVATIVE_LINEAR_PROJECTION_FROM_SLOWER_OBSERVED_TOKEN_RATE_PLUS_PROMPT_EVALUATION"
+    }
+  },
+  "one_percent_admission": [
+    "EXACTLY_TWO_REAL_MODEL_ATTEMPTS",
+    "SAME_LOCKED_VALIDATION_PROBLEM",
+    "ONE_ATTEMPT_PER_DECLARED_ARM",
+    "NO_INTERACTIVE_TRANSCRIPT_CAPTURE",
+    "NO_MODEL_OR_VERIFIER_TIMEOUT",
+    "SIGNED_VERIFIER_EVIDENCE_FOR_EVERY_ANSWERED_RESPONSE",
+    "AT_LEAST_ONE_SIGNED_VALID_MODEL_RESPONSE",
+    "COUNTABLE_ATTEMPTS_REMAIN_ZERO"
+  ]
+}

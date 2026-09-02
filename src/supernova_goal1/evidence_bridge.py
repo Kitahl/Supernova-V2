@@ -4,6 +4,7 @@ No public bridge input accepts solved, verifier_passed, or realized cost totals.
 Those values are derived from an authority-backed closed join, signed host
 execution receipts, authenticated Lean receipts, and reconciled cost events.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -12,9 +13,9 @@ import json
 import os
 import sqlite3
 from collections import namedtuple
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping
 
 from .confirmatory_manifest import (
     NON_CREDIT_DRAFT,
@@ -23,12 +24,6 @@ from .confirmatory_manifest import (
     validate_manifest_bundle,
 )
 from .contracts import Arm, CompleteCost
-from .execution_authority import (
-    PRODUCTION_CREDIT_STATUS,
-    PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
-    PRODUCTION_RECEIPT_SCHEMA,
-    ValidatedExecutionAuthority,
-)
 from .cost import (
     ArmCostTrace,
     CompleteCostReport,
@@ -42,7 +37,23 @@ from .dispatch import (
     DispatchAuthority,
     DispatchEntry,
 )
-from .execution.common import FrozenProblemRequest
+from .execution.common import AttemptStatus, FrozenProblemRequest
+from .execution_authority import (
+    PRODUCTION_BRIDGE_RECEIPT_SCHEMA,
+    PRODUCTION_CREDIT_STATUS,
+    PRODUCTION_RECEIPT_SCHEMA,
+    ValidatedExecutionAuthority,
+)
+from .verifier_evidence import (
+    TerminationCause,
+    VerifierBinding,
+    VerifierEvidenceRecord,
+    VerifierEvidenceStore,
+    VerifierVerdict,
+)
+from .verifier_evidence import (
+    canonical_bytes as verifier_canonical_bytes,
+)
 
 ATTEMPTS_PER_CELL = 16
 _TYPED_ABSENCE = "NOT_INVOKED"
@@ -265,7 +276,9 @@ class ContextIsolationReceipt:
         if self.mode != "NON_CREDIT_SIMULATED_EMPTY_CONTEXT":
             raise ValueError("unsupported context-isolation mode")
         if self.status != "OBSERVED_EMPTY":
-            raise ValueError("context-isolation receipt did not observe an empty context")
+            raise ValueError(
+                "context-isolation receipt did not observe an empty context"
+            )
         _sha256(self.signature, "signature")
 
     def body(self) -> dict[str, object]:
@@ -343,7 +356,9 @@ class HermeticContextReceipt:
         if self.network_policy != "NONE":
             raise ValueError("production context receipt must prove network NONE")
         if self.persistent_writable_state != "DISABLED":
-            raise ValueError("production context receipt must prove no persistent state")
+            raise ValueError(
+                "production context receipt must prove no persistent state"
+            )
         if self.teardown_observed is not True:
             raise ValueError("production context receipt must prove teardown")
 
@@ -430,7 +445,9 @@ class PredecessorReconciliationReceipt:
                 self.selected_predecessor_dispatch_id
                 not in self.eligible_predecessor_dispatch_ids
             ):
-                raise ValueError("selected predecessor is not in the frozen eligible set")
+                raise ValueError(
+                    "selected predecessor is not in the frozen eligible set"
+                )
         expected_status = (
             "NOT_APPLICABLE"
             if not self.eligible_predecessor_dispatch_ids
@@ -456,9 +473,7 @@ class PredecessorReconciliationReceipt:
             "request_sha256": self.request_sha256,
             "run_id": self.run_id,
             "schema": "supernova.predecessor-reconciliation-receipt.v1",
-            "selected_predecessor_dispatch_id": (
-                self.selected_predecessor_dispatch_id
-            ),
+            "selected_predecessor_dispatch_id": (self.selected_predecessor_dispatch_id),
             "status": self.status,
         }
 
@@ -521,7 +536,9 @@ def _completion_body(
         "response_utf8_bytes": payload.attempt_result.response_artifact.byte_length,
         "run_id": completion.run_id,
         "schema": "supernova.execution-ledger-receipt.v3",
-        "verifier_milliseconds": 0 if verifier is None else verifier.elapsed_milliseconds,
+        "verifier_milliseconds": 0
+        if verifier is None
+        else verifier.elapsed_milliseconds,
         "verifier_receipt_sha256": (
             _TYPED_ABSENCE if verifier is None else verifier.receipt_sha256
         ),
@@ -599,9 +616,11 @@ class ExecutionLedgerReceipt:
         orchestration_milliseconds: int,
         secret: bytes,
         _factory: object,
-    ) -> "ExecutionLedgerReceipt":
+    ) -> ExecutionLedgerReceipt:
         if _factory is not _LEDGER_FACTORY:
-            raise TypeError("execution receipts are issued only by ExecutionLedgerAuthority")
+            raise TypeError(
+                "execution receipts are issued only by ExecutionLedgerAuthority"
+            )
         body = _completion_body(
             completion,
             issuer_id=issuer_id,
@@ -622,9 +641,7 @@ class ExecutionLedgerReceipt:
             issuer_id=str(body["issuer_id"]),
             execution_authority_sha256=str(body["execution_authority_sha256"]),
             protocol_dispatch_id=str(body["protocol_dispatch_id"]),
-            confirmatory_manifest_sha256=str(
-                body["confirmatory_manifest_sha256"]
-            ),
+            confirmatory_manifest_sha256=str(body["confirmatory_manifest_sha256"]),
             run_id=str(body["run_id"]),
             dispatch_id=str(body["dispatch_id"]),
             completion_record_sha256=str(body["completion_record_sha256"]),
@@ -653,9 +670,7 @@ class ExecutionLedgerReceipt:
             "completion_record_sha256": self.completion_record_sha256,
             "completion_status": self.completion_status,
             "confirmatory_manifest_sha256": self.confirmatory_manifest_sha256,
-            "context_isolation_receipt_sha256": (
-                self.context_isolation_receipt_sha256
-            ),
+            "context_isolation_receipt_sha256": (self.context_isolation_receipt_sha256),
             "dispatch_id": self.dispatch_id,
             "execution_authority_sha256": self.execution_authority_sha256,
             "issuer_id": self.issuer_id,
@@ -664,9 +679,7 @@ class ExecutionLedgerReceipt:
             "predecessor_reconciliation_sha256": (
                 self.predecessor_reconciliation_sha256
             ),
-            "protocol_binding_receipt_sha256": (
-                self.protocol_binding_receipt_sha256
-            ),
+            "protocol_binding_receipt_sha256": (self.protocol_binding_receipt_sha256),
             "request_sha256": self.request_sha256,
             "request_utf8_bytes": self.request_utf8_bytes,
             "response_artifact_id": self.response_artifact_id,
@@ -726,7 +739,9 @@ class ExecutionLedgerAuthority:
             validate_draft_bundle(public_manifest, operator_plan, protocol)
         else:
             if type(execution_authority) is not ValidatedExecutionAuthority:
-                raise TypeError("execution_authority must be a validator-issued capability")
+                raise TypeError(
+                    "execution_authority must be a validator-issued capability"
+                )
             validate_manifest_bundle(
                 public_manifest,
                 operator_plan,
@@ -734,9 +749,13 @@ class ExecutionLedgerAuthority:
                 execution_authority=execution_authority,
             )
             if execution_authority_sha256 != execution_authority.authority_sha256:
-                raise ValueError("caller execution authority digest differs from capability")
+                raise ValueError(
+                    "caller execution authority digest differs from capability"
+                )
             if issuer_id != execution_authority.issuer_id:
-                raise ValueError("caller issuer differs from validated execution authority")
+                raise ValueError(
+                    "caller issuer differs from validated execution authority"
+                )
         self.production_authority = execution_authority
         self.protocol_rules_sha256 = _sha256(
             protocol["sealed_rules_sha256"], "sealed_rules_sha256"
@@ -756,7 +775,9 @@ class ExecutionLedgerAuthority:
             bindings["cost_policy_sha256"], "cost_policy_sha256"
         )
         self.__plan_slots = {
-            (entry["problem_id"], entry["arm"], entry["budget_attempt_index"]): dict(entry)
+            (entry["problem_id"], entry["arm"], entry["budget_attempt_index"]): dict(
+                entry
+            )
             for entry in operator_plan["entries"]
         }
         if len(self.__plan_slots) != len(operator_plan["entries"]):
@@ -799,9 +820,7 @@ class ExecutionLedgerAuthority:
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.database_path, timeout=30)
 
-    def _slot_for_request(
-        self, request: FrozenProblemRequest
-    ) -> dict[str, object]:
+    def _slot_for_request(self, request: FrozenProblemRequest) -> dict[str, object]:
         if type(request) is not FrozenProblemRequest:
             raise TypeError("request must be an exact FrozenProblemRequest")
         request = FrozenProblemRequest.from_mapping(request.to_mapping())
@@ -824,18 +843,13 @@ class ExecutionLedgerAuthority:
             raise ValueError(
                 "frozen request protocol dispatch binding differs from operator plan"
             )
-        if (
-            request.confirmatory_manifest_sha256
-            != self.confirmatory_manifest_sha256
-        ):
+        if request.confirmatory_manifest_sha256 != self.confirmatory_manifest_sha256:
             raise ValueError(
                 "frozen request confirmatory manifest binding differs from ledger"
             )
         return slot
 
-    def _slot_for_completion(
-        self, completion: CompletionRecord
-    ) -> dict[str, object]:
+    def _slot_for_completion(self, completion: CompletionRecord) -> dict[str, object]:
         completion = _snapshot_completion(completion)
         return self._slot_for_request(completion.payload.request)
 
@@ -890,9 +904,7 @@ class ExecutionLedgerAuthority:
         ).hexdigest()
         receipt = ProtocolDispatchReceipt(
             issuer_id=str(body["issuer_id"]),
-            execution_authority_sha256=str(
-                body["execution_authority_sha256"]
-            ),
+            execution_authority_sha256=str(body["execution_authority_sha256"]),
             run_id=str(body["run_id"]),
             dispatch_id=str(body["dispatch_id"]),
             dispatch_entry_sha256=str(body["dispatch_entry_sha256"]),
@@ -903,9 +915,7 @@ class ExecutionLedgerAuthority:
             attempt=int(body["attempt"]),
             protocol_dispatch_id=str(body["protocol_dispatch_id"]),
             protocol_rules_sha256=str(body["protocol_rules_sha256"]),
-            confirmatory_manifest_sha256=str(
-                body["confirmatory_manifest_sha256"]
-            ),
+            confirmatory_manifest_sha256=str(body["confirmatory_manifest_sha256"]),
             signature=signature,
         )
         encoded = json.dumps(
@@ -981,9 +991,7 @@ class ExecutionLedgerAuthority:
                 raise ValueError("persisted protocol dispatch schema changed")
             receipt = ProtocolDispatchReceipt(
                 issuer_id=raw["issuer_id"],
-                execution_authority_sha256=raw[
-                    "execution_authority_sha256"
-                ],
+                execution_authority_sha256=raw["execution_authority_sha256"],
                 run_id=raw["run_id"],
                 dispatch_id=raw["dispatch_id"],
                 dispatch_entry_sha256=raw["dispatch_entry_sha256"],
@@ -994,9 +1002,7 @@ class ExecutionLedgerAuthority:
                 attempt=raw["attempt"],
                 protocol_dispatch_id=raw["protocol_dispatch_id"],
                 protocol_rules_sha256=raw["protocol_rules_sha256"],
-                confirmatory_manifest_sha256=raw[
-                    "confirmatory_manifest_sha256"
-                ],
+                confirmatory_manifest_sha256=raw["confirmatory_manifest_sha256"],
                 signature=raw["signature"],
             )
             expected_signature = hmac.new(
@@ -1075,9 +1081,7 @@ class ExecutionLedgerAuthority:
             attempt=raw["attempt"],
             protocol_dispatch_id=raw["protocol_dispatch_id"],
             protocol_rules_sha256=raw["protocol_rules_sha256"],
-            confirmatory_manifest_sha256=raw[
-                "confirmatory_manifest_sha256"
-            ],
+            confirmatory_manifest_sha256=raw["confirmatory_manifest_sha256"],
             signature=raw["signature"],
         )
         expected_signature = hmac.new(
@@ -1124,9 +1128,7 @@ class ExecutionLedgerAuthority:
             )
         return receipt
 
-    def _context_body(
-        self, completion: CompletionRecord
-    ) -> dict[str, object]:
+    def _context_body(self, completion: CompletionRecord) -> dict[str, object]:
         completion = _snapshot_completion(completion)
         request = completion.payload.request
         slot = self._slot_for_completion(completion)
@@ -1167,17 +1169,13 @@ class ExecutionLedgerAuthority:
             attempt=int(body["attempt"]),
             request_sha256=str(body["request_sha256"]),
             protocol_dispatch_id=str(body["protocol_dispatch_id"]),
-            confirmatory_manifest_sha256=str(
-                body["confirmatory_manifest_sha256"]
-            ),
+            confirmatory_manifest_sha256=str(body["confirmatory_manifest_sha256"]),
             mode=str(body["mode"]),
             status=str(body["status"]),
             signature=signature,
         )
 
-    def _predecessor_body(
-        self, completion: CompletionRecord
-    ) -> dict[str, object]:
+    def _predecessor_body(self, completion: CompletionRecord) -> dict[str, object]:
         completion = _snapshot_completion(completion)
         request = completion.payload.request
         slot = self._slot_for_completion(completion)
@@ -1208,9 +1206,7 @@ class ExecutionLedgerAuthority:
         body = self._predecessor_body(completion)
         signature = hmac.new(
             self.__secret,
-            _canonical_bytes(
-                "supernova.predecessor-reconciliation.signature.v1", body
-            ),
+            _canonical_bytes("supernova.predecessor-reconciliation.signature.v1", body),
             hashlib.sha256,
         ).hexdigest()
         return PredecessorReconciliationReceipt(
@@ -1222,9 +1218,7 @@ class ExecutionLedgerAuthority:
             attempt=int(body["attempt"]),
             request_sha256=str(body["request_sha256"]),
             protocol_dispatch_id=str(body["protocol_dispatch_id"]),
-            confirmatory_manifest_sha256=str(
-                body["confirmatory_manifest_sha256"]
-            ),
+            confirmatory_manifest_sha256=str(body["confirmatory_manifest_sha256"]),
             predecessor_policy=str(body["predecessor_policy"]),
             eligible_predecessor_dispatch_ids=tuple(
                 body["eligible_predecessor_dispatch_ids"]
@@ -1281,7 +1275,7 @@ class ExecutionLedgerAuthority:
             "persistent_writable_state": "DISABLED",
             "problem_id": request.problem.native_id,
             "protocol_dispatch_id": slot["dispatch_id"],
-            "request_artifact_sha256": request.frozen_request_sha256,
+            "request_artifact_sha256": request.request_artifact.sha256_hex,
             "response_artifact_sha256": response.sha256_hex,
             "run_id": self.run_id,
             "schema": PRODUCTION_RECEIPT_SCHEMA,
@@ -1289,7 +1283,9 @@ class ExecutionLedgerAuthority:
             "teardown_observed": True,
         }
         if receipt.body() != expected:
-            raise ValueError("production context receipt does not bind actual execution")
+            raise ValueError(
+                "production context receipt does not bind actual execution"
+            )
         authority.verify_receipt_signature(
             receipt.signature,
             domain=PRODUCTION_RECEIPT_SCHEMA,
@@ -1330,17 +1326,12 @@ class ExecutionLedgerAuthority:
         slot = self._slot_for_completion(completion)
         binding = self._read_protocol_binding(completion.dispatch_id)
         if binding is None:
-            raise ValueError(
-                "completion has no pre-dispatch protocol binding receipt"
-            )
+            raise ValueError("completion has no pre-dispatch protocol binding receipt")
         if (
-            binding.request_sha256
-            != completion.payload.request.frozen_request_sha256
+            binding.request_sha256 != completion.payload.request.frozen_request_sha256
             or binding.dispatch_entry_sha256 != completion.entry_sha256
         ):
-            raise ValueError(
-                "pre-dispatch protocol binding does not match completion"
-            )
+            raise ValueError("pre-dispatch protocol binding does not match completion")
         context_receipt = self._verify_context_receipt(
             completion, context_isolation_receipt
         )
@@ -1447,9 +1438,7 @@ class ExecutionLedgerAuthority:
                 issuer_id=raw["issuer_id"],
                 execution_authority_sha256=raw["execution_authority_sha256"],
                 protocol_dispatch_id=raw["protocol_dispatch_id"],
-                confirmatory_manifest_sha256=raw[
-                    "confirmatory_manifest_sha256"
-                ],
+                confirmatory_manifest_sha256=raw["confirmatory_manifest_sha256"],
                 run_id=raw["run_id"],
                 dispatch_id=raw["dispatch_id"],
                 completion_record_sha256=raw["completion_record_sha256"],
@@ -1461,9 +1450,7 @@ class ExecutionLedgerAuthority:
                 response_utf8_bytes=raw["response_utf8_bytes"],
                 verifier_milliseconds=raw["verifier_milliseconds"],
                 orchestration_milliseconds=raw["orchestration_milliseconds"],
-                protocol_binding_receipt_sha256=raw[
-                    "protocol_binding_receipt_sha256"
-                ],
+                protocol_binding_receipt_sha256=raw["protocol_binding_receipt_sha256"],
                 context_isolation_receipt_sha256=(
                     raw["context_isolation_receipt_sha256"]
                 ),
@@ -1558,7 +1545,7 @@ class ExecutionLedgerAuthority:
 
     def _issue_evidence_bridge_receipt(
         self, bridge_sha256: str
-    ) -> "EvidenceBridgeReceipt":
+    ) -> EvidenceBridgeReceipt:
         bridge_sha256 = _sha256(bridge_sha256, "bridge_sha256")
         body = {
             "bridge_sha256": bridge_sha256,
@@ -1580,9 +1567,7 @@ class ExecutionLedgerAuthority:
             signature=signature,
         )
 
-    def verify_evidence_bridge_bundle(
-        self, bundle: "EvidenceBridgeBundle"
-    ) -> str:
+    def verify_evidence_bridge_bundle(self, bundle: EvidenceBridgeBundle) -> str:
         if type(bundle) is not EvidenceBridgeBundle:
             raise TypeError("bundle must be an exact EvidenceBridgeBundle")
         receipt = bundle.authority_receipt
@@ -1597,11 +1582,9 @@ class ExecutionLedgerAuthority:
         }
         if (
             bundle.run_id != self.run_id
-            or bundle.execution_authority_sha256
-            != self.execution_authority_sha256
+            or bundle.execution_authority_sha256 != self.execution_authority_sha256
             or bundle.protocol_rules_sha256 != self.protocol_rules_sha256
-            or bundle.confirmatory_manifest_sha256
-            != self.confirmatory_manifest_sha256
+            or bundle.confirmatory_manifest_sha256 != self.confirmatory_manifest_sha256
             or receipt.body() != expected_body
         ):
             raise ValueError("evidence bridge receipt does not bind trusted authority")
@@ -1624,7 +1607,6 @@ class ExecutionLedgerAuthority:
                 body=expected_body,
             )
         return receipt.receipt_sha256
-
 
 
 @dataclass(frozen=True)
@@ -1671,7 +1653,7 @@ def _evidence_bundle_body(
     close_sha256: str,
     completion_set_sha256: str,
     execution_authority_sha256: str,
-    records: tuple["EvaluatorEvidenceRecord", ...],
+    records: tuple[EvaluatorEvidenceRecord, ...],
 ) -> dict[str, object]:
     return {
         "close_sha256": close_sha256,
@@ -1755,7 +1737,10 @@ class EvaluatorEvidenceRecord(_RecordTuple):
                 else:
                     _sha256(value, f"{name}[]")
         verifier_values = raw["verifier_evidence_sha256s"]
-        if type(verifier_values) is not tuple or len(verifier_values) != ATTEMPTS_PER_CELL:
+        if (
+            type(verifier_values) is not tuple
+            or len(verifier_values) != ATTEMPTS_PER_CELL
+        ):
             raise ValueError("verifier_evidence_sha256s must contain exactly 16 values")
         for value in verifier_values:
             if value.startswith(_TYPED_ABSENCE + ":"):
@@ -1803,10 +1788,10 @@ class EvaluatorEvidenceRecord(_RecordTuple):
         raise TypeError("EvaluatorEvidenceRecord may not be subclassed")
 
     @classmethod
-    def _make(cls, iterable: object) -> "EvaluatorEvidenceRecord":
+    def _make(cls, iterable: object) -> EvaluatorEvidenceRecord:
         raise TypeError("EvaluatorEvidenceRecord cannot be reconstructed directly")
 
-    def _replace(self, **kwargs: object) -> "EvaluatorEvidenceRecord":
+    def _replace(self, **kwargs: object) -> EvaluatorEvidenceRecord:
         raise TypeError("EvaluatorEvidenceRecord cannot be replaced directly")
 
     @property
@@ -1896,7 +1881,9 @@ class EvidenceBridgeBundle(_BundleTuple):
         if type(records) is not tuple or not records:
             raise ValueError("bridge bundle requires a non-empty record tuple")
         if not all(type(value) is EvaluatorEvidenceRecord for value in records):
-            raise TypeError("bridge records must be exact EvaluatorEvidenceRecord values")
+            raise TypeError(
+                "bridge records must be exact EvaluatorEvidenceRecord values"
+            )
         if type(raw["authority_receipt"]) is not EvidenceBridgeReceipt:
             raise TypeError("authority_receipt must be an exact EvidenceBridgeReceipt")
         keys = [(value.problem_id, value.arm) for value in records]
@@ -1926,10 +1913,10 @@ class EvidenceBridgeBundle(_BundleTuple):
         raise TypeError("EvidenceBridgeBundle may not be subclassed")
 
     @classmethod
-    def _make(cls, iterable: object) -> "EvidenceBridgeBundle":
+    def _make(cls, iterable: object) -> EvidenceBridgeBundle:
         raise TypeError("EvidenceBridgeBundle cannot be reconstructed directly")
 
-    def _replace(self, **kwargs: object) -> "EvidenceBridgeBundle":
+    def _replace(self, **kwargs: object) -> EvidenceBridgeBundle:
         raise TypeError("EvidenceBridgeBundle cannot be replaced directly")
 
     @property
@@ -2007,13 +1994,136 @@ def _reconcile_trace(
                 "model-call cost does not match authenticated artifact byte lengths"
             )
         if verifier.milliseconds != receipt.verifier_milliseconds:
-            raise ValueError(
-                "verifier cost does not match authenticated Lean receipt"
-            )
+            raise ValueError("verifier cost does not match authenticated Lean receipt")
         if orchestration.milliseconds != receipt.orchestration_milliseconds:
             raise ValueError(
                 "orchestration cost does not match signed host execution receipt"
             )
+
+
+def _production_verifier_records(
+    completions: tuple[CompletionRecord, ...],
+    *,
+    store: VerifierEvidenceStore,
+    bindings_by_dispatch: Mapping[str, VerifierBinding],
+    run_spec_id: str,
+    execution_authority_sha256: str,
+    protocol_rules_sha256: str,
+    confirmatory_manifest_sha256: str,
+) -> dict[str, VerifierEvidenceRecord]:
+    if type(bindings_by_dispatch) is not dict:
+        raise TypeError("bindings_by_dispatch must be one exact dict")
+    expected: list[VerifierBinding] = []
+    completion_by_dispatch: dict[str, CompletionRecord] = {}
+    for completion in completions:
+        completion = _snapshot_completion(completion)
+        if completion.payload.attempt_result.status is not AttemptStatus.ANSWERED:
+            continue
+        binding = bindings_by_dispatch.get(completion.dispatch_id)
+        if type(binding) is not VerifierBinding:
+            raise ValueError(
+                "answered production attempt lacks a pre-completion verifier binding"
+            )
+        request = completion.payload.request
+        result = completion.payload.attempt_result
+        expected_fields = (
+            run_spec_id,
+            request.run_id,
+            request.experiment_id,
+            execution_authority_sha256,
+            confirmatory_manifest_sha256,
+            protocol_rules_sha256,
+            request.protocol_dispatch_id,
+            completion.dispatch_id,
+            completion.entry_sha256,
+            request.frozen_request_sha256,
+            request.frozen_request_sha256,
+            result.attempt_result_sha256,
+            request.problem_id,
+            request.problem.canonical_id,
+            request.arm.value,
+            request.attempt,
+            result.response_artifact.artifact_id,
+            result.response_artifact.sha256_hex,
+            request.runtime_sha256,
+        )
+        observed_fields = (
+            binding.run_spec_id,
+            binding.run_id,
+            binding.experiment_id,
+            binding.execution_authority_sha256,
+            binding.confirmatory_manifest_sha256,
+            binding.protocol_rules_sha256,
+            binding.protocol_dispatch_id,
+            binding.actual_dispatch_id,
+            binding.dispatch_entry_sha256,
+            binding.frozen_request_sha256,
+            binding.normalized_request_sha256,
+            binding.attempt_result_sha256,
+            binding.problem_id,
+            binding.problem_identity,
+            binding.arm_id,
+            binding.attempt_id,
+            binding.candidate_id,
+            binding.candidate_source_sha256,
+            binding.requested_runtime_sha256,
+        )
+        if observed_fields != expected_fields:
+            raise ValueError(
+                "pre-completion verifier binding differs from closed execution evidence"
+            )
+        expected.append(binding)
+        completion_by_dispatch[completion.dispatch_id] = completion
+    if set(bindings_by_dispatch) != set(completion_by_dispatch):
+        raise ValueError(
+            "pre-completion verifier bindings do not exactly cover answers"
+        )
+    records = store.read_complete(tuple(expected))
+    by_dispatch = {
+        binding.actual_dispatch_id: record
+        for binding, record in zip(expected, records, strict=True)
+    }
+    for dispatch_id, record in by_dispatch.items():
+        completion = completion_by_dispatch[dispatch_id]
+        legacy = completion.payload.verifier_receipt
+        if legacy is None:
+            raise ValueError("answered production attempt lacks compatibility receipt")
+        body = record.body
+        observed = body["observations"]
+        artifacts = body["artifacts"]
+        verdict = VerifierVerdict(observed["verdict"])
+        cause = TerminationCause(observed["termination_cause"])
+        if verdict is VerifierVerdict.UNKNOWN:
+            raise PermissionError("BLOCKED_UNKNOWN_VERIFIER_EVIDENCE: " + cause.value)
+        expected_status = (
+            CompletionStatus.SUCCEEDED
+            if verdict is VerifierVerdict.VALID
+            else CompletionStatus.FAILED
+        )
+        if completion.status is not expected_status:
+            raise ValueError(
+                "caller completion status differs from authenticated verdict"
+            )
+        command_sha = hashlib.sha256(
+            verifier_canonical_bytes(list(legacy.command))
+        ).hexdigest()
+        identity = body["verifier_identity"]
+        if (
+            identity["toolchain_lock_sha256"]
+            != body["binding"]["actual_runtime_sha256"]
+            or legacy.runtime_sha256 != body["binding"]["actual_runtime_sha256"]
+            or legacy.candidate_artifact_id != body["binding"]["candidate_id"]
+            or legacy.frozen_request_sha256 != body["binding"]["frozen_request_sha256"]
+            or legacy.attempt_result_sha256 != body["binding"]["attempt_result_sha256"]
+            or legacy.elapsed_milliseconds != observed["elapsed_milliseconds"]
+            or legacy.stdout_sha256 != artifacts["stdout_sha256"]
+            or legacy.stderr_sha256 != artifacts["stderr_sha256"]
+            or command_sha != identity["verification_command_sha256"]
+        ):
+            raise ValueError(
+                "caller compatibility receipt differs from authenticated host evidence"
+            )
+    return by_dispatch
 
 
 def bridge_closed_evidence(
@@ -2025,9 +2135,9 @@ def bridge_closed_evidence(
     public_manifest: Mapping[str, object],
     operator_plan: Mapping[str, object],
     cost_reports_by_problem: Mapping[str, CompleteCostReport],
-    production_receipt_issuer: (
-        Callable[[str], EvidenceBridgeReceipt] | None
-    ) = None,
+    verifier_evidence_store: VerifierEvidenceStore | None = None,
+    verifier_bindings_by_dispatch: Mapping[str, VerifierBinding] | None = None,
+    production_receipt_issuer: (Callable[[str], EvidenceBridgeReceipt] | None) = None,
 ) -> EvidenceBridgeBundle:
     """Derive evidence-only evaluator inputs; a draft stays explicitly non-credit."""
 
@@ -2045,6 +2155,23 @@ def bridge_closed_evidence(
     ):
         if type(value) is not dict:
             raise TypeError(f"{field} must be an exact dict")
+    if (
+        verifier_evidence_store is not None
+        and type(verifier_evidence_store) is not VerifierEvidenceStore
+    ):
+        raise TypeError(
+            "verifier_evidence_store must be an exact VerifierEvidenceStore"
+        )
+    if verifier_bindings_by_dispatch is not None and (
+        type(verifier_bindings_by_dispatch) is not dict
+        or not all(
+            type(key) is str and type(value) is VerifierBinding
+            for key, value in verifier_bindings_by_dispatch.items()
+        )
+    ):
+        raise TypeError(
+            "verifier_bindings_by_dispatch must be an exact dict of bindings"
+        )
 
     requested_credit_status = public_manifest.get("credit_status")
     if requested_credit_status == NON_CREDIT_DRAFT:
@@ -2062,23 +2189,38 @@ def bridge_closed_evidence(
     confirmatory_manifest_sha256 = _sha256(
         public_manifest["manifest_sha256"], "manifest_sha256"
     )
-    if canonical_sha256(
-        {key: value for key, value in public_manifest.items() if key != "manifest_sha256"}
-    ) != confirmatory_manifest_sha256:
+    if (
+        canonical_sha256(
+            {
+                key: value
+                for key, value in public_manifest.items()
+                if key != "manifest_sha256"
+            }
+        )
+        != confirmatory_manifest_sha256
+    ):
         raise ValueError("manifest_sha256 does not bind the public manifest")
-    manifest_credit_status = _token(
-        public_manifest["credit_status"], "credit_status"
-    )
+    manifest_credit_status = _token(public_manifest["credit_status"], "credit_status")
     if manifest_credit_status == NON_CREDIT_DRAFT:
         if execution_ledger.production_authority is not None:
             raise ValueError("production authority cannot authenticate a draft bridge")
+        if verifier_evidence_store is not None:
+            raise ValueError("draft bridge cannot consume production verifier evidence")
+        if verifier_bindings_by_dispatch is not None:
+            raise ValueError("draft bridge cannot consume production verifier bindings")
     elif manifest_credit_status == PRODUCTION_CREDIT_STATUS:
         if execution_ledger.production_authority is None:
             raise ValueError("production bridge lacks validated execution authority")
+        if verifier_evidence_store is None:
+            raise PermissionError(
+                "production bridge requires authenticated verifier evidence"
+            )
+        if verifier_bindings_by_dispatch is None:
+            raise PermissionError(
+                "production bridge requires pre-completion verifier bindings"
+            )
     else:
-        raise ValueError(
-            "unsupported manifest credit status"
-        )
+        raise ValueError("unsupported manifest credit status")
 
     rules = protocol["sealed_rules"]
     benchmark_root = rules["benchmark_selection"]["benchmark_root_sha256"]
@@ -2093,10 +2235,7 @@ def bridge_closed_evidence(
         raise ValueError("execution authority does not match confirmatory manifest")
     if execution_ledger.protocol_rules_sha256 != protocol_rules_sha256:
         raise ValueError("execution ledger protocol binding changed")
-    if (
-        execution_ledger.confirmatory_manifest_sha256
-        != confirmatory_manifest_sha256
-    ):
+    if execution_ledger.confirmatory_manifest_sha256 != confirmatory_manifest_sha256:
         raise ValueError("execution ledger confirmatory manifest binding changed")
     # A draft has no production execution-authority binding. Its bridge output is
     # permanently labeled NON_CREDIT_DRAFT, including in every record digest.
@@ -2114,9 +2253,29 @@ def bridge_closed_evidence(
 
     authoritative_join = dispatch_authority.verify_closed_join(closed_join)
     if authoritative_join.receipt.run_id != execution_ledger.run_id:
-        raise ValueError("dispatch and execution authorities have different run_id values")
+        raise ValueError(
+            "dispatch and execution authorities have different run_id values"
+        )
     execution_receipts = execution_ledger.verify_complete_join(authoritative_join)
     receipt_by_dispatch = {r.dispatch_id: r for r in execution_receipts}
+    production_verifier_by_dispatch: dict[str, VerifierEvidenceRecord] = {}
+    if manifest_credit_status == PRODUCTION_CREDIT_STATUS:
+        if verifier_evidence_store is None:
+            raise PermissionError(
+                "production bridge requires authenticated verifier evidence"
+            )
+        production_verifier_by_dispatch = _production_verifier_records(
+            tuple(
+                _snapshot_completion(joined.completion)
+                for joined in authoritative_join.joined
+            ),
+            store=verifier_evidence_store,
+            bindings_by_dispatch=verifier_bindings_by_dispatch,
+            run_spec_id=confirmatory_manifest_sha256,
+            execution_authority_sha256=execution_ledger.execution_authority_sha256,
+            protocol_rules_sha256=protocol_rules_sha256,
+            confirmatory_manifest_sha256=confirmatory_manifest_sha256,
+        )
 
     joined_by_cell: dict[
         tuple[str, Arm],
@@ -2146,8 +2305,7 @@ def bridge_closed_evidence(
         receipt = receipt_by_dispatch[completion.dispatch_id]
         if (
             request.protocol_dispatch_id != slot["dispatch_id"]
-            or request.confirmatory_manifest_sha256
-            != confirmatory_manifest_sha256
+            or request.confirmatory_manifest_sha256 != confirmatory_manifest_sha256
         ):
             raise ValueError(
                 "frozen request is not bound to its protocol slot and manifest"
@@ -2171,7 +2329,9 @@ def bridge_closed_evidence(
             native_id, request.problem_id
         )
         if previous_identity != request.problem_id:
-            raise ValueError("one native problem id maps to multiple problem identities")
+            raise ValueError(
+                "one native problem id maps to multiple problem identities"
+            )
         key = (native_id, request.arm)
         joined_by_cell.setdefault(key, []).append(
             (
@@ -2180,8 +2340,8 @@ def bridge_closed_evidence(
                 slot["dispatch_id"],
             )
         )
-        for field in invariants:
-            invariants[field].add(getattr(request, field))
+        for field, observed_values in invariants.items():
+            observed_values.add(getattr(request, field))
 
     if observed_plan_slots != set(plan_slots):
         raise ValueError(
@@ -2213,7 +2373,9 @@ def bridge_closed_evidence(
             raise ValueError("cost report usage basis differs from frozen requests")
         observed_arms = {arm for pid, arm in joined_by_cell if pid == problem_id}
         if observed_arms != set(Arm):
-            raise ValueError(f"problem {problem_id} does not contain all five paired arms")
+            raise ValueError(
+                f"problem {problem_id} does not contain all five paired arms"
+            )
 
         for arm in Arm:
             items = sorted(
@@ -2251,8 +2413,7 @@ def bridge_closed_evidence(
                     execution_authority_sha256=execution_ledger.execution_authority_sha256,
                     protocol_dispatch_ids=protocol_dispatch_ids,
                     protocol_binding_receipt_sha256s=tuple(
-                        receipt.protocol_binding_receipt_sha256
-                        for receipt in receipts
+                        receipt.protocol_binding_receipt_sha256 for receipt in receipts
                     ),
                     dispatch_ids=tuple(c.dispatch_id for c in completions),
                     completion_record_sha256s=tuple(
@@ -2262,7 +2423,13 @@ def bridge_closed_evidence(
                         (
                             f"{_TYPED_ABSENCE}:{c.record_sha256}"
                             if c.payload.verifier_receipt is None
-                            else c.payload.verifier_receipt.receipt_sha256
+                            else (
+                                c.payload.verifier_receipt.receipt_sha256
+                                if manifest_credit_status == NON_CREDIT_DRAFT
+                                else production_verifier_by_dispatch[
+                                    c.dispatch_id
+                                ].record_sha256
+                            )
                         )
                         for c in completions
                     ),
@@ -2270,8 +2437,7 @@ def bridge_closed_evidence(
                         receipt.receipt_sha256 for receipt in receipts
                     ),
                     context_isolation_receipt_sha256s=tuple(
-                        receipt.context_isolation_receipt_sha256
-                        for receipt in receipts
+                        receipt.context_isolation_receipt_sha256 for receipt in receipts
                     ),
                     predecessor_reconciliation_sha256s=tuple(
                         receipt.predecessor_reconciliation_sha256
@@ -2349,9 +2515,9 @@ def bridge_closed_evidence(
 __all__ = [
     "ATTEMPTS_PER_CELL",
     "ContextIsolationReceipt",
+    "EvaluatorEvidenceRecord",
     "EvidenceBridgeBundle",
     "EvidenceBridgeReceipt",
-    "EvaluatorEvidenceRecord",
     "ExecutionLedgerAuthority",
     "ExecutionLedgerReceipt",
     "HermeticContextReceipt",

@@ -108,3 +108,95 @@ The prior MM06, MF06, and BIL00 artifacts are archived with exact merge
 evidence. Their new tickets are initially `WAITING` because dependencies are
 unresolved; each becomes `READY` when its dependencies are `DONE`. Their
 review-only, integration-only, and status-only authority restrictions remain.
+
+## 2026-09-01 Goal-1 activation handoff
+
+Scientific state remains **NOT EVALUATED** with **zero countable attempts**.
+No model call occurred in the latest validation smoke.
+
+Current activation branch is `work/PM/G1-147` at `97c44e3`; PR #96 targets
+`main`. The two-phase verifier independently qualified and published in GitHub
+Actions run `33498934176` from source `4383a104`. Its immutable identity is:
+
+- image: `ghcr.io/kitahl/supernova-goal1-verifier@sha256:dc7e5754612925b8d0de1482fc87ba13b39370c7965f8286912587f030efddc5`;
+- runtime lock root: `45810b9ad1046511f5ee9b1562bcb5542ee4c53c49fb4aca02ad38b82d4ebfe2`;
+- Lake manifest hash: `11bc0ecb997ccd02526acc604d6da03ad3434c575d1746d3d3020780550d196b`.
+
+PR run `33501251455` passed executor build, exact networkless preflight, locked
+miniF2F validation preparation, and immutable-verifier qualification. It then
+stopped in the preregistered synthetic gates before either Kimina model call:
+the signed prose rejection took 7,217 ms, exceeding the frozen 5,000 ms wall
+limit. Failure evidence was uploaded as artifact `9797961730` with ZIP SHA-256
+`f87cd45bce31f451bb6b439352802edd7f3731ac9ba444412a9e043a4a3f1753`.
+
+The performance observations are now three bounded failures on fresh GitHub
+runners:
+
+1. original serial runtime inventory validation: 6,616 ms (run `33491424376`);
+2. two-worker inventory hashing: 7,556 ms (run `33497954822`);
+3. serial `hashlib.file_digest` with one-open/fstat validation: 7,217 ms (run
+   `33501251455`).
+
+The common cost is intentional re-hashing of 8,711 runtime artifacts totaling
+2,475,986,864 bytes in every fresh verifier container. The evidence rejects the
+hypothesis that Python hash-loop overhead or two-worker scheduling can bring
+that complete check below five seconds on the current runner. It does **not**
+show that Lean proof checking takes this long, and it does not invalidate the
+verifier's security qualification.
+
+No further repair should be attempted without choosing and recording one of
+these protocol/architecture decisions before any model output exists:
+
+1. amend the non-scientific prose wall gate prospectively to a measured bound
+   with margin (for example 10 seconds), retaining the 600-second Lean timeout
+   and every runtime hash; or
+2. specify a separately identified trusted lexical pre-classifier that can
+   reject obvious non-Lean prose before the full Lean runtime is launched,
+   while all candidate-shaped Lean continues through full runtime attestation
+   and the hostile two-phase sandbox.
+
+Do not silently move the five-second threshold, remove runtime artifacts from
+the lock, count any failed smoke as scientific evidence, run the 20-attempt
+pilot, or merge PR #96 while this decision is unresolved.
+
+## 2026-09-01 timing-policy correction
+
+The five-second prose criterion above was not an authorized scientific or
+security requirement. It is removed prospectively before any model call. The
+three observed prose-path measurements remain evidence: 6,616 ms, 7,556 ms,
+and 7,217 ms (mean 7,129.67 ms). They measure the complete signed verifier path,
+including a fresh-container integrity scan of 8,711 artifacts / 2,475,986,864
+bytes; they are not Lean elaboration averages.
+
+The non-credit two-attempt validation demo now uses a 60-second outer liveness
+watchdog instead of inheriting the frozen 600-second confirmatory ceiling. The
+watchdog is the next whole-minute boundary above the sum of the observed local
+attestation maximum (7.556 s) and the current Lean default-heartbeat exhaustion
+reference maximum (35.590 s, leanprover/lean4#14704). A watchdog hit maps to
+UNKNOWN and cannot become INVALID. Each signed verifier record now exposes
+elapsed milliseconds for every sandbox phase, allowing the demo report to
+separate container/attestation, elaboration/export, and independent checking.
+
+This amendment does not mutate the frozen confirmatory authority and does not
+create scientific credit. Goal 1 remains NOT EVALUATED with zero countable
+attempts until the validation ladder passes and a new confirmatory design is
+sealed prospectively.
+
+## 2026-09-02 — Two-attempt demo exposed capped reasoning, not a Lean timeout
+
+- Workflow run 33585357319 completed both real Kimina model calls in 66590 ms
+  and 68567 ms (mean 67578.5 ms) and then obtained signed INVALID
+  verdicts in 7572 ms and 7041 ms.
+- Both model responses reached the exact 1024-token generation cap while still
+  emitting reasoning/Markdown rather than the requested tactic body. Treating
+  that truncated content as an answer was an executor-boundary defect.
+- The corrective non-credit configuration uses explicit DeepSeek reasoning
+  separation, requires finish_reason=stop, raises the output cap to 4096,
+  and uses a 300 s model-generation watchdog derived from the slower observed
+  token rate. The independent Lean-verifier watchdog remains 60 s.
+- These are validation-only observations. Countable Goal-1 attempts remain zero.
+
+The next workflow reached both terminal dispatches, but its reporter replaced the
+typed model error with a secondary model-observation-missing exception.
+The report path now verifies the empty terminal artifact for an ERROR dispatch
+and records the original typed model error instead of throwing.
