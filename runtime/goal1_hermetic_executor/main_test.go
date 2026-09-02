@@ -187,8 +187,26 @@ func TestCompletionContentReadsOnlyOneChatMessage(t *testing.T) {
 }
 
 func TestCompletionContentRejectsAmbiguousChoices(t *testing.T) {
-	raw := []byte(`{"choices":[{"message":{"content":"left"}},{"message":{"content":"right"}}]}`)
+	raw := []byte(`{"choices":[{"finish_reason":"stop","message":{"content":"left"}},{"finish_reason":"stop","message":{"content":"right"}}]}`)
 	if _, err := completionContent(raw); err == nil || !strings.Contains(err.Error(), "one choice") {
 		t.Fatalf("ambiguous choices were not rejected: %v", err)
+	}
+}
+
+func TestCompletionContentRejectsTokenLimitTruncation(t *testing.T) {
+	raw := []byte(`{"choices":[{"finish_reason":"length","message":{"content":"partial tactic"}}]}`)
+	if _, err := completionContent(raw); err == nil || !strings.Contains(err.Error(), "not complete") {
+		t.Fatalf("truncated completion was not rejected: %v", err)
+	}
+}
+
+func TestCompletionContentIgnoresSeparatedReasoning(t *testing.T) {
+	raw := []byte(`{"choices":[{"finish_reason":"stop","message":{"content":"exact tactic","reasoning_content":"private scratch work","role":"assistant"}}]}`)
+	content, err := completionContent(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content != "exact tactic" {
+		t.Fatalf("reasoning leaked into completion: %q", content)
 	}
 }

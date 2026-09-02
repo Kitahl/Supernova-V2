@@ -40,7 +40,7 @@ const (
 	llamaServerModelAlias     = "supernova-kimina-prover-1.5b-q4_k_m"
 	llamaServerSystemPrompt   = "You are an expert in mathematics and Lean 4. Return only the requested Lean artifact."
 	llamaServerReadyTimeout   = 120 * time.Second
-	llamaServerRequestTimeout = 570 * time.Second
+	llamaServerRequestTimeout = 300 * time.Second
 	llamaServerProbeTimeout   = 2 * time.Second
 	llamaServerProbeInterval  = 100 * time.Millisecond
 )
@@ -155,9 +155,10 @@ func startLlamaServerProcess() (*llamaServerProcess, error) {
 		"--jinja",
 		"--alias", llamaServerModelAlias,
 		"--device", "none",
-		"--threads", "1",
-		"--ctx-size", "4096",
+		"--threads", "2",
+		"--ctx-size", "8192",
 		"--batch-size", "512",
+		"--reasoning-format", "deepseek",
 	)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -285,7 +286,7 @@ func canonicalCompletionRequest(prompt []byte) ([]byte, error) {
 		return nil, errors.New("generation request must be UTF-8")
 	}
 	return json.Marshal(completionRequest{
-		MaxTokens: 1024,
+		MaxTokens: 4096,
 		Messages: []chatMessage{
 			{Role: "system", Content: llamaServerSystemPrompt},
 			{Role: "user", Content: string(prompt)},
@@ -323,6 +324,20 @@ func completionContent(raw []byte) (string, error) {
 	message, err := decodeJSONObject(rawMessage, "llama-server completion message")
 	if err != nil {
 		return "", err
+	}
+	rawFinishReason, ok := choice["finish_reason"]
+	if !ok {
+		return "", errors.New("llama-server completion choice omitted finish_reason")
+	}
+	var finishReason string
+	if err := json.Unmarshal(rawFinishReason, &finishReason); err != nil {
+		return "", errors.New("llama-server completion finish_reason is not a string")
+	}
+	if finishReason != "stop" {
+		return "", fmt.Errorf(
+			"llama-server completion was not complete: finish_reason=%q",
+			finishReason,
+		)
 	}
 	rawContent, ok := message["content"]
 	if !ok {

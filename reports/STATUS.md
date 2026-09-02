@@ -181,3 +181,17 @@ This amendment does not mutate the frozen confirmatory authority and does not
 create scientific credit. Goal 1 remains NOT EVALUATED with zero countable
 attempts until the validation ladder passes and a new confirmatory design is
 sealed prospectively.
+
+## 2026-09-02 — Two-attempt demo exposed capped reasoning, not a Lean timeout
+
+- Workflow run 33585357319 completed both real Kimina model calls in 66590 ms
+  and 68567 ms (mean 67578.5 ms) and then obtained signed INVALID
+  verdicts in 7572 ms and 7041 ms.
+- Both model responses reached the exact 1024-token generation cap while still
+  emitting reasoning/Markdown rather than the requested tactic body. Treating
+  that truncated content as an answer was an executor-boundary defect.
+- The corrective non-credit configuration uses explicit DeepSeek reasoning
+  separation, requires finish_reason=stop, raises the output cap to 4096,
+  and uses a 300 s model-generation watchdog derived from the slower observed
+  token rate. The independent Lean-verifier watchdog remains 60 s.
+- These are validation-only observations. Countable Goal-1 attempts remain zero.

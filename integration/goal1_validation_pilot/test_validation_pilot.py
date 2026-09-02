@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from integration.goal1_validation_pilot.run_validation_pilot import (
+    MODEL_TIMEOUT_SECONDS,
     PLAN_PATH,
     parse_generation_frame,
     selected_problem_ids,
@@ -29,6 +30,8 @@ class Goal1ValidationPilotTests(unittest.TestCase):
             "PROSE_SIGNED_INVALID_UNDER_5000_MS", plan["pre_model_gates"]
         )
         self.assertEqual(60, verifier_launcher(plan).timeout_seconds)
+        self.assertEqual(300, plan["model_timing_policy"]["outer_watchdog_seconds"])
+        self.assertEqual(300, MODEL_TIMEOUT_SECONDS)
 
     def test_selection_is_stable_and_order_independent(self) -> None:
         left = selected_problem_ids(("c", "a", "b"), seed="frozen", count=2)

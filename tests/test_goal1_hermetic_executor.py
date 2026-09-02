@@ -54,6 +54,7 @@ class HermeticExecutorBuildTests(unittest.TestCase):
             f'"--ctx-size", "{settings["context_tokens"]}"',
             f'"--threads", "{settings["cpu_threads"]}"',
             f'"--batch-size", "{settings["batch_size"]}"',
+            f'"--reasoning-format", "{settings["reasoning_format"]}"',
             f'Seed:        {settings["seed"]}',
             f'Temperature: {settings["temperature"]:.2f}',
             f'TopK:        {settings["top_k"]}',
@@ -71,7 +72,7 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         self.assertEqual(settings["engine_path"], "/app/llama-server")
         self.assertEqual(
             settings["interface"],
-            "LOOPBACK_HTTP_JSON_POST_V1_CHAT_COMPLETIONS_ONE_MESSAGE_CONTENT_FIELD",
+            "LOOPBACK_HTTP_JSON_POST_V1_CHAT_COMPLETIONS_DEEPSEEK_REASONING_SEPARATED_STOPPED_CONTENT_FIELD",
         )
 
     def test_dockerfile_has_no_mutable_runtime_or_secret_input(self) -> None:

@@ -61,6 +61,18 @@
       "rule": "NEXT_WHOLE_MINUTE_ABOVE_LOCAL_ATTESTATION_MAXIMUM_PLUS_EXTERNAL_DEFAULT_HEARTBEAT_EXHAUSTION_MAXIMUM"
     }
   },
+  "model_timing_policy": {
+    "classification": "NON_CREDIT_PILOT_LIVENESS_ONLY",
+    "outer_watchdog_seconds": 300,
+    "incomplete_finish_reason": "ERROR_NOT_ANSWERED",
+    "derivation": {
+      "observed_1024_token_attempts_milliseconds": [66590, 68567],
+      "observed_mean_milliseconds": 67578.5,
+      "observed_generation_rate_tokens_per_second": [19.21, 18.34],
+      "new_output_cap_tokens": 4096,
+      "rule": "NEXT_WHOLE_MINUTE_ABOVE_CONSERVATIVE_LINEAR_PROJECTION_FROM_SLOWER_OBSERVED_TOKEN_RATE_PLUS_PROMPT_EVALUATION"
+    }
+  },
   "one_percent_admission": [
     "EXACTLY_TWO_REAL_MODEL_ATTEMPTS",
     "SAME_LOCKED_VALIDATION_PROBLEM",
