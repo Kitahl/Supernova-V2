@@ -64,7 +64,7 @@
   "model_timing_policy": {
     "classification": "NON_CREDIT_PILOT_LIVENESS_ONLY",
     "outer_watchdog_seconds": 300,
-    "incomplete_finish_reason": "ERROR_NOT_ANSWERED",
+    "incomplete_finish_reason": "NO_ANSWER",
     "derivation": {
       "observed_1024_token_attempts_milliseconds": [66590, 68567],
       "observed_mean_milliseconds": 67578.5,

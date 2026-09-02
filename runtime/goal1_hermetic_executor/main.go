@@ -66,6 +66,17 @@ type generationResponse struct {
 	Status         string `json:"status"`
 }
 
+type incompleteCompletionError struct {
+	finishReason string
+}
+
+func (err *incompleteCompletionError) Error() string {
+	return fmt.Sprintf(
+		"llama-server completion was not complete: finish_reason=%q",
+		err.finishReason,
+	)
+}
+
 type componentManifest struct {
 	BuildLockSHA256   string `json:"build_lock_sha256"`
 	ExecutorSHA256    string `json:"executor_sha256"`
@@ -334,10 +345,7 @@ func completionContent(raw []byte) (string, error) {
 		return "", errors.New("llama-server completion finish_reason is not a string")
 	}
 	if finishReason != "stop" {
-		return "", fmt.Errorf(
-			"llama-server completion was not complete: finish_reason=%q",
-			finishReason,
-		)
+		return "", &incompleteCompletionError{finishReason: finishReason}
 	}
 	rawContent, ok := message["content"]
 	if !ok {
@@ -566,6 +574,20 @@ func handleGeneration(prompt []byte) error {
 		return diagnosticErr
 	}
 	if runErr != nil {
+		var incomplete *incompleteCompletionError
+		if errors.As(runErr, &incomplete) {
+			response := generationResponse{
+				CompletionUTF8: "",
+				Schema:         generationResponseSchema,
+				Status:         "NO_ANSWER",
+			}
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetEscapeHTML(false)
+			if err := encoder.Encode(response); err != nil {
+				return fmt.Errorf("write incomplete generation response: %w", err)
+			}
+			return nil
+		}
 		return fmt.Errorf("generation failed: %w", runErr)
 	}
 	stdout := []byte(content)

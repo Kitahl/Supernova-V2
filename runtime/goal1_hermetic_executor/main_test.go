@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,7 +196,9 @@ func TestCompletionContentRejectsAmbiguousChoices(t *testing.T) {
 
 func TestCompletionContentRejectsTokenLimitTruncation(t *testing.T) {
 	raw := []byte(`{"choices":[{"finish_reason":"length","message":{"content":"partial tactic"}}]}`)
-	if _, err := completionContent(raw); err == nil || !strings.Contains(err.Error(), "not complete") {
+	_, err := completionContent(raw)
+	var incomplete *incompleteCompletionError
+	if err == nil || !errors.As(err, &incomplete) || incomplete.finishReason != "length" {
 		t.Fatalf("truncated completion was not rejected: %v", err)
 	}
 }

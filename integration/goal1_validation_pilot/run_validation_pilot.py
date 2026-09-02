@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -58,6 +59,10 @@ BASELINES_PATH = ROOT / "goal1" / "CONFIRMATORY_BASELINES.json"
 VERIFIER_PUBLICATION_PATH = ROOT / "goal1" / "CONFIRMATORY_VERIFIER_PUBLICATION.json"
 MAX_MODEL_OUTPUT_BYTES = 1 << 20
 MODEL_TIMEOUT_SECONDS = 300
+_LEAN_FENCE = re.compile(
+    r"(?ims)^\x60{3}(?:lean4|lean|tactics)[ \t]*\r?\n(.*?)^\x60{3}[ \t]*(?:\r?\n|\Z)"
+)
+_DECLARATION = re.compile(r"(?m)^\s*(?:theorem|lemma)\s+([^\s:(]+)")
 
 
 def sha256(value: bytes) -> str:
@@ -145,14 +150,61 @@ def _docker_json(argv: Sequence[str], field: str) -> Any:
 
 @dataclass(frozen=True)
 class ModelContainerObservation:
+    raw_completion: bytes
     completion: bytes
+    adaptation_rule: str
     elapsed_milliseconds: int
     image_id: str
     stderr: str
     teardown_observed: bool
 
 
-def run_model_container(image: str, prompt: bytes) -> ModelContainerObservation:
+def adapt_model_completion(raw: bytes, *, theorem_name: str) -> tuple[bytes, str]:
+    """Deterministically unwrap only the final complete Lean response fence.
+
+    This adapter changes representation, never validity. Rejected wrappers pass
+    through unchanged so the hostile verifier still emits signed evidence for
+    every answered model response.
+    """
+
+    if type(raw) is not bytes:
+        raise TypeError("raw completion must be exact bytes")
+    if (
+        type(theorem_name) is not str
+        or not theorem_name
+        or theorem_name.strip() != theorem_name
+    ):
+        raise ValueError("theorem_name must be one exact non-empty token")
+    text = raw.decode("utf-8")
+    if "\x60\x60\x60" not in text:
+        return raw, "RAW_UNCHANGED"
+    matches = list(_LEAN_FENCE.finditer(text))
+    if not matches or text[matches[-1].end() :].strip():
+        return raw, "REJECTED_WRAPPER_RAW_PASSTHROUGH"
+    fenced = matches[-1].group(1)
+    declarations = list(_DECLARATION.finditer(fenced))
+    if not declarations:
+        candidate = fenced.strip().encode("utf-8")
+        return (
+            (candidate, "FINAL_LEAN_FENCE_TACTIC_BODY")
+            if candidate
+            else (raw, "REJECTED_EMPTY_FENCE_RAW_PASSTHROUGH")
+        )
+    if len(declarations) != 1 or declarations[0].group(1) != theorem_name:
+        return raw, "REJECTED_DECLARATION_RAW_PASSTHROUGH"
+    declaration = fenced[declarations[0].start() :]
+    marker = re.search(r":=\s*by\b", declaration)
+    if marker is None:
+        return raw, "REJECTED_PROOF_BOUNDARY_RAW_PASSTHROUGH"
+    candidate = declaration[marker.end() :].strip().encode("utf-8")
+    if not candidate:
+        return raw, "REJECTED_EMPTY_BODY_RAW_PASSTHROUGH"
+    return candidate, "FINAL_LEAN_FENCE_EXACT_THEOREM_BODY"
+
+
+def run_model_container(
+    image: str, prompt: bytes, *, theorem_name: str
+) -> ModelContainerObservation:
     inspected = _docker_json(["docker", "image", "inspect", image], "image inspect")
     if type(inspected) is not list or len(inspected) != 1:
         raise RuntimeError("image inspect returned an unexpected object")
@@ -200,7 +252,9 @@ def run_model_container(image: str, prompt: bytes) -> ModelContainerObservation:
     teardown = False
     started = time.monotonic_ns()
     try:
-        container = _docker_json(["docker", "inspect", container_id], "container inspect")
+        container = _docker_json(
+            ["docker", "inspect", container_id], "container inspect"
+        )
         if type(container) is not list or len(container) != 1:
             raise RuntimeError("container inspect returned an unexpected object")
         item = container[0]
@@ -232,7 +286,10 @@ def run_model_container(image: str, prompt: bytes) -> ModelContainerObservation:
                 "model executor failed: "
                 + completed.stderr.decode("utf-8", "replace")[:2000]
             )
-        completion = parse_generation_frame(completed.stdout)
+        raw_completion = parse_generation_frame(completed.stdout)
+        completion, adaptation_rule = adapt_model_completion(
+            raw_completion, theorem_name=theorem_name
+        )
         stderr = completed.stderr.decode("utf-8", "replace")[:4000]
     finally:
         removed = _run(["docker", "rm", "--force", container_id])
@@ -240,7 +297,9 @@ def run_model_container(image: str, prompt: bytes) -> ModelContainerObservation:
     if not teardown:
         raise RuntimeError("model container teardown was not observed")
     return ModelContainerObservation(
+        raw_completion=raw_completion,
         completion=completion,
+        adaptation_rule=adaptation_rule,
         elapsed_milliseconds=max(0, (time.monotonic_ns() - started) // 1_000_000),
         image_id=image_id,
         stderr=stderr,
@@ -374,7 +433,9 @@ def synthetic_signed_gates(
         },
         expected_split="validation",
     )
-    problem_id = synthetic_dispatch(source, b"  norm_num\n", attempt=0).request.problem_id
+    problem_id = synthetic_dispatch(
+        source, b"  norm_num\n", attempt=0
+    ).request.problem_id
     port = ProductionVerifierPort(
         supervisor,
         {problem_id: source},
@@ -404,7 +465,9 @@ def synthetic_signed_gates(
             ]["phases"],
         }
         if verification.result.status is not expected:
-            raise RuntimeError(f"synthetic {name} gate returned {verification.result.status}")
+            raise RuntimeError(
+                f"synthetic {name} gate returned {verification.result.status}"
+            )
     return result
 
 
@@ -414,6 +477,7 @@ def completion_summary(
     completion: object,
     model_observation: ModelContainerObservation | None,
     verifier_port: ProductionVerifierPort,
+    model_error_detail: str | None = None,
 ) -> dict[str, object]:
     payload = completion.payload
     receipt = payload.verifier_receipt
@@ -426,9 +490,9 @@ def completion_summary(
                 "elapsed_milliseconds": record.body["observations"][
                     "elapsed_milliseconds"
                 ],
-                "phase_timings": record.body["observations"][
-                    "resource_measurements"
-                ]["phases"],
+                "phase_timings": record.body["observations"]["resource_measurements"][
+                    "phases"
+                ],
                 "record_sha256": record.record_sha256,
                 "termination_cause": record.body["observations"]["termination_cause"],
                 "verdict": record.body["observations"]["verdict"],
@@ -436,6 +500,9 @@ def completion_summary(
         except (KeyError, ValueError):
             evidence = None
     response = b"" if model_observation is None else model_observation.completion
+    raw_response = (
+        b"" if model_observation is None else model_observation.raw_completion
+    )
     if not payload.attempt_result.response_artifact.verifies(response):
         raise RuntimeError("captured model bytes do not match the completed artifact")
     return {
@@ -445,12 +512,24 @@ def completion_summary(
         "attempt_status": payload.attempt_result.status.value,
         "candidate_sha256": sha256(response),
         "candidate_utf8": response.decode("utf-8", "replace"),
-        "model_elapsed_milliseconds": (
-            None if model_observation is None else model_observation.elapsed_milliseconds
+        "candidate_bytes": len(response),
+        "raw_completion_sha256": sha256(raw_response),
+        "raw_completion_utf8": raw_response.decode("utf-8", "replace"),
+        "raw_completion_bytes": len(raw_response),
+        "adaptation_rule": (
+            None if model_observation is None else model_observation.adaptation_rule
         ),
-        "model_image_id": None if model_observation is None else model_observation.image_id,
+        "model_elapsed_milliseconds": (
+            None
+            if model_observation is None
+            else model_observation.elapsed_milliseconds
+        ),
+        "model_image_id": None
+        if model_observation is None
+        else model_observation.image_id,
         "model_stderr": None if model_observation is None else model_observation.stderr,
         "model_error": payload.attempt_result.error,
+        "model_error_detail": model_error_detail,
         "verifier_status": None if receipt is None else receipt.status.value,
         "verifier_evidence": evidence,
     }
@@ -523,9 +602,16 @@ def run_smoke(
         plan_sha256=plan_sha,
     )
     observations: dict[str, ModelContainerObservation] = {}
+    model_errors: dict[str, str] = {}
 
     def ordinary_model(dispatch: BaselineDispatch, prompt: bytes):
-        observed = run_model_container(executor_image, prompt)
+        try:
+            observed = run_model_container(
+                executor_image, prompt, theorem_name=source.native_id
+            )
+        except Exception as exc:
+            model_errors[dispatch.entry.dispatch_id] = f"{type(exc).__name__}: {exc}"
+            raise
         observations[dispatch.entry.dispatch_id] = observed
         return ModelAttemptObservation(
             dispatch.entry.dispatch_id,
@@ -561,7 +647,13 @@ def run_smoke(
     )
 
     def chain_model(dispatch: BaselineDispatch, prompt: bytes):
-        observed = run_model_container(executor_image, prompt)
+        try:
+            observed = run_model_container(
+                executor_image, prompt, theorem_name=source.native_id
+            )
+        except Exception as exc:
+            model_errors[dispatch.entry.dispatch_id] = f"{type(exc).__name__}: {exc}"
+            raise
         observations[dispatch.entry.dispatch_id] = observed
         return VerifiedChainObservation(
             dispatch.entry.dispatch_id,
@@ -590,12 +682,14 @@ def run_smoke(
             completion=ordinary.completion,
             model_observation=observations.get(ordinary.completion.dispatch_id),
             verifier_port=verifier_port,
+            model_error_detail=model_errors.get(ordinary.completion.dispatch_id),
         ),
         completion_summary(
             arm=Arm.VERIFIED_CHAIN,
             completion=chain.baseline.completion,
             model_observation=observations.get(chain.baseline.completion.dispatch_id),
             verifier_port=verifier_port,
+            model_error_detail=model_errors.get(chain.baseline.completion.dispatch_id),
         ),
     )
     signed_valids = sum(
