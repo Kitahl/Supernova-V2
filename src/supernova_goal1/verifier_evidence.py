@@ -1416,6 +1416,7 @@ class _PhaseObservation:
     sandbox_policy_violated: bool
     cause: TerminationCause | None
     security_snapshot_sha256: str | None
+    elapsed_milliseconds: int
 
     def measurements(self) -> dict[str, object]:
         return {
@@ -1431,6 +1432,7 @@ class _PhaseObservation:
             "stderr_sha256": _sha(self.stderr),
             "stdout_sha256": _sha(self.stdout),
             "timed_out": self.timed_out,
+            "elapsed_milliseconds": self.elapsed_milliseconds,
         }
 
 
@@ -1506,6 +1508,7 @@ def _run_container_phase(
     name: str,
     request: bytes,
 ) -> _PhaseObservation:
+    monotonic_start = time.monotonic_ns()
     container_id: str | None = None
     stdout = b""
     stderr = b""
@@ -1616,6 +1619,9 @@ def _run_container_phase(
         sandbox_policy_violated=policy_violated,
         cause=cause,
         security_snapshot_sha256=snapshot_sha,
+        elapsed_milliseconds=max(
+            0, (time.monotonic_ns() - monotonic_start) // 1_000_000
+        ),
     )
 
 
@@ -2001,6 +2007,7 @@ class VerifierSupervisor:
                     sandbox_policy_violated=False,
                     cause=TerminationCause.HOST_INFRASTRUCTURE_ERROR,
                     security_snapshot_sha256=None,
+                    elapsed_milliseconds=0,
                 )
             )
             verdict = VerifierVerdict.UNKNOWN

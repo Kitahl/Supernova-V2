@@ -8,6 +8,7 @@ from integration.goal1_validation_pilot.run_validation_pilot import (
     PLAN_PATH,
     parse_generation_frame,
     selected_problem_ids,
+    verifier_launcher,
 )
 
 
@@ -22,6 +23,12 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         self.assertEqual(20, plan["stages"]["pilot_1_percent"]["attempt_count"])
         self.assertTrue(plan["stages"]["smoke_0_1_percent"]["stop_after_report"])
         self.assertTrue(plan["stages"]["pilot_1_percent"]["stop_after_report"])
+        self.assertEqual(60, plan["timing_policy"]["outer_watchdog_seconds"])
+        self.assertEqual("UNKNOWN", plan["timing_policy"]["timeout_verdict"])
+        self.assertNotIn(
+            "PROSE_SIGNED_INVALID_UNDER_5000_MS", plan["pre_model_gates"]
+        )
+        self.assertEqual(60, verifier_launcher(plan).timeout_seconds)
 
     def test_selection_is_stable_and_order_independent(self) -> None:
         left = selected_problem_ids(("c", "a", "b"), seed="frozen", count=2)

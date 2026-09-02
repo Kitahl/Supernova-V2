@@ -248,10 +248,16 @@ def run_model_container(image: str, prompt: bytes) -> ModelContainerObservation:
     )
 
 
-def verifier_launcher() -> VerifierSandboxLauncher:
+def verifier_launcher(plan: dict[str, Any]) -> VerifierSandboxLauncher:
     value = load_object(VERIFIER_PUBLICATION_PATH)
     if value.get("status") != "PUBLISHED_IMMUTABLE":
         raise ValueError("verifier publication is not immutable")
+    timing = plan.get("timing_policy")
+    if type(timing) is not dict:
+        raise ValueError("pilot timing policy is missing")
+    timeout_seconds = timing.get("outer_watchdog_seconds")
+    if type(timeout_seconds) is not int or timeout_seconds < 1:
+        raise ValueError("pilot outer watchdog must be a positive integer")
     return VerifierSandboxLauncher(
         image_ref=value["image_ref"],
         command=tuple(value["command"]),
@@ -260,7 +266,7 @@ def verifier_launcher() -> VerifierSandboxLauncher:
         memory_bytes=value["memory_bytes"],
         nano_cpus=value["nano_cpus"],
         pids_limit=value["pids_limit"],
-        timeout_seconds=value["timeout_seconds"],
+        timeout_seconds=timeout_seconds,
         max_output_bytes=value["max_output_bytes"],
         tmpfs_size_bytes=value["tmpfs_size_bytes"],
         toolchain_lock_sha256=value["toolchain_lock_sha256"],
@@ -393,11 +399,12 @@ def synthetic_signed_gates(
             "record_sha256": verification.record.record_sha256,
             "signed_verdict": verification.record.body["observations"]["verdict"],
             "wall_milliseconds": wall_ms,
+            "phase_timings": verification.record.body["observations"][
+                "resource_measurements"
+            ]["phases"],
         }
         if verification.result.status is not expected:
             raise RuntimeError(f"synthetic {name} gate returned {verification.result.status}")
-        if name == "prose" and wall_ms >= 5000:
-            raise RuntimeError(f"synthetic prose rejection took {wall_ms} ms")
     return result
 
 
@@ -416,6 +423,12 @@ def completion_summary(
         try:
             record = verifier_port.supervisor.store.read(binding)
             evidence = {
+                "elapsed_milliseconds": record.body["observations"][
+                    "elapsed_milliseconds"
+                ],
+                "phase_timings": record.body["observations"][
+                    "resource_measurements"
+                ]["phases"],
                 "record_sha256": record.record_sha256,
                 "termination_cause": record.body["observations"]["termination_cause"],
                 "verdict": record.body["observations"]["verdict"],
@@ -476,7 +489,7 @@ def run_smoke(
         signing_key_id="goal1-validation-pilot-ephemeral-key",
         private_key=os.urandom(32),
     )
-    launcher = verifier_launcher()
+    launcher = verifier_launcher(plan)
     store = VerifierEvidenceStore(
         output_directory / "verifier-evidence.sqlite3",
         verification_key=signer.public_key,

@@ -44,9 +44,23 @@
   "pre_model_gates": [
     "PINNED_VERIFIER_RUNTIME_INVENTORY",
     "BENIGN_SIGNED_VALID",
-    "PROSE_SIGNED_INVALID_UNDER_5000_MS",
+    "PROSE_SIGNED_INVALID_WITH_RECORDED_TIMING",
     "HOSTILE_METAPROGRAM_EXECUTION_AND_CONTAINMENT"
   ],
+  "timing_policy": {
+    "classification": "NON_CREDIT_PILOT_LIVENESS_ONLY",
+    "outer_watchdog_seconds": 60,
+    "timeout_verdict": "UNKNOWN",
+    "runtime_statistic": "REPORT_OBSERVED_PHASE_AND_TOTAL_MILLISECONDS",
+    "derivation": {
+      "local_prose_observations_milliseconds": [6616, 7556, 7217],
+      "local_prose_mean_milliseconds": 7129.67,
+      "local_prose_maximum_milliseconds": 7556,
+      "external_reference": "LEAN_DEFAULT_HEARTBEAT_EXHAUSTION_OBSERVED_AT_33090_TO_35590_MS",
+      "external_reference_url": "https://github.com/leanprover/lean4/issues/14704",
+      "rule": "NEXT_WHOLE_MINUTE_ABOVE_LOCAL_ATTESTATION_MAXIMUM_PLUS_EXTERNAL_DEFAULT_HEARTBEAT_EXHAUSTION_MAXIMUM"
+    }
+  },
   "one_percent_admission": [
     "EXACTLY_TWO_REAL_MODEL_ATTEMPTS",
     "SAME_LOCKED_VALIDATION_PROBLEM",

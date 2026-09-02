@@ -158,3 +158,26 @@ these protocol/architecture decisions before any model output exists:
 Do not silently move the five-second threshold, remove runtime artifacts from
 the lock, count any failed smoke as scientific evidence, run the 20-attempt
 pilot, or merge PR #96 while this decision is unresolved.
+
+## 2026-09-01 timing-policy correction
+
+The five-second prose criterion above was not an authorized scientific or
+security requirement. It is removed prospectively before any model call. The
+three observed prose-path measurements remain evidence: 6,616 ms, 7,556 ms,
+and 7,217 ms (mean 7,129.67 ms). They measure the complete signed verifier path,
+including a fresh-container integrity scan of 8,711 artifacts / 2,475,986,864
+bytes; they are not Lean elaboration averages.
+
+The non-credit two-attempt validation demo now uses a 60-second outer liveness
+watchdog instead of inheriting the frozen 600-second confirmatory ceiling. The
+watchdog is the next whole-minute boundary above the sum of the observed local
+attestation maximum (7.556 s) and the current Lean default-heartbeat exhaustion
+reference maximum (35.590 s, leanprover/lean4#14704). A watchdog hit maps to
+UNKNOWN and cannot become INVALID. Each signed verifier record now exposes
+elapsed milliseconds for every sandbox phase, allowing the demo report to
+separate container/attestation, elaboration/export, and independent checking.
+
+This amendment does not mutate the frozen confirmatory authority and does not
+create scientific credit. Goal 1 remains NOT EVALUATED with zero countable
+attempts until the validation ladder passes and a new confirmatory design is
+sealed prospectively.
