@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "MM01",
+  "work_order_id": "G1V2-W06",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Implement the binding after the teardown patch establishes the safe signing path."
+}

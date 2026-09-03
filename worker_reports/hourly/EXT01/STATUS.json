@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "EXT01",
+  "work_order_id": "G1V2-W12",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Convert the reviewed calibration result into a sealed, family-aware v2 power calculation."
+}

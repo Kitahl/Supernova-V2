@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "MF06",
+  "work_order_id": "G1V2-W14",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Run the full synthetic schedule after the first reviewed component integrations land."
+}

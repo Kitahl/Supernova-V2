@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "MF02",
+  "work_order_id": "G1V2-W02",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Prepare a reviewed, explicit reprovisioning input set for the chosen executor."
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "MF04",
+  "work_order_id": "G1V2-W04",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Extend the same no-sign invariant to Docker control-plane and persistence failures."
+}

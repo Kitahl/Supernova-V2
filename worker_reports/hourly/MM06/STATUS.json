@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "MM06",
+  "work_order_id": "G1V2-W13",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Review the next highest-priority open worker PR or recheck an amended head."
+}

@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "program": "goal1-v2-repair-and-qualification",
+  "repository": "Kitahl/Supernova-V2",
+  "base_branch": "main",
+  "schedule": "hourly",
+  "scientific_state": "NOT_EVALUATED",
+  "countable_attempts": 0,
+  "production_dispatch": "FORBIDDEN",
+  "manager_rule": "Workers propose next_goal; only the project manager reassigns work orders.",
+  "status_view": "orchestration/hourly_workers/MASTER_STATUS.md",
+  "worker_report_root": "worker_reports/hourly",
+  "excluded_role": {
+    "role": "BIL00",
+    "reason": "Registered status-only fifteenth task; not enabled as an engineering or research worker."
+  },
+  "work_orders": [
+    {
+      "work_order_id": "G1V2-W01",
+      "role": "MF01",
+      "scheduler_task_id": "6a8416348c848191b6b4908fea710e9f",
+      "kind": "engineering",
+      "priority": 1,
+      "objective": "Implement a fail-before-side-effects pre-dispatch conformance harness that binds the exact checkout, frozen authorities, executor, verifier, keys, capacity, and storage readiness.",
+      "allowed_paths": [
+        "src/supernova_goal1/pre_dispatch_conformance.py",
+        "tests/test_pre_dispatch_conformance.py",
+        "worker_reports/hourly/MF01/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "A wrong executor or source digest is rejected before any model or Docker process starts.",
+        "The report records exact module __file__, Git commit, authority digests, and test output.",
+        "No frozen scientific artifact is changed."
+      ],
+      "next_goal": "Integrate the conformance capability at the activation entry point after independent review."
+    },
+    {
+      "work_order_id": "G1V2-W02",
+      "role": "MF02",
+      "scheduler_task_id": "6a84163cd4fc81918b57cf7a25923976",
+      "kind": "engineering",
+      "priority": 1,
+      "objective": "Diagnose and repair the Kimina/Qwen executor-authority mismatch without signing, publishing, or activating production authority.",
+      "allowed_paths": [
+        "src/supernova_goal1/execution_authority.py",
+        "tests/test_confirmatory_execution_authority.py",
+        "runtime/goal1_hermetic_executor/",
+        "worker_reports/hourly/MF02/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "One exact model, image, GGUF, tokenizer, runtime, build lock, launcher, and capacity identity is derived consistently in dry-run tests.",
+        "Stale Qwen/Kimina cross-binding is rejected deterministically.",
+        "No production signature, image publication, or activation occurs."
+      ],
+      "next_goal": "Prepare a reviewed, explicit reprovisioning input set for the chosen executor."
+    },
+    {
+      "work_order_id": "G1V2-W03",
+      "role": "MF03",
+      "scheduler_task_id": "6a84164563ec8191ac9a0902622eb676",
+      "kind": "engineering",
+      "priority": 1,
+      "objective": "Eliminate stale-checkout Python import contamination and make test provenance an executable gate.",
+      "allowed_paths": [
+        "tests/conftest.py",
+        "tests/test_checkout_provenance.py",
+        "pyproject.toml",
+        "worker_reports/hourly/MF03/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Tests fail if supernova_goal1 imports outside the current checkout.",
+        "The current Git commit and module path are printed or captured in CI evidence.",
+        "A clean isolated environment runs the targeted suite."
+      ],
+      "next_goal": "Add the provenance gate to every release and authority-generation workflow."
+    },
+    {
+      "work_order_id": "G1V2-W04",
+      "role": "MF04",
+      "scheduler_task_id": "6a84164c7bb0819192e2750f51587099",
+      "kind": "engineering",
+      "priority": 1,
+      "objective": "Repair verifier teardown truthfulness so cleanup uncertainty can never produce a signed or stored mathematical verdict.",
+      "allowed_paths": [
+        "src/supernova_goal1/verifier_evidence.py",
+        "tests/test_verifier_evidence_teardown.py",
+        "worker_reports/hourly/MF04/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Injected _remove_observed failure results in zero signer calls and zero evidence-store writes.",
+        "A separate host-incident path states teardown is unknown without claiming a verifier result.",
+        "Normal teardown behavior remains covered."
+      ],
+      "next_goal": "Extend the same no-sign invariant to Docker control-plane and persistence failures."
+    },
+    {
+      "work_order_id": "G1V2-W05",
+      "role": "MF05",
+      "scheduler_task_id": "6a8416576c288191b31eb63a52854388",
+      "kind": "research",
+      "priority": 1,
+      "objective": "Specify the complete verifier terminal algebra and exact code/test seams for semantic INVALID versus heartbeat, timeout, OOM, internal, format, and host-incident outcomes.",
+      "allowed_paths": [
+        "worker_reports/hourly/MF05/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Every Lean/container/host failure maps to one typed state.",
+        "Heartbeat, timeout, OOM, and internal failures can never become INVALID.",
+        "The report names exact current symbols and deterministic negative tests."
+      ],
+      "next_goal": "Implement the reviewed algebra after MF04's teardown repair lands."
+    },
+    {
+      "work_order_id": "G1V2-W06",
+      "role": "MM01",
+      "scheduler_task_id": "6a84166107d48191aaa2d95880e3b19e",
+      "kind": "research",
+      "priority": 1,
+      "objective": "Audit expected-challenge/export digest binding and design a minimal fix that prevents checker mix-up or challenge substitution from producing VALID.",
+      "allowed_paths": [
+        "worker_reports/hourly/MM01/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "The exact unchecked challenge_export_sha256 path is reproduced.",
+        "The proposed binding identifies the trusted expected digest and signing boundary.",
+        "Negative tests cover challenge, source, checker, run, and arm substitution."
+      ],
+      "next_goal": "Implement the binding after the teardown patch establishes the safe signing path."
+    },
+    {
+      "work_order_id": "G1V2-W07",
+      "role": "MM02",
+      "scheduler_task_id": "6a84166713ac819185e377ef68a73788",
+      "kind": "research",
+      "priority": 1,
+      "objective": "Produce a Docker/process lifecycle hardening plan covering bounded control commands, monotonic timing, process-tree termination, output streaming, orphan detection, and restart recovery.",
+      "allowed_paths": [
+        "worker_reports/hourly/MM02/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Every Docker invocation and filesystem write has a timeout/failure state.",
+        "The plan records pre-kill, post-kill, and post-remove observations.",
+        "Tests cover daemon hang, output flood, disk full, clock rollback, and orphan containers."
+      ],
+      "next_goal": "Implement lifecycle supervision in a dedicated reviewed work order."
+    },
+    {
+      "work_order_id": "G1V2-W08",
+      "role": "MM03",
+      "scheduler_task_id": "6a84166ec498819187f84ad1bc350979",
+      "kind": "engineering",
+      "priority": 1,
+      "objective": "Enforce exact raw model-response bytes and close pilot-admission holes without running a model.",
+      "allowed_paths": [
+        "scripts/run_validation_pilot.py",
+        "tests/test_validation_pilot.py",
+        "worker_reports/hourly/MM03/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Fenced, wrapped, prose, escaped-newline, or transcript output is FAILED_FORMAT without repair.",
+        "Candidate SHA equals the exact raw response SHA.",
+        "One VALID plus any model/verifier timeout cannot admit the smoke."
+      ],
+      "next_goal": "Bind provider/model invocation receipts to the immutable raw request and response."
+    },
+    {
+      "work_order_id": "G1V2-W09",
+      "role": "MM04",
+      "scheduler_task_id": "6a84167554548191904b4dbc7d2e059b",
+      "kind": "research",
+      "priority": 2,
+      "objective": "Design the versioned benchmark-v2 compatibility authority for all 488 statements without runtime normalization or held-out model leakage.",
+      "allowed_paths": [
+        "worker_reports/hourly/MM04/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "The gate tests every statement with only its proof body replaced by sorry under the exact release verifier identity.",
+        "Only proven incompatibilities are patched and rehashed.",
+        "Held-out output reveals compatibility status/digests but no theorem bytes to model developers."
+      ],
+      "next_goal": "Implement the compatibility gate after protocol v2 authorizes the independent held-out checker."
+    },
+    {
+      "work_order_id": "G1V2-W10",
+      "role": "MM05",
+      "scheduler_task_id": "6a84167f810881919e2a300295a082fd",
+      "kind": "research",
+      "priority": 2,
+      "objective": "Design a finite-heartbeat calibration and a tested known-good proof for amc12a_2003_p1, explicitly discriminating the sum_range_succ expansion hypothesis.",
+      "allowed_paths": [
+        "worker_reports/hourly/MM05/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "The proposal does not blindly adopt 500K heartbeats.",
+        "A finite preregistered diagnostic grid compares the observed tactic with a non-expanding proof shape.",
+        "The wall watchdog is a generous backstop and every resource outcome remains UNKNOWN."
+      ],
+      "next_goal": "Run the non-credit diagnostic only after the typed verifier and benchmark-v2 gates pass."
+    },
+    {
+      "work_order_id": "G1V2-W11",
+      "role": "MM07",
+      "scheduler_task_id": "6a841794fe288191893747cc6114f34b",
+      "kind": "engineering",
+      "priority": 2,
+      "objective": "Implement the durable full-cohort scheduling skeleton that can advance beyond start-first, using synthetic model/verifier fixtures only.",
+      "allowed_paths": [
+        "src/supernova_goal1/cohort_runner.py",
+        "tests/test_cohort_runner.py",
+        "worker_reports/hourly/MM07/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Next/lease/commit/recover semantics cover every synthetic slot.",
+        "Crash and concurrent restart tests preserve exactly-once scientific accounting.",
+        "No real model, held-out problem, activation nonce, or production verifier is used."
+      ],
+      "next_goal": "Connect the runner to reviewed authority and verifier capabilities after their gates pass."
+    },
+    {
+      "work_order_id": "G1V2-W12",
+      "role": "EXT01",
+      "scheduler_task_id": "6a84192d0f888191a4aaa9523fc07d7e",
+      "kind": "research",
+      "priority": 2,
+      "objective": "Write the prospective validation-calibration and paired-power plan for ordinary, verified_chain, and product_only.",
+      "allowed_paths": [
+        "worker_reports/hourly/EXT01/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "The plan freezes seed, split, min/max size, sequential rule, exclusions, and viability bands before data.",
+        "It measures emission, admission, time-to-admission, later exposure, downstream lift, discordance, latency, and complete cost.",
+        "Final sample size follows paired calibration rather than assuming 60 or 19,520."
+      ],
+      "next_goal": "Convert the reviewed calibration result into a sealed, family-aware v2 power calculation."
+    },
+    {
+      "work_order_id": "G1V2-W13",
+      "role": "MM06",
+      "scheduler_task_id": "6a84168b056481919c5ebfcb4f0a1ce4",
+      "kind": "review",
+      "priority": 1,
+      "objective": "Continuously review hourly-worker PRs for path scope, authority integrity, evidence quality, test provenance, and false-green gates; author reports only.",
+      "allowed_paths": [
+        "worker_reports/hourly/MM06/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Every review binds the exact PR head and commands/results inspected.",
+        "Self-reports are treated as untrusted until independently reproduced.",
+        "Unresolved critical findings block manager acceptance but do not mutate implementation."
+      ],
+      "next_goal": "Review the next highest-priority open worker PR or recheck an amended head."
+    },
+    {
+      "work_order_id": "G1V2-W14",
+      "role": "MF06",
+      "scheduler_task_id": "6a841697574481918e67222cacb7fcfb",
+      "kind": "integration_test",
+      "priority": 2,
+      "objective": "Build a synthetic, non-credit adversarial integration suite spanning conformance, verifier, persistence, lifecycle, and cohort-recovery boundaries.",
+      "allowed_paths": [
+        "integration/goal1_v2_rehearsal/",
+        "tests/test_goal1_v2_rehearsal.py",
+        "worker_reports/hourly/MF06/",
+        "orchestration/hourly_workers/MASTER_STATUS.md"
+      ],
+      "acceptance": [
+        "Fixtures exercise wrong authority, teardown failure, resource UNKNOWN, raw-format rejection, crash recovery, replay, and storage failure.",
+        "No real model, held-out theorem, production key, or activation nonce is used.",
+        "The report distinguishes tested behavior from missing seams."
+      ],
+      "next_goal": "Run the full synthetic schedule after the first reviewed component integrations land."
+    }
+  ]
+}

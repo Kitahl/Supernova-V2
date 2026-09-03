@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "MM02",
+  "work_order_id": "G1V2-W07",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Implement lifecycle supervision in a dedicated reviewed work order."
+}

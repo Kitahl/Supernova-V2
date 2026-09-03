@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "role": "MM07",
+  "work_order_id": "G1V2-W11",
+  "state": "ASSIGNED",
+  "last_run_utc": null,
+  "latest_report": null,
+  "branch": null,
+  "pull_request": null,
+  "observed_summary": "Not started.",
+  "verification": [],
+  "blockers": [],
+  "next_goal": "Connect the runner to reviewed authority and verifier capabilities after their gates pass."
+}
