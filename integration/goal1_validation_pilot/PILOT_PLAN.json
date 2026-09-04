@@ -5,13 +5,15 @@
   "countable_attempts_before": 0,
   "countable_attempts_after": 0,
   "benchmark": {
-    "name": "miniF2F-Lean4-Kimina-composite",
-    "version": "deepseek-v1.5-2c4ba911+kimina-5def318",
+    "name": "miniF2F-Lean4-Kimina-composite-goal1-v2-candidate",
+    "version": "goal1-v2-candidate-unsealed",
     "allowed_split": "validation",
     "forbidden_split": "test",
-    "validation_file_sha256": "4da5c1f69143e2633cf7c300d8946eb28d6b88d0f94441147ff4d54ec8c09926",
+    "record_schema_version": 2,
+    "validation_file_sha256": "8b7faf412670d5c3b77533ed6aa513fd52b73a6a150ed8b5489b7a5c53b932d7",
     "validation_records": 244,
-    "benchmark_root_sha256": "914c05427e1e7e0979f4ca058f90fb3138ee0d3319233b415194c10e67d3683b"
+    "benchmark_root_sha256": "c404215b329dcaca4228a8a23eaa21b64277c85e536c441232e91355ec96d9d8",
+    "transform_manifest_sha256": "4e3efcc70437b946d074300a9710250327cd32b7facfde690f91ddb6b0e9dd48"
   },
   "selection": {
     "algorithm": "SORT_BY_SHA256_OF_UTF8_SEED_NUL_PROBLEM_ID_THEN_PROBLEM_ID",

@@ -12,6 +12,7 @@ from integration.goal1_validation_pilot.run_validation_pilot import (
     ModelContainerObservation,
     adapt_model_completion,
     completion_summary,
+    exact_smoke_problem_signed_valid_gate,
     github_failure_annotation,
     parse_generation_frame,
     selected_problem_ids,
@@ -95,6 +96,11 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         plan = json.loads(Path(PLAN_PATH).read_text(encoding="utf-8"))
         self.assertEqual("validation", plan["benchmark"]["allowed_split"])
         self.assertEqual("test", plan["benchmark"]["forbidden_split"])
+        self.assertEqual(2, plan["benchmark"]["record_schema_version"])
+        self.assertEqual(
+            "c404215b329dcaca4228a8a23eaa21b64277c85e536c441232e91355ec96d9d8",
+            plan["benchmark"]["benchmark_root_sha256"],
+        )
         self.assertEqual("NONE", plan["scientific_credit"])
         self.assertEqual(0, plan["countable_attempts_after"])
         self.assertEqual(2, plan["stages"]["smoke_0_1_percent"]["attempt_count"])
@@ -110,6 +116,13 @@ class Goal1ValidationPilotTests(unittest.TestCase):
             "NO_ANSWER", plan["model_timing_policy"]["incomplete_finish_reason"]
         )
         self.assertEqual(300, MODEL_TIMEOUT_SECONDS)
+
+    def test_exact_problem_gate_refuses_a_different_theorem(self) -> None:
+        with self.assertRaisesRegex(ValueError, "bound to amc12a_2003_p1"):
+            exact_smoke_problem_signed_valid_gate(
+                SimpleNamespace(),
+                SimpleNamespace(native_id="different"),
+            )
 
     def test_selection_is_stable_and_order_independent(self) -> None:
         left = selected_problem_ids(("c", "a", "b"), seed="frozen", count=2)

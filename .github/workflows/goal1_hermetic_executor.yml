@@ -25,6 +25,7 @@ on:
         default: executor
         type: choice
         options:
+          - executor-smoke
           - executor
           - verifier
 
@@ -40,7 +41,8 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'executor')
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.publish_target == 'executor' || inputs.publish_target == 'executor-smoke'))
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -89,23 +91,34 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install verifier and pilot dependencies
-        run: python -m pip install --disable-pip-version-check -e .
-      - name: Prepare exact locked validation split
+        run: python -m pip install --disable-pip-version-check -e . pyarrow==24.0.0
+      - name: Prepare exact unsealed benchmark-v2 validation split
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/goal1-validation"
           source_file="$RUNNER_TEMP/goal1-validation/deepseek-minif2f.jsonl"
-          validation_file="$RUNNER_TEMP/goal1-validation/validation.jsonl"
+          kimina_file="$RUNNER_TEMP/goal1-validation/kimina.parquet"
           curl --fail --location --retry 3 \
             "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-Prover-V1.5/2c4ba9119eef74d0d611f494261b2c5bae98c69a/datasets/minif2f.jsonl" \
             --output "$source_file"
+          curl --fail --location --retry 3 \
+            "https://huggingface.co/datasets/AI-MO/minif2f_test/resolve/5def318348521dfc34875045a9ecddf729a2b49f/data/train-00000-of-00001.parquet?download=true" \
+            --output "$kimina_file"
           printf '%s  %s\n' \
             'd6654c88476ff14db19d57dea25bd955a240525fb52171e460f89d98f83d7dd5' \
             "$source_file" | sha256sum --check --strict
-          python integration/goal1_validation_pilot/prepare_validation.py \
+          printf '%s  %s\n' \
+            'a32985e3d44b5165fbd586f453055cd17de0d081f43d7806cbba3f321346a8c5' \
+            "$kimina_file" | sha256sum --check --strict
+          python scripts/assemble_minif2f_kimina.py \
+            --manifest goal1/BENCHMARK_SOURCES.json \
             --deepseek-jsonl "$source_file" \
-            --output "$validation_file" \
+            --kimina-parquet "$kimina_file" \
+            --output-directory "$RUNNER_TEMP/goal1-validation/corpus-v1"
+          python scripts/build_benchmark_v2.py \
+            "$RUNNER_TEMP/goal1-validation/corpus-v1" \
+            "$RUNNER_TEMP/goal1-validation/candidate-v2" \
             | tee validation-preparation.json
       - name: Qualify immutable verifier image
         shell: bash
@@ -121,7 +134,7 @@ jobs:
         run: |
           set -euo pipefail
           python integration/goal1_validation_pilot/run_validation_pilot.py \
-            --validation-file "$RUNNER_TEMP/goal1-validation/validation.jsonl" \
+            --validation-file "$RUNNER_TEMP/goal1-validation/candidate-v2/corpus/validation.jsonl" \
             --executor-image "$CANDIDATE_TAG" \
             --output-directory validation-smoke-output \
             | tee validation-smoke-console.json
@@ -132,12 +145,14 @@ jobs:
           name: goal1-validation-smoke-${{ github.sha }}
           path: |
             validation-preparation.json
+            ${{ runner.temp }}/goal1-validation/candidate-v2/BENCHMARK_V2_CANDIDATE.lock.json
+            ${{ runner.temp }}/goal1-validation/candidate-v2/BENCHMARK_V2_CANDIDATE.report.json
             verifier-qualification.json
             validation-smoke-console.json
             validation-smoke-output/
           if-no-files-found: warn
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && inputs.publish_target != 'executor-smoke'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -145,7 +160,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the exact tested image
         id: publish
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && inputs.publish_target != 'executor-smoke'
         shell: bash
         run: |
           set -euo pipefail
@@ -191,7 +206,7 @@ jobs:
             '{schema:"supernova.hermetic-executor-build-evidence.v1",source_commit:$commit,image_ref:$image,image_digest:$digest,build_lock_sha256:$lock_digest,platform:"linux/amd64",publication_status:$status}' \
             > executor-build-evidence.json
       - name: Attest published image
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && inputs.publish_target != 'executor-smoke'
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
           subject-name: ${{ env.IMAGE_NAME }}

@@ -183,6 +183,21 @@ class ProductionVerifierTests(unittest.TestCase):
                 version="deepseek-v1.5-2c4ba911+kimina-5def318",
                 split="validation",
             )
+            v2_records = [dict(record, schema_version=2) for record in records]
+            v2_bytes = b"".join(
+                canonical_bytes(record) + b"\n" for record in v2_records
+            )
+            v2_path = Path(temporary) / "validation-v2.jsonl"
+            v2_path.write_bytes(v2_bytes)
+            v2_sources = load_frozen_lean_sources(
+                v2_path,
+                expected_file_sha256=sha(v2_bytes),
+                expected_records=2,
+                benchmark="miniF2F-Lean4-Kimina-composite-goal1-v2-candidate",
+                version="goal1-v2-candidate-unsealed",
+                split="validation",
+                expected_record_schema_version=2,
+            )
             with self.assertRaisesRegex(ValueError, "file digest mismatch"):
                 load_frozen_lean_sources(
                     path,
@@ -192,8 +207,18 @@ class ProductionVerifierTests(unittest.TestCase):
                     version="deepseek-v1.5-2c4ba911+kimina-5def318",
                     split="validation",
                 )
+            with self.assertRaisesRegex(ValueError, "record schema changed"):
+                load_frozen_lean_sources(
+                    v2_path,
+                    expected_file_sha256=sha(v2_bytes),
+                    expected_records=2,
+                    benchmark="miniF2F-Lean4-Kimina-composite",
+                    version="deepseek-v1.5-2c4ba911+kimina-5def318",
+                    split="validation",
+                )
 
         self.assertEqual(2, len(sources))
+        self.assertEqual(2, len(v2_sources))
         self.assertEqual(
             {"alpha", "beta"}, {value.native_id for value in sources.values()}
         )

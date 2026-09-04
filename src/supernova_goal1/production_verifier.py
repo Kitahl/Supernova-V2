@@ -98,10 +98,13 @@ class FrozenLeanProblemSource:
         raw: Mapping[str, Any],
         *,
         expected_split: str,
+        expected_schema_version: int = 1,
     ) -> FrozenLeanProblemSource:
         if type(raw) is not dict or set(raw) != _RECORD_FIELDS:
             raise ValueError("frozen benchmark record fields changed")
-        if raw["schema_version"] != 1:
+        if expected_schema_version not in {1, 2}:
+            raise ValueError("expected benchmark record schema is unsupported")
+        if raw["schema_version"] != expected_schema_version:
             raise ValueError("frozen benchmark record schema changed")
         native_id = _text(raw["problem_id"], "problem_id")
         split = _text(raw["split"], "split")
@@ -282,6 +285,7 @@ def load_frozen_lean_sources(
     benchmark: str,
     version: str,
     split: str,
+    expected_record_schema_version: int = 1,
 ) -> dict[str, FrozenLeanProblemSource]:
     """Load one fully frozen split after verifying its complete byte identity."""
 
@@ -293,6 +297,8 @@ def load_frozen_lean_sources(
     benchmark = _text(benchmark, "benchmark")
     version = _text(version, "version")
     split = _text(split, "split")
+    if expected_record_schema_version not in {1, 2}:
+        raise ValueError("expected benchmark record schema is unsupported")
     raw_file = path.resolve(strict=True).read_bytes()
     if _sha(raw_file) != expected_file_sha256:
         raise ValueError("frozen benchmark file digest mismatch")
@@ -339,7 +345,11 @@ def load_frozen_lean_sources(
             raise ValueError(
                 f"frozen benchmark line {line_number} is not canonical JSON"
             )
-        source = FrozenLeanProblemSource.from_record(record, expected_split=split)
+        source = FrozenLeanProblemSource.from_record(
+            record,
+            expected_split=split,
+            expected_schema_version=expected_record_schema_version,
+        )
         problem = BenchmarkProblemIdentity(
             benchmark=benchmark,
             version=version,

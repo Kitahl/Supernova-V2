@@ -471,6 +471,56 @@ def synthetic_signed_gates(
     return result
 
 
+def exact_smoke_problem_signed_valid_gate(
+    supervisor: VerifierSupervisor,
+    source: FrozenLeanProblemSource,
+) -> dict[str, object]:
+    if source.native_id != "amc12a_2003_p1":
+        raise ValueError("the exact smoke proof is bound to amc12a_2003_p1")
+    candidate = b"""  have hpoint (k : Nat) : u k = v k + 1 := by
+    rw [h\xe2\x82\x80 k, h\xe2\x82\x81 k]
+  have hsum :
+      (\xe2\x88\x91 k \xe2\x88\x88 Finset.range 2003, u k) =
+        (\xe2\x88\x91 k \xe2\x88\x88 Finset.range 2003, v k) + 2003 := by
+    calc
+      (\xe2\x88\x91 k \xe2\x88\x88 Finset.range 2003, u k) =
+          \xe2\x88\x91 k \xe2\x88\x88 Finset.range 2003, (v k + 1) := by
+            apply Finset.sum_congr rfl
+            intro k _
+            exact hpoint k
+      _ = (\xe2\x88\x91 k \xe2\x88\x88 Finset.range 2003, v k) +
+          (\xe2\x88\x91 _k \xe2\x88\x88 Finset.range 2003, 1) := by
+            rw [Finset.sum_add_distrib]
+      _ = (\xe2\x88\x91 k \xe2\x88\x88 Finset.range 2003, v k) + 2003 := by simp
+  rw [hsum]
+  omega
+"""
+    dispatch = synthetic_dispatch(source, candidate, attempt=2)
+    port = ProductionVerifierPort(
+        supervisor,
+        {dispatch.request.problem_id: source},
+        run_spec_id=sha256(b"exact-smoke-problem-run-spec-v2"),
+        execution_authority_sha256=sha256(b"exact-smoke-problem-authority-v2"),
+        protocol_rules_sha256=sha256(b"exact-smoke-problem-rules-v2"),
+        confirmatory_manifest_sha256=sha256(b"exact-smoke-problem-manifest-v2"),
+    )
+    started = time.monotonic_ns()
+    verification = port.verify(dispatch, candidate)
+    wall_ms = max(0, (time.monotonic_ns() - started) // 1_000_000)
+    if verification.result.status is not VerifierStatus.PASS:
+        raise RuntimeError(
+            "exact smoke problem known-good proof returned "
+            f"{verification.result.status.value}"
+        )
+    return {
+        "candidate_sha256": sha256(candidate),
+        "record_sha256": verification.record.record_sha256,
+        "source_sha256": source.source_sha256,
+        "status": verification.result.status.value,
+        "wall_milliseconds": wall_ms,
+    }
+
+
 def completion_summary(
     *,
     arm: Arm,
@@ -554,6 +604,7 @@ def run_smoke(
         benchmark=benchmark["name"],
         version=benchmark["version"],
         split=benchmark["allowed_split"],
+        expected_record_schema_version=benchmark["record_schema_version"],
     )
     chosen_ids = selected_problem_ids(
         [source.native_id for source in sources.values()],
@@ -581,6 +632,7 @@ def run_smoke(
     )
     supervisor = VerifierSupervisor(launcher, signer, store)
     gates = synthetic_signed_gates(supervisor)
+    exact_problem_gate = exact_smoke_problem_signed_valid_gate(supervisor, source)
 
     verifier_port = ProductionVerifierPort(
         supervisor,
@@ -726,6 +778,7 @@ def run_smoke(
             "one_percent_problem_ids_frozen_before_smoke": list(chosen_ids),
         },
         "synthetic_signed_gates": gates,
+        "exact_smoke_problem_signed_valid_gate": exact_problem_gate,
         "attempts": list(summaries),
         "signed_valid_model_responses": signed_valids,
         "one_percent_admission": "PASS" if admitted else "FAIL",
