@@ -111,6 +111,8 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         self.assertEqual("UNKNOWN", plan["timing_policy"]["timeout_verdict"])
         self.assertNotIn("PROSE_SIGNED_INVALID_UNDER_5000_MS", plan["pre_model_gates"])
         self.assertEqual(60, verifier_launcher(plan).timeout_seconds)
+        override = "ghcr.io/kitahl/supernova-goal1-verifier@sha256:" + "f" * 64
+        self.assertEqual(override, verifier_launcher(plan, image_ref=override).image_ref)
         self.assertEqual(300, plan["model_timing_policy"]["outer_watchdog_seconds"])
         self.assertEqual(
             "NO_ANSWER", plan["model_timing_policy"]["incomplete_finish_reason"]

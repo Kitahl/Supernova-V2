@@ -97,9 +97,12 @@ class HermeticExecutorBuildTests(unittest.TestCase):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("- executor-smoke", workflow)
         self.assertEqual(
-            5,
-            workflow.count("run-goal1-executor-smoke-20260903-8690792"),
+            10,
+            workflow.count("run-goal1-executor-smoke-v2-20260904-cd86506"),
         )
+        self.assertIn("Build current v2 verifier for exact smoke", workflow)
+        self.assertIn("Publish exact qualified v2 verifier for smoke", workflow)
+        self.assertIn("--verifier-image-ref", workflow)
         self.assertIn(
             "inputs.publish_target != 'executor-smoke'",
             workflow,

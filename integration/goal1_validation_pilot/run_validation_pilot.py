@@ -307,7 +307,9 @@ def run_model_container(
     )
 
 
-def verifier_launcher(plan: dict[str, Any]) -> VerifierSandboxLauncher:
+def verifier_launcher(
+    plan: dict[str, Any], *, image_ref: str | None = None
+) -> VerifierSandboxLauncher:
     value = load_object(VERIFIER_PUBLICATION_PATH)
     if value.get("status") != "PUBLISHED_IMMUTABLE":
         raise ValueError("verifier publication is not immutable")
@@ -318,7 +320,7 @@ def verifier_launcher(plan: dict[str, Any]) -> VerifierSandboxLauncher:
     if type(timeout_seconds) is not int or timeout_seconds < 1:
         raise ValueError("pilot outer watchdog must be a positive integer")
     return VerifierSandboxLauncher(
-        image_ref=value["image_ref"],
+        image_ref=value["image_ref"] if image_ref is None else image_ref,
         command=tuple(value["command"]),
         image_environment=tuple(value["image_environment"]),
         container_user=value["container_user"],
@@ -591,7 +593,11 @@ def completion_summary(
 
 
 def run_smoke(
-    *, validation_file: Path, executor_image: str, output_directory: Path
+    *,
+    validation_file: Path,
+    executor_image: str,
+    output_directory: Path,
+    verifier_image_ref: str | None = None,
 ) -> dict[str, object]:
     plan_raw = PLAN_PATH.read_bytes()
     plan = load_object(PLAN_PATH)
@@ -623,7 +629,7 @@ def run_smoke(
         signing_key_id="goal1-validation-pilot-ephemeral-key",
         private_key=os.urandom(32),
     )
-    launcher = verifier_launcher(plan)
+    launcher = verifier_launcher(plan, image_ref=verifier_image_ref)
     store = VerifierEvidenceStore(
         output_directory / "verifier-evidence.sqlite3",
         verification_key=signer.public_key,
@@ -852,12 +858,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--validation-file", type=Path, required=True)
     parser.add_argument("--executor-image", required=True)
+    parser.add_argument("--verifier-image-ref")
     parser.add_argument("--output-directory", type=Path, required=True)
     args = parser.parse_args(argv)
     report = run_smoke(
         validation_file=args.validation_file.resolve(strict=True),
         executor_image=args.executor_image,
         output_directory=args.output_directory.resolve(strict=False),
+        verifier_image_ref=args.verifier_image_ref,
     )
     print(json.dumps(report, allow_nan=False, indent=2, sort_keys=True))
     if report["one_percent_admission"] == "PASS":

@@ -11,7 +11,7 @@ on:
   push:
     branches: [main]
     tags:
-      - "run-goal1-executor-smoke-20260903-8690792"
+      - "run-goal1-executor-smoke-v2-20260904-cd86506"
       - "publish-goal1-verifier-g1-activation-20260829"
       - "publish-goal1-verifier-g1-activation-20260829-parser"
     paths:
@@ -36,13 +36,14 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/kitahl/supernova-goal1-executor
   CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-executor:candidate-${{ github.sha }}
+  V2_VERIFIER_CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-verifier:candidate-${{ github.sha }}
 
 jobs:
   build-test-publish:
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'push' && github.ref == 'refs/tags/run-goal1-executor-smoke-20260903-8690792') ||
+      (github.event_name == 'push' && github.ref == 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506') ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.publish_target == 'executor' || inputs.publish_target == 'executor-smoke'))
     runs-on: ubuntu-24.04
@@ -122,7 +123,46 @@ jobs:
             "$RUNNER_TEMP/goal1-validation/corpus-v1" \
             "$RUNNER_TEMP/goal1-validation/candidate-v2" \
             | tee validation-preparation.json
+      - name: Build current v2 verifier for exact smoke
+        if: github.ref == 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --platform linux/amd64 --load \
+            --tag "$V2_VERIFIER_CANDIDATE_TAG" \
+            --file runtime/goal1_verifier/Dockerfile .
+      - name: Qualify current v2 verifier for exact smoke
+        if: github.ref == 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python runtime/goal1_verifier/qualify_image.py \
+            "$V2_VERIFIER_CANDIDATE_TAG" \
+            --output verifier-qualification.json
+      - name: Log in to GHCR for qualified v2 verifier
+        if: github.ref == 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish exact qualified v2 verifier for smoke
+        if: github.ref == 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_id="$(docker image inspect "$V2_VERIFIER_CANDIDATE_TAG" --format '{{.Id}}')"
+          push_output="$(docker push "$V2_VERIFIER_CANDIDATE_TAG")"
+          printf '%s\n' "$push_output"
+          digest="$(printf '%s\n' "$push_output" | sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\).*$/\1/p' | tail -n 1)"
+          test -n "$digest"
+          immutable_ref="ghcr.io/kitahl/supernova-goal1-verifier@${digest}"
+          docker pull "$immutable_ref"
+          published_id="$(docker image inspect "$immutable_ref" --format '{{.Id}}')"
+          test "$candidate_id" = "$published_id"
+          echo "V2_VERIFIER_IMMUTABLE_REF=$immutable_ref" >> "$GITHUB_ENV"
       - name: Qualify immutable verifier image
+        if: github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506'
         shell: bash
         run: |
           set -euo pipefail
@@ -135,9 +175,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          verifier_args=()
+          if test -n "${V2_VERIFIER_IMMUTABLE_REF:-}"; then
+            verifier_args+=(--verifier-image-ref "$V2_VERIFIER_IMMUTABLE_REF")
+          fi
           python integration/goal1_validation_pilot/run_validation_pilot.py \
             --validation-file "$RUNNER_TEMP/goal1-validation/candidate-v2/corpus/validation.jsonl" \
             --executor-image "$CANDIDATE_TAG" \
+            "${verifier_args[@]}" \
             --output-directory validation-smoke-output \
             | tee validation-smoke-console.json
       - name: Upload validation-smoke evidence
@@ -156,7 +201,7 @@ jobs:
       - name: Log in to GHCR
         if: >-
           github.event_name != 'pull_request' &&
-          github.ref != 'refs/tags/run-goal1-executor-smoke-20260903-8690792' &&
+          github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506' &&
           inputs.publish_target != 'executor-smoke'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -167,7 +212,7 @@ jobs:
         id: publish
         if: >-
           github.event_name != 'pull_request' &&
-          github.ref != 'refs/tags/run-goal1-executor-smoke-20260903-8690792' &&
+          github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506' &&
           inputs.publish_target != 'executor-smoke'
         shell: bash
         run: |
@@ -216,7 +261,7 @@ jobs:
       - name: Attest published image
         if: >-
           github.event_name != 'pull_request' &&
-          github.ref != 'refs/tags/run-goal1-executor-smoke-20260903-8690792' &&
+          github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506' &&
           inputs.publish_target != 'executor-smoke'
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
