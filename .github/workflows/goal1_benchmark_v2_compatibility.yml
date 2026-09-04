@@ -1,0 +1,59 @@
+name: Goal 1 benchmark-v2 compatibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  corpus-compatibility:
+    name: Elaborate all 488 statements
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Install exact Python dependencies
+        run: python -m pip install --disable-pip-version-check -e . pyarrow==24.0.0
+      - name: Acquire and hash-check public frozen sources
+        env:
+          WORK: ${{ runner.temp }}/supernova-benchmark
+        run: |
+          mkdir -p "$WORK"
+          curl --fail --location --silent --show-error --output "$WORK/minif2f.jsonl" "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-Prover-V1.5/2c4ba9119eef74d0d611f494261b2c5bae98c69a/datasets/minif2f.jsonl"
+          curl --fail --location --silent --show-error --output "$WORK/kimina.parquet" "https://huggingface.co/datasets/AI-MO/minif2f_test/resolve/5def318348521dfc34875045a9ecddf729a2b49f/data/train-00000-of-00001.parquet?download=true"
+          echo "d6654c88476ff14db19d57dea25bd955a240525fb52171e460f89d98f83d7dd5  $WORK/minif2f.jsonl" | sha256sum --check
+          echo "a32985e3d44b5165fbd586f453055cd17de0d081f43d7806cbba3f321346a8c5  $WORK/kimina.parquet" | sha256sum --check
+      - name: Assemble locked v1 corpus and build unsealed v2 candidate
+        env:
+          WORK: ${{ runner.temp }}/supernova-benchmark
+        run: |
+          python scripts/assemble_minif2f_kimina.py --manifest goal1/BENCHMARK_SOURCES.json --deepseek-jsonl "$WORK/minif2f.jsonl" --kimina-parquet "$WORK/kimina.parquet" --output-directory "$WORK/corpus-v1"
+          python scripts/validate_confirmatory_benchmark.py "$WORK/corpus-v1"
+          python scripts/build_benchmark_v2.py "$WORK/corpus-v1" "$WORK/candidate-v2"
+          python scripts/import_benchmark.py check "$WORK/candidate-v2/corpus" --lock "$WORK/candidate-v2/BENCHMARK_V2_CANDIDATE.lock.json"
+      - name: Install Lean 4.33.1 and Mathlib cache
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9
+        with:
+          auto-config: false
+          lake-package-directory: runtime/lean
+          use-github-cache: true
+          use-mathlib-cache: true
+      - name: Run 488-statement non-credit compatibility gate
+        env:
+          WORK: ${{ runner.temp }}/supernova-benchmark
+        run: |
+          python scripts/check_benchmark_v2_compatibility.py "$WORK/candidate-v2" --runtime runtime/lean --workers 2 --timeout-seconds 60 --report "$WORK/compatibility-report.json"
+      - name: Upload non-credit compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: goal1-benchmark-v2-compatibility
+          path: |
+            ${{ runner.temp }}/supernova-benchmark/candidate-v2/BENCHMARK_V2_CANDIDATE.lock.json
+            ${{ runner.temp }}/supernova-benchmark/candidate-v2/BENCHMARK_V2_CANDIDATE.report.json
+            ${{ runner.temp }}/supernova-benchmark/compatibility-report.json
+          retention-days: 30

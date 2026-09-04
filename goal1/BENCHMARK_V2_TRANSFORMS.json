@@ -1,0 +1,22 @@
+{
+  "schema": "supernova.goal1-benchmark-v2-transforms.v1",
+  "status": "CANDIDATE_UNSEALED_NON_CREDIT",
+  "input_benchmark_root_sha256": "914c05427e1e7e0979f4ca058f90fb3138ee0d3319233b415194c10e67d3683b",
+  "output_record_schema_version": 2,
+  "heartbeat_policy": {
+    "exact_before": "set_option maxHeartbeats 0",
+    "exact_after": "set_option maxHeartbeats 500000",
+    "expected_record_count": 488,
+    "rationale": "Replace the disabled deterministic guard with the 500000-heartbeat prior reported by LeanMarathon; qualification must still prove the budget accepts known-good proofs before any seal."
+  },
+  "statement_patches": [
+    {
+      "problem_id": "amc12a_2003_p1",
+      "split": "validation",
+      "exact_before": "(∑ k in Finset.range 2003, u k) - ∑ k in Finset.range 2003, v k",
+      "exact_after": "(∑ k ∈ Finset.range 2003, u k) - ∑ k ∈ Finset.range 2003, v k",
+      "expected_occurrences": 1,
+      "evidence": "Non-credit smoke produced Lean 4.33.1 parse error: unexpected token 'in'; expected ','."
+    }
+  ]
+}
