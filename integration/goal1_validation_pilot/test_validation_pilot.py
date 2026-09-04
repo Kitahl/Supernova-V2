@@ -10,10 +10,14 @@ from integration.goal1_validation_pilot.run_validation_pilot import (
     MODEL_TIMEOUT_SECONDS,
     PLAN_PATH,
     ModelContainerObservation,
+    _one_percent_metrics,
     adapt_model_completion,
+    adapt_product_completion,
     completion_summary,
     exact_smoke_problem_signed_valid_gate,
     github_failure_annotation,
+    github_pilot_notice,
+    one_percent_schedule,
     parse_generation_frame,
     selected_problem_ids,
     verifier_launcher,
@@ -22,6 +26,7 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactEnvelope,
     ScheduledChatArtifactKind,
 )
+from supernova_goal1.confirmatory_io import FINAL_PREFIX
 from supernova_goal1.execution.common import Arm, AttemptStatus
 
 
@@ -92,6 +97,23 @@ class Goal1ValidationPilotTests(unittest.TestCase):
             adapt_model_completion(raw, theorem_name="target"),
         )
 
+    def test_product_adapter_preserves_only_exact_protocol_responses(self) -> None:
+        exact = FINAL_PREFIX + b"omega\n"
+        self.assertEqual(
+            (exact, "EXACT_PRODUCT_PROTOCOL_RESPONSE"),
+            adapt_product_completion(exact),
+        )
+        fenced = b"analysis\n\x60\x60\x60lean\n" + exact + b"\x60\x60\x60\n"
+        self.assertEqual(
+            (exact.rstrip(), "FINAL_LEAN_FENCE_PRODUCT_PROTOCOL_RESPONSE"),
+            adapt_product_completion(fenced),
+        )
+        unmarked = b"analysis\n\x60\x60\x60lean\nomega\n\x60\x60\x60\n"
+        self.assertEqual(
+            (unmarked, "REJECTED_UNMARKED_PRODUCT_FENCE_RAW_PASSTHROUGH"),
+            adapt_product_completion(unmarked),
+        )
+
     def test_plan_freezes_non_credit_two_then_twenty(self) -> None:
         plan = json.loads(Path(PLAN_PATH).read_text(encoding="utf-8"))
         self.assertEqual("validation", plan["benchmark"]["allowed_split"])
@@ -105,6 +127,23 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         self.assertEqual(0, plan["countable_attempts_after"])
         self.assertEqual(2, plan["stages"]["smoke_0_1_percent"]["attempt_count"])
         self.assertEqual(20, plan["stages"]["pilot_1_percent"]["attempt_count"])
+        self.assertFalse(
+            plan["stages"]["pilot_1_percent"]["requires_clean_smoke_report"]
+        )
+        self.assertEqual(
+            33834392060,
+            plan["stages"]["pilot_1_percent"]["transition_authority"][
+                "github_actions_run_id"
+            ],
+        )
+        self.assertIn(
+            "MALFORMED_OUTPUT_IS_A_TYPED_FAILED_ATTEMPT_NOT_A_RUN_BLOCKER",
+            plan["pilot_1_percent_integrity_gate"],
+        )
+        self.assertIn(
+            "AT_LEAST_ONE_SIGNED_VALID_MODEL_RESPONSE",
+            plan["historical_smoke_admission_gate"],
+        )
         self.assertTrue(plan["stages"]["smoke_0_1_percent"]["stop_after_report"])
         self.assertTrue(plan["stages"]["pilot_1_percent"]["stop_after_report"])
         self.assertEqual(60, plan["timing_policy"]["outer_watchdog_seconds"])
@@ -112,7 +151,9 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         self.assertNotIn("PROSE_SIGNED_INVALID_UNDER_5000_MS", plan["pre_model_gates"])
         self.assertEqual(60, verifier_launcher(plan).timeout_seconds)
         override = "ghcr.io/kitahl/supernova-goal1-verifier@sha256:" + "f" * 64
-        self.assertEqual(override, verifier_launcher(plan, image_ref=override).image_ref)
+        self.assertEqual(
+            override, verifier_launcher(plan, image_ref=override).image_ref
+        )
         self.assertEqual(300, plan["model_timing_policy"]["outer_watchdog_seconds"])
         self.assertEqual(
             "NO_ANSWER", plan["model_timing_policy"]["incomplete_finish_reason"]
@@ -131,6 +172,108 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         right = selected_problem_ids(("b", "c", "a"), seed="frozen", count=2)
         self.assertEqual(left, right)
         self.assertEqual(2, len(left))
+
+    def test_one_percent_schedule_is_exactly_twenty_and_balanced(self) -> None:
+        problem_ids = tuple(f"p-{index}" for index in range(5))
+        schedule = one_percent_schedule(
+            problem_ids,
+            attempts_per_problem_arm=2,
+        )
+        self.assertEqual(20, len(schedule))
+        self.assertEqual(20, len(set(schedule)))
+        for problem_id in problem_ids:
+            for arm in (Arm.ORDINARY, Arm.VERIFIED_CHAIN):
+                self.assertEqual(
+                    [0, 1],
+                    sorted(
+                        attempt
+                        for attempt, observed_id, observed_arm in schedule
+                        if observed_id == problem_id and observed_arm is arm
+                    ),
+                )
+        self.assertEqual((0, "p-0", Arm.ORDINARY), schedule[0])
+        self.assertEqual((0, "p-1", Arm.VERIFIED_CHAIN), schedule[2])
+        self.assertEqual((1, "p-0", Arm.VERIFIED_CHAIN), schedule[10])
+
+    def test_one_percent_metrics_separate_emission_admission_and_exposure(self) -> None:
+        def row(
+            *,
+            problem_id: str,
+            arm: str,
+            response_kind: str,
+            admitted: bool = False,
+            exposed: int = 0,
+            solved: bool = False,
+            verdict: str | None = "INVALID",
+        ) -> dict[str, object]:
+            return {
+                "admitted_products_visible_before_attempt": exposed,
+                "arm": arm,
+                "attempt_status": "ANSWERED",
+                "final_solved": solved,
+                "problem_id": problem_id,
+                "product_admitted": admitted,
+                "response_kind": response_kind,
+                "verifier_evidence": (
+                    None if verdict is None else {"verdict": verdict}
+                ),
+            }
+
+        attempts = [
+            row(
+                problem_id="p-0",
+                arm="verified_chain",
+                response_kind="PRODUCT_CANDIDATE",
+                admitted=True,
+                verdict="VALID",
+            ),
+            row(
+                problem_id="p-0",
+                arm="verified_chain",
+                response_kind="FINAL_ANSWER",
+                exposed=1,
+                solved=True,
+                verdict="VALID",
+            ),
+            row(
+                problem_id="p-0",
+                arm="ordinary",
+                response_kind="FINAL_ANSWER",
+            ),
+            row(
+                problem_id="p-0",
+                arm="ordinary",
+                response_kind="FINAL_ANSWER",
+            ),
+        ]
+        metrics = _one_percent_metrics(attempts, problem_ids=("p-0",))
+        product = metrics["product_chain"]
+        self.assertEqual(1, product["product_emissions"])
+        self.assertEqual(1, product["product_admissions"])
+        self.assertEqual(1.0, product["admission_rate_given_emission"])
+        self.assertEqual(1, product["final_attempts_after_usable_product_exposure"])
+        self.assertTrue(
+            metrics["paired_problem_outcomes"][0]["verified_chain_best_of_2_solved"]
+        )
+
+    def test_pilot_notice_is_bounded_and_excludes_candidate_text(self) -> None:
+        report = {
+            "attempts": [{"candidate_utf8": "secret proof bytes"}],
+            "countable_attempts": 0,
+            "execution_status": "COMPLETE",
+            "integrity": {"status": "PASS"},
+            "metrics": {"attempts": 20},
+            "next_action": "STOP_AND_ANALYZE_BEFORE_ANY_LARGER_CALIBRATION",
+            "report_sha256": "a" * 64,
+            "selection": {"problem_ids": ["p-0"]},
+            "verifier_image_ref": "image@sha256:" + "b" * 64,
+        }
+        notice = github_pilot_notice(report)
+        self.assertTrue(notice.startswith("::notice title="))
+        self.assertIn('"countable_attempts":0', notice)
+        self.assertNotIn("secret proof bytes", notice)
+        self.assertNotIn('"candidate_utf8"', notice)
+        self.assertNotIn('"raw_completion_utf8"', notice)
 
     def test_generation_frame_returns_only_discrete_completion(self) -> None:
         frame = {

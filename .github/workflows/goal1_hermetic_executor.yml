@@ -3,6 +3,9 @@ name: goal1-hermetic-executor
 on:
   pull_request:
     paths:
+      - "goal1/CONFIRMATORY_BASELINES.json"
+      - "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json"
+      - "integration/goal1_validation_pilot/**"
       - "runtime/goal1_hermetic_executor/**"
       - "runtime/goal1_verifier/**"
       - ".github/workflows/goal1_hermetic_executor.yml"
@@ -12,9 +15,13 @@ on:
     branches: [main]
     tags:
       - "run-goal1-executor-smoke-v2-20260904-cd86506"
+      - "run-goal1-pilot-1pct-v2-20260903-v1"
       - "publish-goal1-verifier-g1-activation-20260829"
       - "publish-goal1-verifier-g1-activation-20260829-parser"
     paths:
+      - "goal1/CONFIRMATORY_BASELINES.json"
+      - "goal1/CONFIRMATORY_PRODUCT_CONTROLS.json"
+      - "integration/goal1_validation_pilot/**"
       - "runtime/goal1_hermetic_executor/**"
       - ".github/workflows/goal1_hermetic_executor.yml"
       - "tests/test_goal1_hermetic_executor.py"
@@ -37,6 +44,7 @@ env:
   IMAGE_NAME: ghcr.io/kitahl/supernova-goal1-executor
   CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-executor:candidate-${{ github.sha }}
   V2_VERIFIER_CANDIDATE_TAG: ghcr.io/kitahl/supernova-goal1-verifier:candidate-${{ github.sha }}
+  V2_VERIFIER_SOURCE_TAG: ghcr.io/kitahl/supernova-goal1-verifier:candidate-b678e1bb8f0befdeb9f5a905a7ba0282ec8b9a8d
 
 jobs:
   build-test-publish:
@@ -44,6 +52,7 @@ jobs:
       github.event_name == 'pull_request' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'push' && github.ref == 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506') ||
+      (github.event_name == 'push' && github.ref == 'refs/tags/run-goal1-pilot-1pct-v2-20260903-v1') ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.publish_target == 'executor' || inputs.publish_target == 'executor-smoke'))
     runs-on: ubuntu-24.04
@@ -161,8 +170,31 @@ jobs:
           published_id="$(docker image inspect "$immutable_ref" --format '{{.Id}}')"
           test "$candidate_id" = "$published_id"
           echo "V2_VERIFIER_IMMUTABLE_REF=$immutable_ref" >> "$GITHUB_ENV"
+      - name: Log in to GHCR for frozen one-percent verifier
+        if: github.ref == 'refs/tags/run-goal1-pilot-1pct-v2-20260903-v1'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve and qualify frozen one-percent verifier
+        if: github.ref == 'refs/tags/run-goal1-pilot-1pct-v2-20260903-v1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$V2_VERIFIER_SOURCE_TAG"
+          immutable_ref="$(docker image inspect "$V2_VERIFIER_SOURCE_TAG" --format '{{json .RepoDigests}}' |
+            jq -r '.[] | select(startswith("ghcr.io/kitahl/supernova-goal1-verifier@sha256:"))' |
+            head -n 1)"
+          test -n "$immutable_ref"
+          python runtime/goal1_verifier/qualify_image.py \
+            "$immutable_ref" \
+            --output verifier-qualification.json
+          echo "V2_VERIFIER_IMMUTABLE_REF=$immutable_ref" >> "$GITHUB_ENV"
       - name: Qualify immutable verifier image
-        if: github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506'
+        if: >-
+          github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506' &&
+          github.ref != 'refs/tags/run-goal1-pilot-1pct-v2-20260903-v1'
         shell: bash
         run: |
           set -euo pipefail
@@ -171,37 +203,46 @@ jobs:
           python runtime/goal1_verifier/qualify_image.py \
             "$verifier" \
             --output verifier-qualification.json
-      - name: Run exactly two non-credit validation attempts
+      - name: Run exact non-credit validation stage
         shell: bash
         run: |
           set -euo pipefail
           verifier_args=()
+          stage=smoke
+          output_directory=validation-smoke-output
+          if test "$GITHUB_REF" = "refs/tags/run-goal1-pilot-1pct-v2-20260903-v1"; then
+            stage=one-percent
+            output_directory=validation-one-percent-output
+          fi
           if test -n "${V2_VERIFIER_IMMUTABLE_REF:-}"; then
             verifier_args+=(--verifier-image-ref "$V2_VERIFIER_IMMUTABLE_REF")
           fi
           python integration/goal1_validation_pilot/run_validation_pilot.py \
+            --stage "$stage" \
             --validation-file "$RUNNER_TEMP/goal1-validation/candidate-v2/corpus/validation.jsonl" \
             --executor-image "$CANDIDATE_TAG" \
             "${verifier_args[@]}" \
-            --output-directory validation-smoke-output \
-            | tee validation-smoke-console.json
-      - name: Upload validation-smoke evidence
+            --output-directory "$output_directory" \
+            | tee validation-stage-console.json
+      - name: Upload validation-stage evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: goal1-validation-smoke-${{ github.sha }}
+          name: goal1-validation-stage-${{ github.sha }}
           path: |
             validation-preparation.json
             ${{ runner.temp }}/goal1-validation/candidate-v2/BENCHMARK_V2_CANDIDATE.lock.json
             ${{ runner.temp }}/goal1-validation/candidate-v2/BENCHMARK_V2_CANDIDATE.report.json
             verifier-qualification.json
-            validation-smoke-console.json
+            validation-stage-console.json
             validation-smoke-output/
+            validation-one-percent-output/
           if-no-files-found: warn
       - name: Log in to GHCR
         if: >-
           github.event_name != 'pull_request' &&
           github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506' &&
+          github.ref != 'refs/tags/run-goal1-pilot-1pct-v2-20260903-v1' &&
           inputs.publish_target != 'executor-smoke'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -213,6 +254,7 @@ jobs:
         if: >-
           github.event_name != 'pull_request' &&
           github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506' &&
+          github.ref != 'refs/tags/run-goal1-pilot-1pct-v2-20260903-v1' &&
           inputs.publish_target != 'executor-smoke'
         shell: bash
         run: |
@@ -262,6 +304,7 @@ jobs:
         if: >-
           github.event_name != 'pull_request' &&
           github.ref != 'refs/tags/run-goal1-executor-smoke-v2-20260904-cd86506' &&
+          github.ref != 'refs/tags/run-goal1-pilot-1pct-v2-20260903-v1' &&
           inputs.publish_target != 'executor-smoke'
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
