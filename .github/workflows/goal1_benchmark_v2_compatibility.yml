@@ -2,6 +2,17 @@ name: Goal 1 benchmark-v2 compatibility
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - work/PM/G1V2-core-repairs
+    paths:
+      - .github/workflows/goal1_benchmark_v2_compatibility.yml
+      - goal1/BENCHMARK_V2_TRANSFORMS.json
+      - scripts/build_benchmark_v2.py
+      - scripts/check_benchmark_v2_compatibility.py
+      - scripts/import_benchmark.py
+      - tests/test_build_benchmark_v2.py
+      - tests/test_check_benchmark_v2_compatibility.py
 
 permissions:
   contents: read

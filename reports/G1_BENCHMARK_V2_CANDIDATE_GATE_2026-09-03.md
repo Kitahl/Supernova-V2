@@ -75,10 +75,12 @@ The standalone lock checker passed over exactly
 - treats timeout/error/failure as blocking evidence, not mathematical
   invalidity.
 
-`.github/workflows/goal1_benchmark_v2_compatibility.yml` is manual-only,
-read-only, non-credit, and contains no model or secret step. It pins the
-official checkout, Python setup, Lean, and artifact-upload actions to immutable
-commits. The Lean action is pinned at
+`.github/workflows/goal1_benchmark_v2_compatibility.yml` supports manual
+dispatch once it reaches the default branch. While it exists only on
+`work/PM/G1V2-core-repairs`, a path-limited push trigger for that exact branch
+runs the pre-merge compatibility gate. The job is read-only, non-credit, and
+contains no model or secret step. It pins the official checkout, Python setup,
+Lean, and artifact-upload actions to immutable commits. The Lean action is pinned at
 `38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9`. It installs the Mathlib cache,
 rebuilds the candidate from the public pinned sources, and runs the entire
 compatibility gate.
@@ -99,9 +101,9 @@ Ran 2 tests
 OK
 ```
 
-Workflow YAML parsing passed. Exact trigger audit found only
-`workflow_dispatch`; no schedule, push, pull request, model, or secret
-reference is present.
+Workflow YAML parsing passed. The trigger audit found `workflow_dispatch`
+plus the exact repair-branch/path-limited push gate described above; no
+schedule, pull request, model, or secret reference is present.
 
 ## Current blocker and next action
 
@@ -111,19 +113,21 @@ The local Docker Linux engine is unavailable:
 failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
 ```
 
-No Docker image was pulled or built. The branch has not been published because
-the environment's publication safety review rejected the push without an
-explicit destination authorization.
+No Docker image was pulled or built. The user subsequently authorized
+publication and the repair branch was pushed. GitHub rejected PR creation
+because the available `gh` token lacks `public_repo`, then rejected manual
+dispatch because the new workflow is not yet on the default branch. The narrow
+push trigger is therefore the pre-merge execution path. The candidate remains
+unsealed.
 
 The next correct action is:
 
-1. push `work/PM/G1V2-core-repairs` to
-   `https://github.com/Kitahl/Supernova-V2`;
-2. manually run `Goal 1 benchmark-v2 compatibility`;
-3. inspect the complete 488-record report;
-4. add only failure-proven per-problem patches and repeat until the corpus gate
+1. push the narrow trigger commit to `work/PM/G1V2-core-repairs` so GitHub
+   runs `Goal 1 benchmark-v2 compatibility` without merging first;
+2. inspect the complete 488-record report;
+3. add only failure-proven per-problem patches and repeat until the corpus gate
    passes;
-5. then bind the qualified challenge/export digests into verifier identity.
+4. then bind the qualified challenge/export digests into verifier identity.
 
 No verifier publication, model smoke, calibration, protocol seal, or
 countable attempt may precede that result.
