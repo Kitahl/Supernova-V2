@@ -112,6 +112,36 @@ class Goal1VerifierRuntimeTests(unittest.TestCase):
         self.assertEqual(command[command.index("-t") + 1], "0")
         self.assertEqual(command[command.index("-M") + 1], "0")
 
+    def test_heartbeat_exhaustion_is_unknown_not_invalid(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["lean", "Solution.lean"],
+            1,
+            b"",
+            (
+                b"Solution.lean:4:2: error: (deterministic) timeout at `whnf`, "
+                b"maximum number of heartbeats (500000) has been reached"
+            ),
+        )
+
+        with self.assertRaises(entrypoint.ResourceUnknown) as raised:
+            entrypoint.raise_candidate_failure(completed)
+
+        self.assertEqual(
+            entrypoint.UNKNOWN_CAUSE_HEARTBEAT,
+            raised.exception.cause,
+        )
+
+    def test_ordinary_lean_rejection_remains_invalid(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["lean", "Solution.lean"],
+            1,
+            b"",
+            b"Solution.lean:4:2: error: unsolved goals",
+        )
+
+        with self.assertRaises(entrypoint.Rejected):
+            entrypoint.raise_candidate_failure(completed)
+
     def test_runtime_environment_is_locked_and_lake_git_are_absent(self) -> None:
         lock = {
             "module_environment": {

@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,38 @@ class ConfirmatoryActivationTests(unittest.TestCase):
 
     def authority(self, root: str) -> DurableActivationAuthority:
         return DurableActivationAuthority(Path(root) / "activation.sqlite")
+
+    def setUp(self) -> None:
+        def fixture_activation(
+            protocol: object,
+            goal1: object,
+            *,
+            operator_seed: bytes,
+        ) -> SimpleNamespace:
+            del goal1
+            opened = json.loads(json.dumps(protocol))
+            opened["confirmatory_execution_status"] = (
+                "AUTHORIZED_BY_VALIDATED_EXECUTION_AUTHORITY"
+            )
+            return SimpleNamespace(
+                protocol=opened,
+                manifest=SimpleNamespace(
+                    public_manifest={
+                        "dispatch_status": (
+                            "AUTHORIZED_BY_VALIDATED_EXECUTION_AUTHORITY"
+                        )
+                    },
+                    operator_plan={"operator_seed_hex": operator_seed.hex()},
+                ),
+                authority=SimpleNamespace(authority_sha256="a" * 64),
+            )
+
+        patcher = patch(
+            "supernova_goal1.activation.activate_confirmatory_execution",
+            side_effect=fixture_activation,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_activation_is_atomic_durable_and_readback_verified(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

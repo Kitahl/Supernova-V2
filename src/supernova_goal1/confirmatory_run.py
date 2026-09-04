@@ -47,6 +47,7 @@ BENCHMARK_LOCK_PATH = GOAL1_DIRECTORY / "BENCHMARK.lock.json"
 VERIFIER_PUBLICATION_PATH = (
     GOAL1_DIRECTORY / "CONFIRMATORY_VERIFIER_PUBLICATION.json"
 )
+V2_MIGRATION_PATH = GOAL1_DIRECTORY / "GOAL1_V2_MIGRATION.json"
 FIRST_ATTEMPT_SCHEMA = "supernova.confirmatory-first-attempt.v1"
 
 
@@ -126,6 +127,31 @@ def _secret(path: Path, *, minimum: int = 32) -> bytes:
     if len(value) < minimum:
         raise ValueError(f"host secret has fewer than {minimum} bytes: {path.name}")
     return value
+
+
+def _assert_protocol_not_superseded(
+    protocol: Mapping[str, object],
+    migration: Mapping[str, object],
+) -> None:
+    if migration.get("schema") != "supernova.goal1-v2-migration.v1":
+        raise ValueError("Goal-1 v2 migration schema changed")
+    if migration.get("status") != "V1_SUPERSEDED_NO_DISPATCH":
+        raise ValueError("Goal-1 v2 migration status changed")
+    if migration.get("scientific_state") != "NOT_EVALUATED":
+        raise ValueError("Goal-1 migration scientific state changed")
+    if migration.get("countable_attempts") != 0:
+        raise ValueError("Goal-1 migration countable-attempt state changed")
+    superseded = migration.get("superseded")
+    if not isinstance(superseded, Mapping):
+        raise ValueError("Goal-1 migration superseded binding is absent")
+    if (
+        protocol.get("protocol_id") == superseded.get("protocol_id")
+        and superseded.get("dispatch_status") == "BLOCKED"
+    ):
+        raise PermissionError(
+            "BLOCKED_SUPERSEDED_CONFIRMATORY_V1: the v1 launcher is retired; "
+            "only an independently sealed Goal-1 v2 authority may dispatch"
+        )
 
 
 def _verifier_launcher() -> VerifierSandboxLauncher:
@@ -210,11 +236,13 @@ def _cost_trace_mapping(trace: object) -> dict[str, object]:
 def start_first_attempt(files: RunFiles) -> dict[str, object]:
     """Consume activation and execute the first exact production dispatch."""
 
+    protocol = _json(PROTOCOL_PATH)
+    migration = _json(V2_MIGRATION_PATH)
+    _assert_protocol_not_superseded(protocol, migration)
     files.run_directory.mkdir(parents=True, exist_ok=True)
     if files.first_attempt_record.exists():
         return _json(files.first_attempt_record)
 
-    protocol = _json(PROTOCOL_PATH)
     goal1 = _json(GOAL1_PATH)
     activation_authority = DurableActivationAuthority(files.activation_database)
     try:

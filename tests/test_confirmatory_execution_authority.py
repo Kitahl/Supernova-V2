@@ -234,22 +234,21 @@ class ConfirmatoryExecutionAuthorityTests(unittest.TestCase):
                         operator_seed=b"x" * 32,
                     )
 
-    def test_fixed_repository_authority_activates(self) -> None:
-        capability = load_execution_authority(PROTOCOL, GOAL1)
-        activated = activate_confirmatory_execution(
-            PROTOCOL,
-            GOAL1,
-            operator_seed=b"B" * 32,
-        )
-        self.assertEqual(capability, activated.authority)
-        self.assertEqual(
-            AUTHORIZED_DISPATCH_STATUS,
-            activated.protocol["confirmatory_execution_status"],
-        )
-        self.assertEqual(
-            PRODUCTION_CREDIT_STATUS,
-            activated.manifest.public_manifest["credit_status"],
-        )
+    def test_fixed_v1_repository_authority_is_retired(self) -> None:
+        with self.assertRaisesRegex(
+            PermissionError,
+            "BLOCKED_SUPERSEDED_CONFIRMATORY_V1",
+        ):
+            load_execution_authority(PROTOCOL, GOAL1)
+        with self.assertRaisesRegex(
+            PermissionError,
+            "BLOCKED_SUPERSEDED_CONFIRMATORY_V1",
+        ):
+            activate_confirmatory_execution(
+                PROTOCOL,
+                GOAL1,
+                operator_seed=b"B" * 32,
+            )
 
     def test_random_self_selected_root_cannot_activate(self) -> None:
         authority, _, _ = _signed_fixture()

@@ -1134,13 +1134,17 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         *,
         elaborator_status: str = "EXPORTED",
         checker_status: str = "VALID",
+        elaborator_exit_override: int | None = None,
+        checker_exit_override: int | None = None,
         elaborator_stdout: bytes | None = None,
         checker_stdout: bytes | None = None,
         timeout_phase: str | None = None,
         oom_phase: str | None = None,
         create_failure_phase: str | None = None,
         policy_failure_phase: str | None = None,
+        teardown_failure_phase: str | None = None,
         parser_status: str | None = None,
+        unknown_cause: str = TerminationCause.INTERNAL.value,
         name: str,
     ) -> VerifierEvidenceRecord:
         binding = self.binding(actual_dispatch_id=sha("dispatch:" + name))
@@ -1186,6 +1190,11 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                     "diagnostic": f"deterministic {status.lower()}",
                     "schema": verifier_evidence_module.CONTAINER_RESPONSE_SCHEMA,
                     "status": status,
+                    **(
+                        {"termination_cause": unknown_cause}
+                        if status == VerifierVerdict.UNKNOWN.value
+                        else {}
+                    ),
                 }
             )
 
@@ -1202,17 +1211,27 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             if checker_stdout is None
             else checker_stdout,
         )
-        base_exit = (
+        expected_elaborator_exit = (
             0
             if elaborator_status == "EXPORTED"
             else 10
             if elaborator_status == "INVALID"
-            else 20,
+            else 20
+        )
+        expected_checker_exit = (
             0
             if checker_status == "VALID"
             else 10
             if checker_status == "INVALID"
-            else 20,
+            else 20
+        )
+        base_exit = (
+            expected_elaborator_exit
+            if elaborator_exit_override is None
+            else elaborator_exit_override,
+            expected_checker_exit
+            if checker_exit_override is None
+            else checker_exit_override,
         )
         phase_stdout = (
             base_stdout
@@ -1227,6 +1246,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         created_containers: list[str] = []
         removed_containers: list[str] = []
         issue_removed_counts: list[int] = []
+        append_removed_counts: list[int] = []
         inspection_count: dict[str, int] = {}
         phase_by_container: dict[str, int] = {}
 
@@ -1289,13 +1309,21 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             return {"phase": phase_name, "policy": self.launcher.sandbox_policy}
 
         def remove_observed(container_id: str) -> None:
+            phase_name = phase_names[phase_by_container[container_id]]
+            if teardown_failure_phase == phase_name:
+                raise RuntimeError("forced teardown observation failure")
             removed_containers.append(container_id)
 
         original_issue = self.signer._issue
+        original_append = store.append
 
         def issue(*args: object, **kwargs: object) -> VerifierEvidenceRecord:
             issue_removed_counts.append(len(removed_containers))
             return original_issue(*args, **kwargs)  # type: ignore[arg-type]
+
+        def append(*args: object, **kwargs: object) -> None:
+            append_removed_counts.append(len(removed_containers))
+            original_append(*args, **kwargs)  # type: ignore[arg-type]
 
         with (
             patch.object(verifier_evidence_module, "_invoke", side_effect=invoke),
@@ -1318,6 +1346,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 side_effect=remove_observed,
             ),
             patch.object(self.signer, "_issue", side_effect=issue),
+            patch.object(store, "append", side_effect=append),
         ):
             parser_kwargs = (
                 {}
@@ -1327,22 +1356,25 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                     "product_parser_expected_name": "alpha",
                 }
             )
-            record = supervisor.run_and_record(
-                binding,
-                source=self.source,
-                candidate=self.candidate,
-                theorem_names=("alpha",),
-                **parser_kwargs,
-            )
+            try:
+                record = supervisor.run_and_record(
+                    binding,
+                    source=self.source,
+                    candidate=self.candidate,
+                    theorem_names=("alpha",),
+                    **parser_kwargs,
+                )
+            finally:
+                self.last_supervisor_trace = {
+                    "append_removed_counts": tuple(append_removed_counts),
+                    "captured_requests": tuple(captured_requests),
+                    "created_containers": tuple(created_containers),
+                    "issue_removed_counts": tuple(issue_removed_counts),
+                    "removed_containers": tuple(removed_containers),
+                }
         for request in captured_requests:
             self.assertNotIn(b"k" * 32, request)
             self.assertNotIn(str(store.path).encode("utf-8"), request)
-        self.last_supervisor_trace = {
-            "captured_requests": tuple(captured_requests),
-            "created_containers": tuple(created_containers),
-            "issue_removed_counts": tuple(issue_removed_counts),
-            "removed_containers": tuple(removed_containers),
-        }
         return record
 
     def test_valid_requires_two_fresh_keyless_containers_removed_before_signing(
@@ -1361,6 +1393,22 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
         self.assertEqual(
             ("elaborate", "check"), tuple(value["mode"] for value in requests)
         )
+
+    def test_teardown_observation_failure_never_signs_or_persists(self) -> None:
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "elaborator teardown was not observed; evidence was not signed",
+        ):
+            self._mocked_supervisor_run(
+                teardown_failure_phase="elaborator",
+                name="teardown-unobserved",
+            )
+
+        trace = self.last_supervisor_trace
+        self.assertEqual(1, len(trace["created_containers"]))
+        self.assertEqual((), trace["removed_containers"])
+        self.assertEqual((), trace["issue_removed_counts"])
+        self.assertEqual((), trace["append_removed_counts"])
 
     def test_product_parser_admission_is_bound_inside_signed_evidence(self) -> None:
         admitted = self._mocked_supervisor_run(
@@ -1477,7 +1525,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             ),
             (
                 {"checker_status": "UNKNOWN", "name": "checker-unknown"},
-                TerminationCause.CHECKER_CRASH,
+                TerminationCause.INTERNAL,
             ),
             (
                 {"timeout_phase": "checker", "name": "checker-timeout"},
@@ -1490,6 +1538,35 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 observed = record.body["observations"]
                 self.assertEqual(VerifierVerdict.UNKNOWN.value, observed["verdict"])
                 self.assertEqual(expected_cause.value, observed["termination_cause"])
+
+    def test_heartbeat_exhaustion_is_signed_as_resource_unknown(self) -> None:
+        observed = self._mocked_supervisor_run(
+            elaborator_status=VerifierVerdict.UNKNOWN.value,
+            unknown_cause=TerminationCause.RESOURCE_LIMIT_HEARTBEAT.value,
+            name="heartbeat-unknown",
+        ).body["observations"]
+
+        self.assertEqual(VerifierVerdict.UNKNOWN.value, observed["verdict"])
+        self.assertEqual(
+            TerminationCause.RESOURCE_LIMIT_HEARTBEAT.value,
+            observed["termination_cause"],
+        )
+        self.assertTrue(observed["resource_limited"])
+
+    def test_unknown_response_with_wrong_exit_is_malformed_not_heartbeat(self) -> None:
+        observed = self._mocked_supervisor_run(
+            elaborator_status=VerifierVerdict.UNKNOWN.value,
+            elaborator_exit_override=0,
+            unknown_cause=TerminationCause.RESOURCE_LIMIT_HEARTBEAT.value,
+            name="heartbeat-wrong-exit",
+        ).body["observations"]
+
+        self.assertEqual(VerifierVerdict.UNKNOWN.value, observed["verdict"])
+        self.assertEqual(
+            TerminationCause.MALFORMED_CHECKER_OUTPUT.value,
+            observed["termination_cause"],
+        )
+        self.assertFalse(observed["resource_limited"])
 
     def test_real_bridge_blocks_authenticated_unknown_before_evaluator_projection(
         self,
@@ -1527,6 +1604,7 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
             theorem_target_set_sha256=hashlib.sha256(
                 verifier_evidence_module.canonical_bytes([request.problem.native_id])
             ).hexdigest(),
+            rendered_source_sha256=hashlib.sha256(source).hexdigest(),
             source_construction_sha256=hashlib.sha256(source).hexdigest(),
             requested_runtime_sha256=request.runtime_sha256,
             actual_runtime_sha256=self.launcher.toolchain_lock_sha256,

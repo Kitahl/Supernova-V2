@@ -20,6 +20,7 @@ PRODUCTION_BRIDGE_RECEIPT_SCHEMA = "supernova.hermetic-evidence-bridge-receipt.v
 AUTHORIZED_DISPATCH_STATUS = "AUTHORIZED_BY_VALIDATED_EXECUTION_AUTHORITY"
 AUTHORITY_RELATIVE_PATH = Path("goal1") / "CONFIRMATORY_EXECUTION_AUTHORITY.json"
 TRUST_ROOT_RELATIVE_PATH = Path("goal1") / "CONFIRMATORY_TRUST_ROOT.json"
+V2_MIGRATION_RELATIVE_PATH = Path("goal1") / "GOAL1_V2_MIGRATION.json"
 
 PROTOCOL_RELATIVE_PATH = Path("goal1") / "CONFIRMATORY_PROTOCOL.json"
 GOAL1_RELATIVE_PATH = Path("goal1") / "GOAL1.json"
@@ -418,6 +419,37 @@ def load_execution_authority(
     """Mint authority only from the complete fixed repository artifact chain."""
 
     repository_root = _repository_root()
+    migration_path = repository_root / V2_MIGRATION_RELATIVE_PATH
+    if migration_path.is_file():
+        try:
+            migration = json.loads(migration_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise PermissionError(
+                "BLOCKED_NO_EXECUTION_AUTHORITY: Goal-1 migration authority is invalid"
+            ) from exc
+        if type(migration) is not dict:
+            raise PermissionError(
+                "BLOCKED_NO_EXECUTION_AUTHORITY: Goal-1 migration authority is invalid"
+            )
+        superseded = migration.get("superseded")
+        if (
+            migration.get("schema") != "supernova.goal1-v2-migration.v1"
+            or migration.get("status") != "V1_SUPERSEDED_NO_DISPATCH"
+            or migration.get("scientific_state") != "NOT_EVALUATED"
+            or migration.get("countable_attempts") != 0
+            or type(superseded) is not dict
+        ):
+            raise PermissionError(
+                "BLOCKED_NO_EXECUTION_AUTHORITY: Goal-1 migration authority is invalid"
+            )
+        if (
+            protocol.get("protocol_id") == superseded.get("protocol_id")
+            and superseded.get("dispatch_status") == "BLOCKED"
+        ):
+            raise PermissionError(
+                "BLOCKED_NO_EXECUTION_AUTHORITY: "
+                "BLOCKED_SUPERSEDED_CONFIRMATORY_V1"
+            )
     key_id, root_key = _fixed_root(repository_root)
     fixed_protocol = json.loads(
         (repository_root / PROTOCOL_RELATIVE_PATH).read_text(encoding="utf-8")

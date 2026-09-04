@@ -43,7 +43,7 @@ VERIFIER_PROTOCOL_VERSION = "goal1-host-verifier-evidence-v3"
 SIGNATURE_DOMAIN = b"supernova.confirmatory.verifier-evidence.signature.v3\0"
 INDEPENDENT_CHECKER_ID = "LEAN_COMPARATOR_PLUS_NANODA"
 CONTAINER_REQUEST_SCHEMA = "supernova.goal1.verifier-container-request.v1"
-CONTAINER_RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v1"
+CONTAINER_RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v2"
 PERMITTED_AXIOMS = ("propext", "Quot.sound", "Classical.choice")
 PRODUCTION_VALIDITY_BLOCKER = (
     "BLOCKED_UNTRUSTED_VALIDITY_ASSERTION: production VALID is constructible "
@@ -72,6 +72,8 @@ class TerminationCause(StrEnum):
     INCOMPLETE_EXPORT = "INCOMPLETE_EXPORT"
     MALFORMED_CHECKER_OUTPUT = "MALFORMED_CHECKER_OUTPUT"
     RESOURCE_LIMIT = "RESOURCE_LIMIT"
+    RESOURCE_LIMIT_HEARTBEAT = "RESOURCE_LIMIT_HEARTBEAT"
+    INTERNAL = "INTERNAL"
     INDETERMINATE = "INDETERMINATE"
 
 
@@ -432,6 +434,7 @@ def _validate_result_algebra(
         TerminationCause.TIMEOUT: timed_out,
         TerminationCause.OOM: oom_killed,
         TerminationCause.RESOURCE_LIMIT: resource_limited,
+        TerminationCause.RESOURCE_LIMIT_HEARTBEAT: resource_limited,
         TerminationCause.SANDBOX_POLICY_VIOLATION: sandbox_policy_violated,
     }.get(cause)
     if expected_flag is False:
@@ -1191,6 +1194,12 @@ class _SandboxPolicyError(RuntimeError):
     pass
 
 
+class _TeardownObservationError(RuntimeError):
+    """A verifier container may still exist, so no evidence may be signed."""
+
+    pass
+
+
 def _invoke(
     argv: Sequence[str],
     *,
@@ -1492,11 +1501,22 @@ def _parse_container_response(raw: bytes) -> tuple[dict[str, Any], bytes]:
         if value["checker"] != "COMPARATOR_DATA_ONLY_PLUS_NANODA":
             raise ValueError("independent checker identity changed")
         return value, b""
-    if status in {VerifierVerdict.INVALID.value, VerifierVerdict.UNKNOWN.value}:
+    if status == VerifierVerdict.INVALID.value:
         if set(value) != {"diagnostic", "schema", "status"}:
-            raise ValueError("non-valid verifier response fields changed")
+            raise ValueError("INVALID verifier response fields changed")
         if type(value["diagnostic"]) is not str:
             raise ValueError("verifier diagnostic must be a string")
+        return value, b""
+    if status == VerifierVerdict.UNKNOWN.value:
+        if set(value) != {"diagnostic", "schema", "status", "termination_cause"}:
+            raise ValueError("UNKNOWN verifier response fields changed")
+        if type(value["diagnostic"]) is not str:
+            raise ValueError("verifier diagnostic must be a string")
+        if value["termination_cause"] not in {
+            TerminationCause.RESOURCE_LIMIT_HEARTBEAT.value,
+            TerminationCause.INTERNAL.value,
+        }:
+            raise ValueError("UNKNOWN verifier termination cause changed")
         return value, b""
     raise ValueError("verifier container response status changed")
 
@@ -1581,6 +1601,20 @@ def _run_container_phase(
                     except ValueError as exc:
                         cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
                         stderr = (stderr + b"\n" + str(exc).encode("utf-8")).strip()
+                    else:
+                        if response.get("status") == VerifierVerdict.UNKNOWN.value:
+                            if exit_status != 20:
+                                cause = TerminationCause.MALFORMED_CHECKER_OUTPUT
+                                stderr = (
+                                    stderr
+                                    + b"\nUNKNOWN response requires container exit 20"
+                                ).strip()
+                            else:
+                                cause = TerminationCause(response["termination_cause"])
+                                resource_limited = (
+                                    cause
+                                    is TerminationCause.RESOURCE_LIMIT_HEARTBEAT
+                                )
     except (
         OSError,
         RuntimeError,
@@ -1600,7 +1634,7 @@ def _run_container_phase(
             try:
                 _remove_observed(container_id)
             except (OSError, RuntimeError) as exc:
-                raise RuntimeError(
+                raise _TeardownObservationError(
                     f"{name} teardown was not observed; evidence was not signed"
                 ) from exc
     return _PhaseObservation(
@@ -1747,7 +1781,11 @@ class VerifierSupervisor:
             checker_signal=None,
             timed_out=cause is TerminationCause.TIMEOUT,
             oom_killed=cause is TerminationCause.OOM,
-            resource_limited=cause is TerminationCause.RESOURCE_LIMIT,
+            resource_limited=cause
+            in {
+                TerminationCause.RESOURCE_LIMIT,
+                TerminationCause.RESOURCE_LIMIT_HEARTBEAT,
+            },
             sandbox_policy_violated=(
                 cause is TerminationCause.SANDBOX_POLICY_VIOLATION
             ),
@@ -1983,6 +2021,8 @@ class VerifierSupervisor:
             if parser_blocking_cause is not None:
                 verdict = VerifierVerdict.UNKNOWN
                 cause = parser_blocking_cause
+        except _TeardownObservationError:
+            raise
         except (
             OSError,
             RuntimeError,

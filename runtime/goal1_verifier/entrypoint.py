@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 REQUEST_SCHEMA = "supernova.goal1.verifier-container-request.v1"
-RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v1"
+RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v2"
 MAX_REQUEST_BYTES = 64 * 1024 * 1024
 MAX_SOURCE_BYTES = 4 * 1024 * 1024
 MAX_EXPORT_BYTES = 48 * 1024 * 1024
@@ -64,6 +64,13 @@ FORBIDDEN_PRODUCT_SYNTAX = re.compile(
     rb"attribute|set_option|axiom|opaque|unsafe)\b|\b(?:sorry|admit)\b|"
     rb"^\s*@\["
 )
+HEARTBEAT_EXHAUSTION = re.compile(
+    rb"(?:maximum number of heartbeats \([0-9]+\) has been reached|"
+    rb"maximum heartbeats exceeded)",
+    re.IGNORECASE,
+)
+UNKNOWN_CAUSE_HEARTBEAT = "RESOURCE_LIMIT_HEARTBEAT"
+UNKNOWN_CAUSE_INTERNAL = "INTERNAL"
 
 
 class Rejected(Exception):
@@ -72,6 +79,12 @@ class Rejected(Exception):
 
 class InfrastructureError(Exception):
     pass
+
+
+class ResourceUnknown(Exception):
+    def __init__(self, cause: str, diagnostic: str) -> None:
+        super().__init__(diagnostic)
+        self.cause = cause
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -309,6 +322,14 @@ def compile_module(
     return completed
 
 
+def raise_candidate_failure(completed: subprocess.CompletedProcess[bytes]) -> None:
+    diagnostic = (completed.stderr + completed.stdout)[:MAX_DIAGNOSTIC_BYTES]
+    text = diagnostic.decode("utf-8", "replace")
+    if HEARTBEAT_EXHAUSTION.search(diagnostic):
+        raise ResourceUnknown(UNKNOWN_CAUSE_HEARTBEAT, text)
+    raise Rejected(text)
+
+
 def export_module(
     *,
     root: Path,
@@ -345,19 +366,17 @@ def elaborate(request: dict[str, Any], lock: dict[str, Any]) -> None:
         (root / "home").mkdir()
         built = compile_module(root=root, module="Solution", source=solution, lock=lock)
         if built.returncode != 0:
-            raise Rejected(
-                (built.stderr + built.stdout)[:8192].decode("utf-8", "replace")
-            )
+            raise_candidate_failure(built)
         exported = export_module(
             root=root,
             module="Solution",
             targets=export_targets(theorems, axioms),
             lock=lock,
         )
-        if exported.returncode != 0 or not exported.stdout:
-            raise Rejected(
-                (exported.stderr + exported.stdout)[:8192].decode("utf-8", "replace")
-            )
+        if exported.returncode != 0:
+            raise_candidate_failure(exported)
+        if not exported.stdout:
+            raise InfrastructureError("solution export is empty")
         if len(exported.stdout) > MAX_EXPORT_BYTES:
             raise InfrastructureError("solution export exceeds byte limit")
         response(
@@ -522,11 +541,22 @@ def main() -> int:
         else:
             raise InfrastructureError("unsupported mode")
         return 0
+    except ResourceUnknown as exc:
+        response(
+            "UNKNOWN",
+            diagnostic=str(exc)[:MAX_DIAGNOSTIC_BYTES],
+            termination_cause=exc.cause,
+        )
+        return 20
     except Rejected as exc:
         response("INVALID", diagnostic=str(exc)[:8192])
         return 10
     except (InfrastructureError, OSError, subprocess.SubprocessError) as exc:
-        response("UNKNOWN", diagnostic=str(exc)[:8192])
+        response(
+            "UNKNOWN",
+            diagnostic=str(exc)[:MAX_DIAGNOSTIC_BYTES],
+            termination_cause=UNKNOWN_CAUSE_INTERNAL,
+        )
         return 20
 
 

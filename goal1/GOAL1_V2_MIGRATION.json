@@ -1,0 +1,36 @@
+{
+  "schema": "supernova.goal1-v2-migration.v1",
+  "status": "V1_SUPERSEDED_NO_DISPATCH",
+  "scientific_state": "NOT_EVALUATED",
+  "countable_attempts": 0,
+  "superseded": {
+    "experiment_id": "goal1-confirmatory-v1",
+    "protocol_id": "goal1-confirmatory-protocol-rules-v1",
+    "dispatch_status": "BLOCKED",
+    "reason_codes": [
+      "BENCHMARK_RUNTIME_INCOMPATIBLE",
+      "UNBOUNDED_LEAN_HEARTBEATS",
+      "EXECUTOR_IDENTITY_INCONSISTENT",
+      "SELECTION_AND_POWER_UNRESOLVED",
+      "NO_DURABLE_FULL_COHORT_RUNNER",
+      "VERIFIER_EVIDENCE_SEMANTICS_REQUIRE_REPAIR"
+    ]
+  },
+  "successor": {
+    "experiment_id": "goal1-confirmatory-v2",
+    "phase": "ENGINEERING_REPAIR_AND_NON_CREDIT_CALIBRATION",
+    "dispatch_status": "BLOCKED",
+    "required_gates_in_order": [
+      "PRE_DISPATCH_CONFORMANCE",
+      "VERIFIER_TRUTHFULNESS",
+      "BENCHMARK_V2_COMPATIBILITY",
+      "VERIFIER_QUALIFICATION",
+      "EXECUTOR_QUALIFICATION",
+      "DURABLE_RUNNER_RECOVERY",
+      "NON_CREDIT_SMOKE",
+      "VALIDATION_CALIBRATION",
+      "PROSPECTIVE_PROTOCOL_SEAL",
+      "INDEPENDENT_REVIEW_AND_CI"
+    ]
+  }
+}

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 REQUEST_SCHEMA = "supernova.goal1.verifier-container-request.v1"
-RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v1"
+RESPONSE_SCHEMA = "supernova.goal1.verifier-container-response.v2"
 PERMITTED_AXIOMS = ["propext", "Quot.sound", "Classical.choice"]
 INSIDE_SENTINEL = "SUPERNOVA_SANDBOX_SENTINEL_20260830_BOUNDED"
 HOST_SENTINEL = "SUPERNOVA_HOST_SENTINEL_MUST_NEVER_CROSS_20260830"
