@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 import math
+import os
+import re
 import statistics
 import sys
 import tempfile
@@ -29,6 +31,7 @@ REPORT_SCHEMA = "supernova.goal1-benchmark-v2-compatibility-report.v1"
 EXPECTED_RECORDS_PER_SPLIT = 244
 EXPECTED_LEAN_VERSION = "4.33.1"
 MAX_DIAGNOSTIC_CHARS = 4096
+MAX_PUBLIC_DIAGNOSTIC_CHARS = 768
 
 Runner = Callable[..., VerifierResult]
 
@@ -273,6 +276,70 @@ def check_candidate(
     }
 
 
+def github_failure_annotation(report: Mapping[str, object]) -> str | None:
+    """Return one compact, theorem-byte-free annotation for a blocked gate."""
+    if report.get("status") == "PASS":
+        return None
+    failures = report.get("failures")
+    grouped: dict[tuple[object, ...], list[str]] = {}
+    if type(failures) is list:
+        for failure in failures:
+            if type(failure) is not dict:
+                continue
+            diagnostic = failure.get("diagnostic")
+            if type(diagnostic) is not str:
+                diagnostic = ""
+            diagnostic = re.sub(
+                r"(?m)^.*?\.lean:(\d+):(\d+):",
+                r"<candidate>.lean:\1:\2:",
+                diagnostic,
+            )[:MAX_PUBLIC_DIAGNOSTIC_CHARS]
+            key = (
+                failure.get("status"),
+                failure.get("returncode"),
+                failure.get("error"),
+                diagnostic,
+                hashlib.sha256(
+                    str(failure.get("diagnostic", "")).encode("utf-8")
+                ).hexdigest(),
+            )
+            grouped.setdefault(key, []).append(
+                f"{failure.get('split')}/{failure.get('problem_id')}"
+                f"@{str(failure.get('lean_code_sha256', ''))[:16]}"
+            )
+    groups = [
+        {
+            "diagnostic": key[3],
+            "diagnostic_sha256": key[4],
+            "error": key[2],
+            "problems": problems,
+            "returncode": key[1],
+            "status": key[0],
+        }
+        for key, problems in grouped.items()
+    ]
+    payload = {
+        "error": report.get("error"),
+        "failure_count": len(failures) if type(failures) is list else None,
+        "groups": groups,
+        "record_count": report.get("record_count"),
+        "report_sha256": report.get("report_sha256"),
+        "status": report.get("status"),
+        "timing_milliseconds": report.get("timing_milliseconds"),
+    }
+    message = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return (
+        "::error title=Goal 1 benchmark-v2 compatibility blocked::"
+        + message
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Elaborate all 488 Goal-1 benchmark-v2 statements with sorry."
@@ -311,6 +378,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             newline="\n",
         )
     print(json.dumps(report, sort_keys=True))
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        annotation = github_failure_annotation(report)
+        if annotation is not None:
+            print(annotation)
     return 0 if report["status"] == "PASS" else 2
 
 

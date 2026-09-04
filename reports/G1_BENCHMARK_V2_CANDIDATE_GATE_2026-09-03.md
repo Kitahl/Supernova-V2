@@ -131,3 +131,15 @@ The next correct action is:
 
 No verifier publication, model smoke, calibration, protocol seal, or
 countable attempt may precede that result.
+
+## First hosted execution
+
+Run `33827240002` executed at commit `e1bc8f2`, completed all setup gates,
+and failed closed in the 488-statement step after 23m43s. Evidence artifact
+`9920874030` uploaded with GitHub-reported digest
+`sha256:d079b5e41a36e46e64ddb90714d24564d8f85a1f280b73d79fc1325f2d279b53`.
+The available CLI credential can list that artifact but lacks the `actions`
+scope required to download it; job-log download is also denied. A compact
+failure annotation was therefore added for the next identical gate execution.
+It groups identical sanitized diagnostics and exposes problem IDs plus Lean
+source digest prefixes, but never theorem bytes.

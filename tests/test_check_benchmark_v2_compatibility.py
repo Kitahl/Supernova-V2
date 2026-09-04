@@ -142,6 +142,46 @@ class CheckBenchmarkV2CompatibilityTests(unittest.TestCase):
         self.assertEqual("TIMEOUT", report["failures"][0]["status"])
         self.assertEqual("bounded timeout", report["failures"][0]["error"])
 
+    def test_github_annotation_groups_failures_without_source_paths(self) -> None:
+        report = {
+            "failures": [
+                {
+                    "diagnostic": "/tmp/private-a.lean:12:9: error: old syntax\n",
+                    "error": None,
+                    "lean_code_sha256": "a" * 64,
+                    "problem_id": "alpha",
+                    "returncode": 1,
+                    "split": "validation",
+                    "status": "FAIL",
+                },
+                {
+                    "diagnostic": "/tmp/private-b.lean:12:9: error: old syntax\n",
+                    "error": None,
+                    "lean_code_sha256": "b" * 64,
+                    "problem_id": "beta",
+                    "returncode": 1,
+                    "split": "test",
+                    "status": "FAIL",
+                },
+            ],
+            "record_count": 488,
+            "report_sha256": "c" * 64,
+            "status": "BLOCKED",
+            "timing_milliseconds": {"mean": 1},
+        }
+
+        annotation = SUBJECT.github_failure_annotation(report)
+
+        self.assertIsNotNone(annotation)
+        self.assertIn("validation/alpha@aaaaaaaaaaaaaaaa", annotation)
+        self.assertIn("test/beta@bbbbbbbbbbbbbbbb", annotation)
+        self.assertIn("<candidate>.lean:12:9:", annotation)
+        self.assertNotIn("/tmp/private-", annotation)
+        self.assertNotIn("\n", annotation)
+
+    def test_passing_gate_has_no_failure_annotation(self) -> None:
+        self.assertIsNone(SUBJECT.github_failure_annotation({"status": "PASS"}))
+
 
 if __name__ == "__main__":
     unittest.main()
