@@ -96,6 +96,10 @@ class HermeticExecutorBuildTests(unittest.TestCase):
     def test_workflow_builds_only_narrow_context_and_never_receives_signing_keys(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("- executor-smoke", workflow)
+        self.assertEqual(
+            5,
+            workflow.count("run-goal1-executor-smoke-20260903-8690792"),
+        )
         self.assertIn(
             "inputs.publish_target != 'executor-smoke'",
             workflow,

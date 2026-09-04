@@ -11,6 +11,7 @@ on:
   push:
     branches: [main]
     tags:
+      - "run-goal1-executor-smoke-20260903-8690792"
       - "publish-goal1-verifier-g1-activation-20260829"
       - "publish-goal1-verifier-g1-activation-20260829-parser"
     paths:
@@ -41,6 +42,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && github.ref == 'refs/tags/run-goal1-executor-smoke-20260903-8690792') ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.publish_target == 'executor' || inputs.publish_target == 'executor-smoke'))
     runs-on: ubuntu-24.04
@@ -152,7 +154,10 @@ jobs:
             validation-smoke-output/
           if-no-files-found: warn
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request' && inputs.publish_target != 'executor-smoke'
+        if: >-
+          github.event_name != 'pull_request' &&
+          github.ref != 'refs/tags/run-goal1-executor-smoke-20260903-8690792' &&
+          inputs.publish_target != 'executor-smoke'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -160,7 +165,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the exact tested image
         id: publish
-        if: github.event_name != 'pull_request' && inputs.publish_target != 'executor-smoke'
+        if: >-
+          github.event_name != 'pull_request' &&
+          github.ref != 'refs/tags/run-goal1-executor-smoke-20260903-8690792' &&
+          inputs.publish_target != 'executor-smoke'
         shell: bash
         run: |
           set -euo pipefail
@@ -206,7 +214,10 @@ jobs:
             '{schema:"supernova.hermetic-executor-build-evidence.v1",source_commit:$commit,image_ref:$image,image_digest:$digest,build_lock_sha256:$lock_digest,platform:"linux/amd64",publication_status:$status}' \
             > executor-build-evidence.json
       - name: Attest published image
-        if: github.event_name != 'pull_request' && inputs.publish_target != 'executor-smoke'
+        if: >-
+          github.event_name != 'pull_request' &&
+          github.ref != 'refs/tags/run-goal1-executor-smoke-20260903-8690792' &&
+          inputs.publish_target != 'executor-smoke'
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
           subject-name: ${{ env.IMAGE_NAME }}
