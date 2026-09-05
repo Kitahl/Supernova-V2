@@ -1,0 +1,58 @@
+name: Goal 1 isolated signed verifier control
+
+on:
+  push:
+    branches: [work/PM/G1V2-verifier-control]
+    paths:
+      - .github/workflows/goal1_verifier_control.yml
+      - scripts/run_verifier_control.py
+      - tests/test_verifier_control.py
+      - src/supernova_goal1/verifier_evidence.py
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: goal1-isolated-verifier-control
+  cancel-in-progress: false
+
+jobs:
+  signed-control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERIFIER_IMAGE: ghcr.io/kitahl/supernova-goal1-verifier@sha256:6e4008a00beebf5795e3afdc1affcfd549310d357a6662084450a534309b10ba
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install host verifier dependency
+        run: python -m pip install --disable-pip-version-check -e .
+      - name: Test isolated runner without containers or models
+        run: python -m unittest tests.test_verifier_control -v
+      - name: Authenticate read-only image pull
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull existing digest and remove registry login before verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker logout ghcr.io' EXIT
+          docker pull "$VERIFIER_IMAGE"
+      - name: Run exactly one signed Mathlib reflexivity control
+        run: python scripts/run_verifier_control.py --output verifier-control-output
+      - name: Preserve control evidence even when not ready
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: signed-verifier-control-${{ github.run_id }}
+          path: verifier-control-output/
+          if-no-files-found: warn
+          retention-days: 14

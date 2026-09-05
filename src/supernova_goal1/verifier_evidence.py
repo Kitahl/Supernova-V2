@@ -1426,11 +1426,15 @@ class _PhaseObservation:
     cause: TerminationCause | None
     security_snapshot_sha256: str | None
     elapsed_milliseconds: int
+    container_running: bool | None = None
+    container_status: str | None = None
 
     def measurements(self) -> dict[str, object]:
         return {
             "cause": None if self.cause is None else self.cause.value,
             "container_id": self.container_id,
+            "container_running": self.container_running,
+            "container_status": self.container_status,
             "exit_status": self.exit_status,
             "oom_killed": self.oom_killed,
             "request_sha256": self.request_sha256,
@@ -1542,6 +1546,8 @@ def _run_container_phase(
     policy_violated = False
     cause: TerminationCause | None = None
     snapshot_sha: str | None = None
+    container_running: bool | None = None
+    container_status: str | None = None
     try:
         created = _invoke(_create_argv(launcher))
         if created.returncode != 0:
@@ -1585,9 +1591,19 @@ def _run_container_phase(
                 state = _docker_object(container_id).get("State") or {}
                 if type(state) is not dict:
                     raise RuntimeError("docker state is unavailable")
+                container_running = (
+                    state.get("Running") if type(state.get("Running")) is bool else None
+                )
+                container_status = (
+                    state.get("Status") if type(state.get("Status")) is str else None
+                )
+                # Docker reports ExitCode=0 even while a process is running.
+                # Record an exit only when the host actually observed termination.
                 exit_status = (
                     state.get("ExitCode")
                     if type(state.get("ExitCode")) is int
+                    and container_running is False
+                    and container_status in {"exited", "dead"}
                     else None
                 )
                 oom_killed = state.get("OOMKilled") is True
@@ -1656,6 +1672,8 @@ def _run_container_phase(
         elapsed_milliseconds=max(
             0, (time.monotonic_ns() - monotonic_start) // 1_000_000
         ),
+        container_running=container_running,
+        container_status=container_status,
     )
 
 

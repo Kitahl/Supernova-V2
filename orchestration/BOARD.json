@@ -5,6 +5,29 @@
   "integration_policy": "pull_request_only",
   "tickets": [
     {
+      "id": "G1V2-verifier-control",
+      "owner": "PM",
+      "status": "IN_PROGRESS",
+      "paths": [
+        "scripts/run_verifier_control.py",
+        "tests/test_verifier_control.py",
+        "src/supernova_goal1/verifier_evidence.py",
+        "tests/test_evidence_bridge.py",
+        ".github/workflows/goal1_verifier_control.yml",
+        "reports/G1_SIGNED_CONTROL_2026-09-05.md",
+        "orchestration/BOARD.json"
+      ],
+      "depends_on": [],
+      "objective": "Run exactly one synthetic signed Mathlib reflexivity control on the existing immutable verifier image and retain honest phase observations; no model calls, rebuild, benchmark change or scientific credit.",
+      "acceptance": [
+        "A dedicated branch push cannot launch historical pilot or image-build workflows.",
+        "The exact local source and 60-second per-phase watchdog are preserved.",
+        "Signatures, input/run binding and database readback are verified before reporting readiness.",
+        "Running containers never report an observed successful exit.",
+        "Result is retained and reviewed before any subsequent execution."
+      ]
+    },
+    {
       "id": "G1-138",
       "owner": "MF01",
       "status": "READY",
