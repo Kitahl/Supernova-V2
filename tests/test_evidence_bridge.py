@@ -1294,7 +1294,8 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                     "Error": "",
                     "ExitCode": 137 if oom_killed else phase_exit[phase],
                     "OOMKilled": oom_killed,
-                    "Status": "exited",
+                    "Status": "running" if timeout_phase == phase_names[phase] else "exited",
+                    "Running": timeout_phase == phase_names[phase],
                 }
             }
 
@@ -1538,6 +1539,21 @@ class VerifierEvidenceSecurityTests(unittest.TestCase):
                 observed = record.body["observations"]
                 self.assertEqual(VerifierVerdict.UNKNOWN.value, observed["verdict"])
                 self.assertEqual(expected_cause.value, observed["termination_cause"])
+
+    def test_running_container_timeout_has_no_observed_exit(self) -> None:
+        for phase in ("elaborator", "checker"):
+            with self.subTest(phase=phase):
+                observed = self._mocked_supervisor_run(
+                    timeout_phase=phase, name="running-" + phase
+                ).body["observations"]
+                self.assertEqual(observed["verdict"], "UNKNOWN")
+                self.assertEqual(observed["termination_cause"], "TIMEOUT")
+                self.assertIsNone(observed[phase + "_exit_status"])
+                self.assertIsNone(observed[phase + "_signal"])
+                last = observed["resource_measurements"]["phases"][-1]
+                self.assertIs(last["container_running"], True)
+                self.assertEqual(last["container_status"], "running")
+                self.assertTrue(observed["teardown_observed"])
 
     def test_heartbeat_exhaustion_is_signed_as_resource_unknown(self) -> None:
         observed = self._mocked_supervisor_run(

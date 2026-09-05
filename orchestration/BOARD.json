@@ -3,6 +3,41 @@
   "repository": "Kitahl/Supernova-V2",
   "tranche": "goal1-activation-parallel-v1",
   "integration_policy": "pull_request_only",
+  "direct_work_policy": "Direct implementation tickets are separate from the historical scheduler mapping; no scheduled task is created or required.",
+  "direct_work_tickets": [
+    {
+      "id": "G1V2-verifier-control",
+      "owner": "PM",
+      "status": "EXECUTED_VALID_REVIEW_PENDING",
+      "evidence": {
+        "actions_run_id": 33946255412,
+        "pull_request": 97,
+        "head_sha": "411ac6189f9d0a78fdfa76d6b71b69b8699cbc84",
+        "verdict": "VALID",
+        "verifier_elapsed_milliseconds": 27122,
+        "independent_signature_and_blob_readback": "PASS",
+        "countable_attempts": 0
+      },
+      "paths": [
+        "scripts/run_verifier_control.py",
+        "tests/test_verifier_control.py",
+        "src/supernova_goal1/verifier_evidence.py",
+        "tests/test_evidence_bridge.py",
+        ".github/workflows/goal1_verifier_control.yml",
+        "reports/G1_SIGNED_CONTROL_2026-09-05.md",
+        "orchestration/BOARD.json"
+      ],
+      "depends_on": [],
+      "objective": "Run exactly one synthetic signed Mathlib reflexivity control on the existing immutable verifier image and retain honest phase observations; no model calls, rebuild, benchmark change or scientific credit.",
+      "acceptance": [
+        "A dedicated branch push cannot launch historical pilot or image-build workflows.",
+        "The exact local source and 60-second per-phase watchdog are preserved.",
+        "Signatures, input/run binding and database readback are verified before reporting readiness.",
+        "Running containers never report an observed successful exit.",
+        "Result is retained and reviewed before any subsequent execution."
+      ]
+    }
+  ],
   "tickets": [
     {
       "id": "G1-138",
