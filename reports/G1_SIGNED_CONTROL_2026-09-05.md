@@ -54,5 +54,43 @@ Independent final review and the real remote result must be recorded below.
 
 ## Result
 
-Pending isolated remote run. Stop and inspect its signed evidence before any
-model call, pilot, larger calibration or scientific authority change.
+Local implementation commit: 411ac61 on work/PM/G1V2-verifier-control.
+Its exact seven-file diff against 9a4d7b75d84050f48a47adfe42d47b7888364ed8
+contains no integration/pilot or runtime paths. Other uncommitted repairs remain
+preserved and are not included in this commit.
+
+Independent review passed seven runner tests in 0.204 seconds and an additional
+offline integration probe through the actual runner, supervisor, signer and
+SQLite store with only Docker/security observations mocked. No actionable
+finding. The review does not establish real container or Lean success.
+
+The user explicitly approved publication. Commit 411ac6189f9d0a78fdfa76d6b71b69b8699cbc84
+was pushed and its exact remote SHA read back. The isolated control ran once:
+https://github.com/Kitahl/Supernova-V2/actions/runs/33946255412
+Job 101252775765 succeeded. Draft PR 97 is stacked against core-repairs, unmerged:
+https://github.com/Kitahl/Supernova-V2/pull/97
+
+Observed signed verdict: VALID / ACCEPTED. Verifier elapsed 27122 ms;
+elaboration 13962 ms, checking 13119 ms. Both separate keyless containers were
+observed exited with exit code 0 and teardown confirmed. The image and 60-second
+per-phase policy were unchanged. Pull time (~95 seconds) is not verifier time.
+
+Artifact 9963442368 (581074 ZIP bytes), SHA256:
+0d203a09016811a8d3ddde5428e4a4bbacf5964ae3307bfc443ff921252ab103.
+Record SHA256:
+fbc402f2a4d3e6bc3ccff85b94e472815dcf481ec73f84e297688f9377152088.
+Independent local readback verified Ed25519 signature, exact input and run
+binding, committed source hashes, one SQLite record, and all six stored blobs.
+No model calls; no countable attempts. This establishes the exact control on
+Actions, not prover capability or a scientific result. The local host differed;
+the specific cause (paging, storage, or another host factor) remains unproven.
+
+General PR CI run 33946354453 ran 600 tests: three failures, two skips. All three
+failures were the newly added PM ticket violating the legacy 15-role board
+invariant. The correction separates direct_work_tickets from historical tickets;
+the scheduler mapping and all its existing assertions are preserved. No merge
+until corrected GitHub CI passes. Documentation/board-only pushes cannot retrigger
+the image control because they do not match its path filter.
+
+Next: the existing bounded zero-model archive replay and product-transfer fixture
+gates on Actions, under the same image. No image rebuild or larger model pilot.

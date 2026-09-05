@@ -3,11 +3,21 @@
   "repository": "Kitahl/Supernova-V2",
   "tranche": "goal1-activation-parallel-v1",
   "integration_policy": "pull_request_only",
-  "tickets": [
+  "direct_work_policy": "Direct implementation tickets are separate from the historical scheduler mapping; no scheduled task is created or required.",
+  "direct_work_tickets": [
     {
       "id": "G1V2-verifier-control",
       "owner": "PM",
-      "status": "IN_PROGRESS",
+      "status": "EXECUTED_VALID_REVIEW_PENDING",
+      "evidence": {
+        "actions_run_id": 33946255412,
+        "pull_request": 97,
+        "head_sha": "411ac6189f9d0a78fdfa76d6b71b69b8699cbc84",
+        "verdict": "VALID",
+        "verifier_elapsed_milliseconds": 27122,
+        "independent_signature_and_blob_readback": "PASS",
+        "countable_attempts": 0
+      },
       "paths": [
         "scripts/run_verifier_control.py",
         "tests/test_verifier_control.py",
@@ -26,7 +36,9 @@
         "Running containers never report an observed successful exit.",
         "Result is retained and reviewed before any subsequent execution."
       ]
-    },
+    }
+  ],
+  "tickets": [
     {
       "id": "G1-138",
       "owner": "MF01",
