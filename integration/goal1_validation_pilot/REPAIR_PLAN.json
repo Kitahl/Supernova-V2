@@ -1,0 +1,42 @@
+{
+  "schema": "supernova.goal1.pilot-repair-plan.v1",
+  "classification": "NON_CREDIT_ENGINEERING_DIAGNOSTIC",
+  "scientific_credit": "NONE",
+  "countable_attempts": 0,
+  "historical_plan_sha256": "115f9d5a395930a62bf4529734f1ae1ba83828092c39c058362a75f533c1ad69",
+  "historical_artifact": {
+    "run_id": 33843676746,
+    "artifact_id": 9927602076,
+    "zip_sha256": "2a087e76882a76240dbaa53ca28639dc5614a603aede04af10b72dd38092446f",
+    "report_sha256": "72a9381861198d8ac29eb3c06eb8fad135eacbbde628007f7576988442e03dd6"
+  },
+  "verifier_image_ref": "ghcr.io/kitahl/supernova-goal1-verifier@sha256:6e4008a00beebf5795e3afdc1affcfd549310d357a6662084450a534309b10ba",
+  "adapter_version": "supernova.non-credit-completion-adapter.v2-preserve-layout",
+  "model_lifecycle": {
+    "frozen_executor_readiness_seconds": 120,
+    "frozen_executor_completion_seconds": 300,
+    "outer_attach_watchdog_seconds": 450,
+    "outer_transport_allowance_seconds": 30,
+    "internal_phase_timing": "NOT_OBSERVED_BY_FROZEN_EXECUTOR"
+  },
+  "verifier_watchdog_seconds": 60,
+  "max_new_model_calls": 2,
+  "canary": {
+    "source": "SYNTHETIC_NAT_REFLEXIVITY_NOT_BENCHMARK",
+    "schedule": ["PRODUCT_CANDIDATE", "FINAL_ANSWER"],
+    "kind": "FORCED_DIAGNOSTIC_SEQUENCE_NOT_COMPARATIVE_TRIAL",
+    "skip_final_unless_product_admitted": true,
+    "require_product_name_in_final_candidate": true,
+    "stop_after_report": true
+  },
+  "legacy_smoke_and_twenty_call_modes": "BLOCKED_PENDING_NEW_REPAIR_EVIDENCE_AND_REVIEW",
+  "pre_model_gates": [
+    "KNOWN_VALID_FENCED_RESPONSE_THROUGH_REAL_ADAPTER_AND_VERIFIER",
+    "PROSE_INVALID_WITH_OBSERVED_VERIFIER_TIMING",
+    "SYNTHETIC_PRODUCT_PASS_AND_BYTE_EXACT_EXPOSURE_TO_FINAL",
+    "SYNTHETIC_FINAL_USES_ADMITTED_PRODUCT_AND_PASSES",
+    "CURRENT_CODE_UNIT_TESTS_AND_INDEPENDENT_REVIEW"
+  ],
+  "replay_policy": "ORIGINAL_MODEL_BYTES_IMMUTABLE_REPRESENTATION_ONLY_NO_PROOF_REPAIR_NO_RETROACTIVE_CREDIT",
+  "next_action": "STOP_AND_ANALYZE_BEFORE_ANY_LARGER_PILOT"
+}

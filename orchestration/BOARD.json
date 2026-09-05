@@ -6,9 +6,38 @@
   "direct_work_policy": "Direct implementation tickets are separate from the historical scheduler mapping; no scheduled task is created or required.",
   "direct_work_tickets": [
     {
+      "id": "G1V2-readiness",
+      "owner": "PM",
+      "status": "IN_PROGRESS",
+      "paths": [
+        ".github/workflows/goal1_readiness.yml",
+        "tests/test_readiness_workflow.py",
+        "integration/goal1_validation_pilot/run_validation_pilot.py",
+        "integration/goal1_validation_pilot/test_validation_pilot.py",
+        "integration/goal1_validation_pilot/REPAIR_PLAN.json",
+        "integration/goal1_validation_pilot/model_container.py",
+        "integration/goal1_validation_pilot/pilot_prompt.py",
+        "integration/goal1_validation_pilot/run_repair.py",
+        "integration/goal1_validation_pilot/test_model_container.py",
+        "integration/goal1_validation_pilot/test_pilot_prompt.py",
+        "integration/goal1_validation_pilot/test_repair.py",
+        "reports/G1_READINESS_HANDOFF_2026-09-05.md",
+        "orchestration/BOARD.json"
+      ],
+      "depends_on": ["G1V2-verifier-control"],
+      "objective": "Execute one approved 25-minute zero-model readiness job with the existing digest-bound verifier: five immutable archive replays and four synthetic adapter/product-transfer requests, then independently verify signed artifacts.",
+      "acceptance": [
+        "Only the exact readiness branch push starts the diagnostic; no image rebuild, model call, publication or merge.",
+        "Historical ZIP and report digests match before replay; original candidate bytes are not repaired.",
+        "All five fixed fixture gates pass through the real adapter and signed verifier, not mocks.",
+        "Signatures, run/image bindings and SQLite blob readback are independently checked.",
+        "No scientific credit; inspect results before any larger pilot."
+      ]
+    },
+    {
       "id": "G1V2-verifier-control",
       "owner": "PM",
-      "status": "EXECUTED_VALID_REVIEW_PENDING",
+      "status": "EXECUTED_VALID_CI_PASSED_UNMERGED",
       "evidence": {
         "actions_run_id": 33946255412,
         "pull_request": 97,
@@ -16,7 +45,9 @@
         "verdict": "VALID",
         "verifier_elapsed_milliseconds": 27122,
         "independent_signature_and_blob_readback": "PASS",
-        "countable_attempts": 0
+        "countable_attempts": 0,
+        "ci_run_id": 33946865429,
+        "ci_conclusion": "success"
       },
       "paths": [
         "scripts/run_verifier_control.py",

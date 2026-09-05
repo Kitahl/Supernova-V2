@@ -26,16 +26,90 @@ from supernova_goal1.artifacts import (
     ScheduledChatArtifactEnvelope,
     ScheduledChatArtifactKind,
 )
-from supernova_goal1.confirmatory_io import FINAL_PREFIX
+from supernova_goal1.confirmatory_io import (
+    FINAL_PREFIX,
+    build_verification_subject,
+    classify_baseline_response,
+)
 from supernova_goal1.execution.common import Arm, AttemptStatus
+from supernova_goal1.production_verifier import FrozenLeanProblemSource
+
+
+def trusted_fixture(
+    header: bytes = b"theorem target : True := by\n",
+) -> FrozenLeanProblemSource:
+    return FrozenLeanProblemSource.from_record(
+        {
+            "schema_version": 1,
+            "problem_id": "target",
+            "split": "validation",
+            "source_id": "non-credit-adapter-regression",
+            "source_record_sha256": "1" * 64,
+            "lean_code_sha256": hashlib.sha256(header).hexdigest(),
+            "lean_code": header.decode(),
+            "informal_prefix": "",
+        },
+        expected_split="validation",
+    )
 
 
 class Goal1ValidationPilotTests(unittest.TestCase):
+    def test_adapter_preserves_layout_through_actual_subject_assembly(self) -> None:
+        header = b"import Mathlib\n\ntheorem target : True := by\n"
+        body = b"  have h : True := by\n    trivial\n  exact h\n"
+        source = FrozenLeanProblemSource.from_record(
+            {
+                "schema_version": 1,
+                "problem_id": "target",
+                "split": "validation",
+                "source_id": "non-credit-layout-regression",
+                "source_record_sha256": "1" * 64,
+                "lean_code_sha256": hashlib.sha256(header).hexdigest(),
+                "lean_code": header.decode(),
+                "informal_prefix": "",
+            },
+            expected_split="validation",
+        )
+        raw = b"```lean\n" + header + body + b"```\n"
+        candidate, _ = adapt_model_completion(
+            raw, theorem_name="target", trusted_source=source
+        )
+        subject = build_verification_subject(
+            source, classify_baseline_response(candidate, source)
+        )
+        self.assertEqual(
+            header + body, subject.challenge_source + subject.candidate_source
+        )
+        self.assertEqual(body, candidate)
+
+    def test_adapter_preserves_inline_by_and_crlf_body_layout(self) -> None:
+        cases = (
+            (b"theorem target : True := by trivial\n", b" trivial\n"),
+            (b"theorem target : True := by \r\n  trivial\r\n", b"  trivial\r\n"),
+        )
+        for declaration, expected in cases:
+            candidate, _ = adapt_model_completion(
+                b"```lean\n" + declaration + b"```\n",
+                theorem_name="target",
+                trusted_source=trusted_fixture(),
+            )
+            self.assertEqual(expected, candidate)
+
+    def test_adapter_never_reindents_multiline_literal_content(self) -> None:
+        body = b'  let text := "first\nsecond"\n  trivial\n'
+        raw = b"```lean\ntheorem target : True := by\n" + body + b"```\n"
+        candidate, _ = adapt_model_completion(
+            raw, theorem_name="target", trusted_source=trusted_fixture()
+        )
+        self.assertEqual(body, candidate)
+
     def test_adapter_preserves_raw_tactic_body(self) -> None:
         raw = b"simp [Finset.sum_range_succ]\n"
         self.assertEqual(
             (raw, "RAW_UNCHANGED"),
-            adapt_model_completion(raw, theorem_name="target"),
+            adapt_model_completion(
+                raw, theorem_name="target", trusted_source=trusted_fixture()
+            ),
         )
 
     def test_adapter_extracts_exact_theorem_from_final_fence(self) -> None:
@@ -45,14 +119,20 @@ class Goal1ValidationPilotTests(unittest.TestCase):
             b"\x60\x60\x60\n\n  \n"
         )
         self.assertEqual(
-            (b"rfl", "FINAL_LEAN_FENCE_EXACT_THEOREM_BODY"),
-            adapt_model_completion(raw, theorem_name="target"),
+            (b"  rfl\n", "FINAL_LEAN_FENCE_EXACT_THEOREM_BODY"),
+            adapt_model_completion(
+                raw,
+                theorem_name="target",
+                trusted_source=trusted_fixture(
+                    b"theorem target (n : Nat) : n = n := by\n"
+                ),
+            ),
         )
 
     def test_adapter_extracts_final_tactic_fence(self) -> None:
         raw = b"reasoning\n\x60\x60\x60tactics\n  omega\n\x60\x60\x60\n"
         self.assertEqual(
-            (b"omega", "FINAL_LEAN_FENCE_TACTIC_BODY"),
+            (b"  omega\n", "FINAL_LEAN_FENCE_TACTIC_BODY"),
             adapt_model_completion(raw, theorem_name="target"),
         )
 
@@ -63,22 +143,78 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         )
         self.assertEqual(
             (
-                b"have h : True := by trivial\n  exact h",
+                b"  have h : True := by trivial\n  exact h\n",
                 "FINAL_LEAN_FENCE_EXACT_THEOREM_BODY",
             ),
+            adapt_model_completion(
+                raw, theorem_name="target", trusted_source=trusted_fixture()
+            ),
+        )
+
+    def test_adapter_rejects_wrong_or_untrusted_headers(self) -> None:
+        for raw in (
+            b"```lean\ntheorem other : True := by trivial\n```\n",
+            b"```lean\ntheorem target : False := by trivial\n```\n",
+            b"```lean\ntheorem target : True /- := by\n  trivial\n```\n",
+            b"```lean\nimport Untrusted\ntheorem target : True := by\n  trivial\n```\n",
+        ):
+            candidate, rule = adapt_model_completion(
+                raw, theorem_name="target", trusted_source=trusted_fixture()
+            )
+            self.assertEqual(raw, candidate)
+            self.assertEqual("REJECTED_DECLARATION_RAW_PASSTHROUGH", rule)
+
+    def test_adapter_requires_trusted_header_for_full_declaration(self) -> None:
+        raw = b"```lean\ntheorem target : True := by\n  trivial\n```\n"
+        self.assertEqual(
+            (raw, "REJECTED_DECLARATION_RAW_PASSTHROUGH"),
             adapt_model_completion(raw, theorem_name="target"),
         )
 
-    def test_adapter_rejects_ambiguous_or_wrong_declaration(self) -> None:
-        duplicate = (
-            b"\x60\x60\x60lean\ntheorem target : True := by trivial\n"
-            b"theorem target : True := by trivial\n\x60\x60\x60\n"
+    def test_adapter_does_not_treat_header_comments_or_strings_as_boundaries(
+        self,
+    ) -> None:
+        headers = (
+            b"/--\nlemma commentText : True := by\n-/\ntheorem target : True := by\n",
+            b'theorem target : ("foo := by" : String) = "foo := by" := by\n',
         )
-        wrong = b"\x60\x60\x60lean\ntheorem other : True := by trivial\n\x60\x60\x60\n"
-        for raw in (duplicate, wrong):
-            candidate, rule = adapt_model_completion(raw, theorem_name="target")
-            self.assertEqual(raw, candidate)
-            self.assertEqual("REJECTED_DECLARATION_RAW_PASSTHROUGH", rule)
+        for header in headers:
+            body = b"  rfl\n"
+            candidate, _ = adapt_model_completion(
+                b"```lean\n" + header + body + b"```\n",
+                theorem_name="target",
+                trusted_source=trusted_fixture(header),
+            )
+            self.assertEqual(body, candidate)
+
+    def test_adapter_retains_declaration_words_inside_tactic_comments_and_strings(
+        self,
+    ) -> None:
+        body = b'  /-\ntheorem inComment : True := by\n-/\n  let text := "x\nlemma inString : True := by\ny"\n  trivial\n'
+        self.assertEqual(
+            (body, "FINAL_LEAN_FENCE_TACTIC_BODY"),
+            adapt_model_completion(
+                b"```lean\n" + body + b"```\n",
+                theorem_name="target",
+                trusted_source=trusted_fixture(),
+            ),
+        )
+
+    def test_adapter_never_drops_trailing_declarations_or_changes_target(self) -> None:
+        body = b"  trivial\ntheorem injected : True := by trivial\n"
+        source = trusted_fixture()
+        candidate, _ = adapt_model_completion(
+            b"```lean\n" + source.source + body + b"```\n",
+            theorem_name="target",
+            trusted_source=source,
+        )
+        self.assertEqual(body, candidate)
+        with self.assertRaises(ValueError):
+            classify_baseline_response(candidate, source)
+        with self.assertRaisesRegex(ValueError, "trusted source target"):
+            adapt_model_completion(
+                b"trivial", theorem_name="different", trusted_source=source
+            )
 
     def test_adapter_rejects_unclosed_trailing_fence(self) -> None:
         raw = (
@@ -105,7 +241,7 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         )
         fenced = b"analysis\n\x60\x60\x60lean\n" + exact + b"\x60\x60\x60\n"
         self.assertEqual(
-            (exact.rstrip(), "FINAL_LEAN_FENCE_PRODUCT_PROTOCOL_RESPONSE"),
+            (exact, "FINAL_LEAN_FENCE_PRODUCT_PROTOCOL_RESPONSE"),
             adapt_product_completion(fenced),
         )
         unmarked = b"analysis\n\x60\x60\x60lean\nomega\n\x60\x60\x60\n"
@@ -158,7 +294,9 @@ class Goal1ValidationPilotTests(unittest.TestCase):
         self.assertEqual(
             "NO_ANSWER", plan["model_timing_policy"]["incomplete_finish_reason"]
         )
-        self.assertEqual(300, MODEL_TIMEOUT_SECONDS)
+        # Historical plan remains immutable; prospective runtime covers the
+        # frozen executor's sequential 120s readiness + 300s request limits.
+        self.assertEqual(450, MODEL_TIMEOUT_SECONDS)
 
     def test_exact_problem_gate_refuses_a_different_theorem(self) -> None:
         with self.assertRaisesRegex(ValueError, "bound to amc12a_2003_p1"):

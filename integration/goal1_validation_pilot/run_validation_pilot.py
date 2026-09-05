@@ -5,17 +5,32 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
+from integration.goal1_validation_pilot.model_container import (
+    MODEL_TIMEOUT_SECONDS,
+    ModelContainerObservation,
+    execute_model_container,
+    model_lifecycle_budget,
+)
+from integration.goal1_validation_pilot.pilot_prompt import (
+    PILOT_BASELINE_PROMPT_VERSION,
+    PILOT_PRODUCT_PROMPT_VERSION,
+)
+from integration.goal1_validation_pilot.pilot_prompt import (
+    render_pilot_baseline_prompt as render_baseline_prompt,
+)
+from integration.goal1_validation_pilot.pilot_prompt import (
+    render_pilot_product_prompt as render_product_prompt,
+)
 from supernova_goal1.artifacts import (
     ScheduledChatArtifactEnvelope,
     ScheduledChatArtifactKind,
@@ -33,8 +48,6 @@ from supernova_goal1.confirmatory_io import (
     build_verification_subject,
     classify_baseline_response,
     classify_product_response,
-    render_baseline_prompt,
-    render_product_prompt,
 )
 from supernova_goal1.contracts import Arm
 from supernova_goal1.dispatch import DispatchAuthority, DispatchEntry
@@ -77,15 +90,31 @@ BASELINES_PATH = ROOT / "goal1" / "CONFIRMATORY_BASELINES.json"
 PRODUCT_CONTROLS_PATH = ROOT / "goal1" / "CONFIRMATORY_PRODUCT_CONTROLS.json"
 VERIFIER_PUBLICATION_PATH = ROOT / "goal1" / "CONFIRMATORY_VERIFIER_PUBLICATION.json"
 MAX_MODEL_OUTPUT_BYTES = 1 << 20
-MODEL_TIMEOUT_SECONDS = 300
+COMPLETION_ADAPTER_VERSION = (
+    "supernova.non-credit-completion-adapter.v2-preserve-layout"
+)
 _LEAN_FENCE = re.compile(
     r"(?ims)^\x60{3}(?:lean4|lean|tactics)[ \t]*\r?\n(.*?)^\x60{3}[ \t]*(?:\r?\n|\Z)"
 )
-_DECLARATION = re.compile(r"(?m)^\s*(?:theorem|lemma)\s+([^\s:(]+)")
+_WRAPPER_START = re.compile(
+    r"\A\s*(?:theorem|lemma|import|set_option|open|namespace)\b"
+)
 
 
 def sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def pilot_runtime_provenance() -> dict[str, object]:
+    return {
+        "completion_adapter_version": COMPLETION_ADAPTER_VERSION,
+        "baseline_prompt_version": PILOT_BASELINE_PROMPT_VERSION,
+        "product_prompt_version": PILOT_PRODUCT_PROMPT_VERSION,
+        "model_lifecycle_budget": model_lifecycle_budget(),
+        "model_attach_watchdog_seconds": MODEL_TIMEOUT_SECONDS,
+        "model_elapsed_basis": "HOST_FULL_LIFECYCLE_INCLUDING_IMAGE_INSPECTION_AND_CREATE",
+        "scientific_credit": "NONE",
+    }
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -147,43 +176,17 @@ def parse_generation_frame(raw: bytes) -> bytes:
     return result
 
 
-def _run(argv: Sequence[str], *, input_bytes: bytes | None = None, timeout: int = 60):
-    return subprocess.run(
-        list(argv),
-        input=input_bytes,
-        capture_output=True,
-        check=False,
-        shell=False,
-        timeout=timeout,
-    )
-
-
-def _docker_json(argv: Sequence[str], field: str) -> Any:
-    result = _run(argv)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"{field} failed: {result.stderr.decode('utf-8', 'replace')[:1000]}"
-        )
-    return json.loads(result.stdout.decode("utf-8"))
-
-
-@dataclass(frozen=True)
-class ModelContainerObservation:
-    raw_completion: bytes
-    completion: bytes
-    adaptation_rule: str
-    elapsed_milliseconds: int
-    image_id: str
-    stderr: str
-    teardown_observed: bool
-
-
-def adapt_model_completion(raw: bytes, *, theorem_name: str) -> tuple[bytes, str]:
+def adapt_model_completion(
+    raw: bytes,
+    *,
+    theorem_name: str,
+    trusted_source: FrozenLeanProblemSource | None = None,
+) -> tuple[bytes, str]:
     """Deterministically unwrap only the final complete Lean response fence.
 
-    This adapter changes representation, never validity. Rejected wrappers pass
-    through unchanged so the hostile verifier still emits signed evidence for
-    every answered model response.
+    Preserve tactic layout, including leading spaces and trailing newlines.
+    This does not establish proof validity. Rejected wrappers pass through
+    unchanged so the hostile verifier still emits evidence for answered output.
     """
 
     if type(raw) is not bytes:
@@ -194,6 +197,8 @@ def adapt_model_completion(raw: bytes, *, theorem_name: str) -> tuple[bytes, str
         or theorem_name.strip() != theorem_name
     ):
         raise ValueError("theorem_name must be one exact non-empty token")
+    if trusted_source is not None and trusted_source.native_id != theorem_name:
+        raise ValueError("trusted source target differs from theorem_name")
     text = raw.decode("utf-8")
     if "\x60\x60\x60" not in text:
         return raw, "RAW_UNCHANGED"
@@ -201,24 +206,36 @@ def adapt_model_completion(raw: bytes, *, theorem_name: str) -> tuple[bytes, str
     if not matches or text[matches[-1].end() :].strip():
         return raw, "REJECTED_WRAPPER_RAW_PASSTHROUGH"
     fenced = matches[-1].group(1)
-    declarations = list(_DECLARATION.finditer(fenced))
-    if not declarations:
-        candidate = fenced.strip().encode("utf-8")
-        return (
-            (candidate, "FINAL_LEAN_FENCE_TACTIC_BODY")
-            if candidate
-            else (raw, "REJECTED_EMPTY_FENCE_RAW_PASSTHROUGH")
+    candidate = fenced.encode("utf-8")
+    if trusted_source is not None:
+        # Never discover a proof boundary by parsing attacker-shaped Lean with
+        # regex. Only discard exact bytes of the already trusted source/header.
+        # Comments and strings inside that header cannot move this boundary.
+        headers = (
+            trusted_source.source.removesuffix(b"\n"),
+            trusted_source.theorem_statement + b":= by",
         )
-    if len(declarations) != 1 or declarations[0].group(1) != theorem_name:
+        for header in headers:
+            if not candidate.startswith(header):
+                continue
+            body = candidate[len(header) :]
+            if body and body[:1] not in b" \t\r\n":
+                return raw, "REJECTED_PROOF_BOUNDARY_RAW_PASSTHROUGH"
+            # The actual harness supplies ':= by\n'. Remove only the wrapper's
+            # first line break; never dedent or strip the remaining tactic body.
+            body = re.sub(rb"\A[ \t]*\r?\n", b"", body, count=1)
+            if not body.strip():
+                return raw, "REJECTED_EMPTY_BODY_RAW_PASSTHROUGH"
+            return body, "FINAL_LEAN_FENCE_EXACT_THEOREM_BODY"
+    if _WRAPPER_START.match(fenced):
         return raw, "REJECTED_DECLARATION_RAW_PASSTHROUGH"
-    declaration = fenced[declarations[0].start() :]
-    marker = re.search(r":=\s*by\b", declaration)
-    if marker is None:
-        return raw, "REJECTED_PROOF_BOUNDARY_RAW_PASSTHROUGH"
-    candidate = declaration[marker.end() :].strip().encode("utf-8")
-    if not candidate:
-        return raw, "REJECTED_EMPTY_BODY_RAW_PASSTHROUGH"
-    return candidate, "FINAL_LEAN_FENCE_EXACT_THEOREM_BODY"
+    # Do not scan tactic comments/strings for declaration words. Any remaining
+    # commands, malformed syntax or forbidden axioms belong to the verifier.
+    return (
+        (candidate, "FINAL_LEAN_FENCE_TACTIC_BODY")
+        if candidate.strip()
+        else (raw, "REJECTED_EMPTY_FENCE_RAW_PASSTHROUGH")
+    )
 
 
 def adapt_product_completion(raw: bytes) -> tuple[bytes, str]:
@@ -238,7 +255,7 @@ def adapt_product_completion(raw: bytes) -> tuple[bytes, str]:
     matches = list(_LEAN_FENCE.finditer(text))
     if not matches or text[matches[-1].end() :].strip():
         return raw, "REJECTED_PRODUCT_WRAPPER_RAW_PASSTHROUGH"
-    candidate = matches[-1].group(1).strip().encode("utf-8")
+    candidate = matches[-1].group(1).encode("utf-8")
     if candidate == NO_ANSWER or candidate.startswith((PRODUCT_PREFIX, FINAL_PREFIX)):
         return candidate, "FINAL_LEAN_FENCE_PRODUCT_PROTOCOL_RESPONSE"
     return raw, "REJECTED_UNMARKED_PRODUCT_FENCE_RAW_PASSTHROUGH"
@@ -250,111 +267,21 @@ def run_model_container(
     *,
     theorem_name: str,
     response_mode: str = "baseline",
+    trusted_source: FrozenLeanProblemSource | None = None,
 ) -> ModelContainerObservation:
-    inspected = _docker_json(["docker", "image", "inspect", image], "image inspect")
-    if type(inspected) is not list or len(inspected) != 1:
-        raise RuntimeError("image inspect returned an unexpected object")
-    image_id = inspected[0].get("Id")
-    if type(image_id) is not str or not image_id.startswith("sha256:"):
-        raise RuntimeError("model image lacks an immutable local image id")
-    create = _run(
-        [
-            "docker",
-            "create",
-            "--pull",
-            "never",
-            "--network",
-            "none",
-            "--read-only",
-            "--init",
-            "--cap-drop",
-            "ALL",
-            "--security-opt",
-            "no-new-privileges:true",
-            "--pids-limit",
-            "256",
-            "--ipc",
-            "none",
-            "--user",
-            "65532:65532",
-            "--memory",
-            str(4 * 1024 * 1024 * 1024),
-            "--cpus",
-            "2",
-            "--tmpfs",
-            "/tmp:rw,noexec,nosuid,nodev,size=268435456",
-            "--interactive",
-            image,
-            "/opt/supernova/executor",
-            "--stdio",
-        ]
-    )
-    if create.returncode != 0:
-        raise RuntimeError(
-            "model container create failed: "
-            + create.stderr.decode("utf-8", "replace")[:1000]
+    if response_mode == "baseline":
+        adapter = lambda raw: adapt_model_completion(
+            raw, theorem_name=theorem_name, trusted_source=trusted_source
         )
-    container_id = create.stdout.decode("ascii").strip()
-    teardown = False
-    started = time.monotonic_ns()
-    try:
-        container = _docker_json(
-            ["docker", "inspect", container_id], "container inspect"
-        )
-        if type(container) is not list or len(container) != 1:
-            raise RuntimeError("container inspect returned an unexpected object")
-        item = container[0]
-        host = item.get("HostConfig", {})
-        config = item.get("Config", {})
-        if (
-            item.get("Image") != image_id
-            or host.get("NetworkMode") != "none"
-            or host.get("ReadonlyRootfs") is not True
-            or sorted(host.get("CapDrop") or []) != ["ALL"]
-            or sorted(host.get("SecurityOpt") or []) != ["no-new-privileges:true"]
-            or (host.get("Binds") or []) != []
-            or (item.get("Mounts") or []) != []
-            or config.get("User") != "65532:65532"
-        ):
-            raise RuntimeError("model container security configuration drifted")
-        try:
-            completed = _run(
-                ["docker", "start", "--attach", "--interactive", container_id],
-                input_bytes=prompt,
-                timeout=MODEL_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise TimeoutError(
-                f"model container exceeded {MODEL_TIMEOUT_SECONDS} seconds"
-            ) from exc
-        if completed.returncode != 0:
-            raise RuntimeError(
-                "model executor failed: "
-                + completed.stderr.decode("utf-8", "replace")[:2000]
-            )
-        raw_completion = parse_generation_frame(completed.stdout)
-        if response_mode == "baseline":
-            completion, adaptation_rule = adapt_model_completion(
-                raw_completion, theorem_name=theorem_name
-            )
-        elif response_mode == "product":
-            completion, adaptation_rule = adapt_product_completion(raw_completion)
-        else:
-            raise ValueError("unknown model response mode")
-        stderr = completed.stderr.decode("utf-8", "replace")[:4000]
-    finally:
-        removed = _run(["docker", "rm", "--force", container_id])
-        teardown = removed.returncode == 0
-    if not teardown:
-        raise RuntimeError("model container teardown was not observed")
-    return ModelContainerObservation(
-        raw_completion=raw_completion,
-        completion=completion,
-        adaptation_rule=adaptation_rule,
-        elapsed_milliseconds=max(0, (time.monotonic_ns() - started) // 1_000_000),
-        image_id=image_id,
-        stderr=stderr,
-        teardown_observed=True,
+    elif response_mode == "product":
+        adapter = adapt_product_completion
+    else:
+        raise ValueError("unknown model response mode")
+    return execute_model_container(
+        image,
+        prompt,
+        parse_generation_frame=parse_generation_frame,
+        adapt_completion=adapter,
     )
 
 
@@ -398,6 +325,7 @@ def frozen_request(
     run_id: str = "g1-validation-smoke-20260831-v1",
     experiment_id: str = "goal1-validation-pilot-v1",
     attempt: int = 0,
+    benchmark_root_sha256: str | None = None,
 ) -> FrozenProblemRequest:
     artifact = ScheduledChatArtifactEnvelope.from_visible_utf8(
         request_utf8,
@@ -422,9 +350,10 @@ def frozen_request(
         run_id=run_id,
         experiment_id=experiment_id,
         problem=problem,
-        benchmark_root_sha256=load_object(PLAN_PATH)["benchmark"][
-            "benchmark_root_sha256"
-        ],
+        benchmark_root_sha256=(
+            load_object(PLAN_PATH)["benchmark"]["benchmark_root_sha256"]
+            if benchmark_root_sha256 is None else benchmark_root_sha256
+        ),
         problem_sha256=source.source_sha256,
         arm=arm,
         attempt=attempt,
@@ -734,7 +663,10 @@ def run_smoke(
     def ordinary_model(dispatch: BaselineDispatch, prompt: bytes):
         try:
             observed = run_model_container(
-                executor_image, prompt, theorem_name=source.native_id
+                executor_image,
+                prompt,
+                theorem_name=source.native_id,
+                trusted_source=source,
             )
         except Exception as exc:
             model_errors[dispatch.entry.dispatch_id] = f"{type(exc).__name__}: {exc}"
@@ -776,7 +708,10 @@ def run_smoke(
     def chain_model(dispatch: BaselineDispatch, prompt: bytes):
         try:
             observed = run_model_container(
-                executor_image, prompt, theorem_name=source.native_id
+                executor_image,
+                prompt,
+                theorem_name=source.native_id,
+                trusted_source=source,
             )
         except Exception as exc:
             model_errors[dispatch.entry.dispatch_id] = f"{type(exc).__name__}: {exc}"
@@ -837,6 +772,7 @@ def run_smoke(
     )
     report: dict[str, object] = {
         "schema": "supernova.goal1.validation-smoke-report.v1",
+        "prospective_runtime": pilot_runtime_provenance(),
         "classification": plan["classification"],
         "scientific_credit": "NONE",
         "countable_attempts": 0,
@@ -859,6 +795,7 @@ def run_smoke(
         ),
         "verifier_image_ref": launcher.image_ref,
         "verifier_signing_public_key_sha256": sha256(signer.public_key),
+        "verifier_signing_public_key_hex": signer.public_key.hex(),
     }
     report_path = output_directory / "smoke-report.json"
     report_path.write_bytes(canonical_bytes(report) + b"\n")
@@ -1176,6 +1113,7 @@ def run_one_percent(
                     exact_prompt,
                     theorem_name=_source.native_id,
                     response_mode=_response_mode,
+                    trusted_source=_source,
                 )
             except Exception as exc:
                 model_errors[dispatch.entry.dispatch_id] = (
@@ -1325,6 +1263,7 @@ def run_one_percent(
     )
     report: dict[str, object] = {
         "schema": "supernova.goal1.validation-one-percent-report.v1",
+        "prospective_runtime": pilot_runtime_provenance(),
         "classification": plan["classification"],
         "scientific_credit": "NONE",
         "countable_attempts": 0,
@@ -1352,6 +1291,7 @@ def run_one_percent(
         "next_action": "STOP_AND_ANALYZE_BEFORE_ANY_LARGER_CALIBRATION",
         "verifier_image_ref": launcher.image_ref,
         "verifier_signing_public_key_sha256": sha256(signer.public_key),
+        "verifier_signing_public_key_hex": signer.public_key.hex(),
     }
     report_path = output_directory / "one-percent-report.json"
     report_bytes = canonical_bytes(report) + b"\n"
@@ -1447,6 +1387,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--verifier-image-ref")
     parser.add_argument("--output-directory", type=Path, required=True)
     args = parser.parse_args(argv)
+    parser.error(
+        "Historical smoke/one-percent launch modes are paused after the pilot audit. "
+        "Use integration/goal1_validation_pilot/run_repair.py for the bounded "
+        "non-credit repair gates and at most two explicitly requested canary calls."
+    )
     common = {
         "validation_file": args.validation_file.resolve(strict=True),
         "executor_image": args.executor_image,

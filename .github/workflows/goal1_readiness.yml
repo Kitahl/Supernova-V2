@@ -1,0 +1,82 @@
+name: Goal 1 zero-model repair readiness
+
+on:
+  push:
+    branches: [work/PM/G1V2-readiness]
+    paths:
+      - .github/workflows/goal1_readiness.yml
+      - integration/goal1_validation_pilot/**
+      - tests/test_readiness_workflow.py
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+concurrency:
+  group: goal1-zero-model-repair-readiness
+  cancel-in-progress: false
+
+jobs:
+  zero-model-readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      VERIFIER_IMAGE: ghcr.io/kitahl/supernova-goal1-verifier@sha256:6e4008a00beebf5795e3afdc1affcfd549310d357a6662084450a534309b10ba
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing pinned host dependency
+        run: python -m pip install --disable-pip-version-check -e .
+      - name: Offline repair and workflow tests
+        run: >-
+          python -m unittest
+          integration.goal1_validation_pilot.test_validation_pilot
+          integration.goal1_validation_pilot.test_model_container
+          integration.goal1_validation_pilot.test_pilot_prompt
+          integration.goal1_validation_pilot.test_repair
+          tests.test_readiness_workflow -v
+      - name: Download one immutable historical archive
+        env:
+          ARCHIVE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer $ARCHIVE_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/Kitahl/Supernova-V2/actions/artifacts/9927602076/zip \
+            --output "$RUNNER_TEMP/historical-pilot.zip"
+          echo "2a087e76882a76240dbaa53ca28639dc5614a603aede04af10b72dd38092446f  $RUNNER_TEMP/historical-pilot.zip" | sha256sum --check --strict
+      - name: Authenticate read-only image pull
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull unchanged verifier and remove registry login
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker logout ghcr.io' EXIT
+          docker pull "$VERIFIER_IMAGE"
+      - name: Replay five saved candidates and four fixed verifier requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python integration/goal1_validation_pilot/run_repair.py \
+            --archive "$RUNNER_TEMP/historical-pilot.zip" \
+            --output-directory readiness-output
+          python -c 'import json; from pathlib import Path; from integration.goal1_validation_pilot.run_repair import FIXTURE_GATES; r=json.loads(Path("readiness-output/repair-report.json").read_text()); assert r["execution_status"] == "COMPLETE"; assert r["new_model_calls"] == 0 and r["countable_attempts"] == 0; assert r["canary_status"] == "NOT_REQUESTED"; assert r["archive_integrity"]["status"] == "PASS"; assert len(r["archive_replays"]) == 5 and len(r["fixture_attempts"]) == 4; assert all(r["fixture_gates"].get(g) == "PASS" for g in FIXTURE_GATES)'
+      - name: Preserve signed evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zero-model-readiness-${{ github.run_id }}
+          path: readiness-output/
+          if-no-files-found: warn
+          retention-days: 14
