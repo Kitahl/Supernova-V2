@@ -3,6 +3,37 @@
 Scientific result: NOT EVALUATED. Countable attempts: 0. New model calls this
 work session: 0. Do not repeat the successful signed reflexivity control.
 
+## Current result - readiness executed, product boundary blocked
+
+The approved single readiness job ran at commit
+864c1ed58bf9504c58edda74a78da5ad5d014d7b and failed its product fixture:
+https://github.com/Kitahl/Supernova-V2/actions/runs/33948987056.
+Eight signatures, 48 blob pairs and 48 committed source/config digests were
+independently checked. The artifact is preserved, not deleted or backfilled.
+
+Reflexivity was signed VALID; two archived proofs for the SAME problem were
+signed VALID; three other archived proofs and prose were signed INVALID. All
+phases exited and were torn down; none timed out. Product syntax parsing and
+elaboration/export succeeded, but the checker received only imports plus sorry,
+without a theorem declaration. Result: signed UNKNOWN / INTERNAL. Final product
+reuse was not reached. Readiness is NOT_READY, not PASS.
+
+The same constructor also puts admitted candidate product bytes into the trusted
+final challenge, violating the hostile-source boundary. Do not fix this by
+executing a candidate-derived type in the trusted checker, self-comparing an
+export, or quietly weakening product PASS to any true theorem with the same name.
+General product source-to-export intent binding remains the architectural issue;
+a fixture-only host-authored header is not a production solution.
+
+The existing corpus artifact was recovered without a new run: 424/488 statements
+PASS; 63 old `in` syntax failures and one `Complex.abs` failure. These are exact
+candidate-patch evidence, not release-image qualification or theorem proofs.
+
+Full evidence, timings, hashes, root cause, review and the next repair interface:
+[G1_READINESS_RESULT_2026-09-05.md](G1_READINESS_RESULT_2026-09-05.md).
+No rebuild, new model request, larger pilot, scientific run or merge followed the
+failed readiness job. The sections below preserve the approved job's scope.
+
 ## Completed and independently checked
 
 - Control commit 411ac6189f9d0a78fdfa76d6b71b69b8699cbc84 ran on Actions once.
@@ -22,8 +53,8 @@ the direct PM ticket was incorrectly put in the historical 15-task array.
 Commit a8314b3bc14e15e23636636d6790605c462b65ae separates direct_work_tickets
 without changing the scheduler mapping or deleting its assertions. All eight
 orchestration tests and seven control tests pass locally. Full GitHub CI rerun
-33946865429 is pending at this handoff's first write; read live before claiming
-it passed. No control rerun was triggered by the board/documentation-only push.
+33946865429 subsequently PASSED (unit, non-credit integration and evaluator).
+No control rerun was triggered by the board/documentation-only push.
 
 Existing repair acceptance tests were rerun with:
 
@@ -34,7 +65,7 @@ python -m unittest integration.goal1_validation_pilot.test_validation_pilot inte
 Result: 62 tests passed in 0.929 seconds. These are offline checks, not proof of
 real product admission or model capability.
 
-## Next bounded run - explicitly approved
+## Executed bounded run - approved scope retained
 
 The user approved this exact publication/job after the previous app-gate refusal:
 "Yes. Proceed and finish goal 1." The control PR's full CI rerun 33946865429
@@ -78,8 +109,9 @@ Current publication checks: all 65 readiness tests pass; all 73 tests including
 orchestration pass. Ruff on the runner/adapter/lifecycle/prompt and new guard test
 passes. Actual CLI --help and YAML structure checks pass. Independent reviewer
 reran the 65 tests, checked the exact staged 13 declared paths (no runtime/src or
-dry-cohort edits), and found no execution/publication blocker. Remote readiness
-results remain unobserved until the approved branch is pushed and the job ends.
+dry-cohort edits), and found no execution/publication blocker. Publication and
+the remote readiness failure are now recorded above; offline tests did not
+establish real product readiness.
 
 Previously requested user approval (now granted): publish the bounded repair code/workflow to the existing
 public Kitahl/Supernova-V2 repository and run this single zero-model Actions
@@ -93,8 +125,9 @@ local verification. After readiness, stop and inspect before new model work.
 
 ## Not yet established
 
-Real adapter/product-transfer fixture success on Actions; corrected-model
-product admission and reuse; current full-corpus compatibility and qualification;
+Real product-admission and product-transfer fixture success on Actions;
+corrected-model product admission and reuse; full-corpus compatibility (64 known
+statement failures in the recovered candidate report) and qualification;
 validation calibration and prospective final protocol/complete-cost seal; a
 countable final experiment and its registered PASS/FAIL analysis. The successful
 control does not establish these. Local host-specific slowdown is demonstrated

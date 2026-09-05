@@ -8,7 +8,26 @@
     {
       "id": "G1V2-readiness",
       "owner": "PM",
-      "status": "IN_PROGRESS",
+      "status": "EXECUTED_BLOCKED_PRODUCT_CHALLENGE",
+      "evidence": {
+        "head_sha": "864c1ed58bf9504c58edda74a78da5ad5d014d7b",
+        "actions_run_id": 33948987056,
+        "job_id": 101260085364,
+        "conclusion": "failure",
+        "artifact_id": 9964248572,
+        "artifact_zip_sha256": "7a0e3d63b223c11d3789640211a68e89fae438c084933f4e7b7bcbcbdcb5bf55",
+        "independent_signature_records_checked": 8,
+        "independent_blob_pairs_checked": 48,
+        "independent_committed_source_digests_checked": 48,
+        "archive_replays": 5,
+        "fixture_requests_completed": 3,
+        "fixture_requests_not_reached": 1,
+        "product_outcome": "UNKNOWN_INTERNAL_CHECKER_CHALLENGE_HAS_NO_DECLARATION",
+        "readiness": "NOT_READY",
+        "countable_attempts": 0,
+        "new_model_calls": 0,
+        "report": "reports/G1_READINESS_RESULT_2026-09-05.md"
+      },
       "paths": [
         ".github/workflows/goal1_readiness.yml",
         "tests/test_readiness_workflow.py",
@@ -22,6 +41,7 @@
         "integration/goal1_validation_pilot/test_pilot_prompt.py",
         "integration/goal1_validation_pilot/test_repair.py",
         "reports/G1_READINESS_HANDOFF_2026-09-05.md",
+        "reports/G1_READINESS_RESULT_2026-09-05.md",
         "orchestration/BOARD.json"
       ],
       "depends_on": ["G1V2-verifier-control"],
